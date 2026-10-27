@@ -21,16 +21,33 @@ jobs:
           [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "manifest $v != tag ${GITHUB_REF_NAME}"; exit 1; }
       - run: node scripts/pack.mjs
       - run: npm run build:firefox -- --prod --only=ext
-      - run: npm run pack:firefox
-      - name: Publish release
-        env: { GH_TOKEN: '${{ github.token }}' }
-        # Only user archives go to GitHub; store payloads remain separate.
+      # Firefox only installs Mozilla-signed add-ons permanently. Sign the build through AMO's self-distribution
+      # (unlisted) channel; without the AMO secrets no Firefox file is attached at all (an unsigned one would
+      # disappear after a browser restart and confuse players).
+      - name: Sign Firefox build (AMO unlisted)
+        id: firefox
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
-          zip="legion-3d-${GITHUB_REF_NAME#v}.zip"
-          firefox_zip="legion-3d-${GITHUB_REF_NAME#v}-firefox.zip"
+          if [[ -z "$AMO_JWT_ISSUER" || -z "$AMO_JWT_SECRET" ]]; then
+            echo 'AMO secrets missing; no Firefox file in this release.'; exit 0
+          fi
+          set -euo pipefail
+          npx --yes web-ext@10.8.0 sign --source-dir dist-firefox --artifacts-dir amo --channel unlisted \
+            --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" --approval-timeout 1800000
+          xpi="legion-3d-${GITHUB_REF_NAME#v}-firefox.xpi"
+          mv amo/*.xpi "$xpi"
+          echo "xpi=$xpi" >> "$GITHUB_OUTPUT"
+      - name: Publish release
+        env: { GH_TOKEN: '${{ github.token }}', XPI: '${{ steps.firefox.outputs.xpi }}' }
+        # Only user files go to GitHub: the Chrome zip and the signed Firefox .xpi. Store payloads stay separate.
+        run: |
+          files=("legion-3d-${GITHUB_REF_NAME#v}.zip")
+          [[ -n "$XPI" ]] && files+=("$XPI")
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
-            && gh release upload "${GITHUB_REF_NAME}" "$zip" "$firefox_zip" --clobber \
-            || gh release create "${GITHUB_REF_NAME}" "$zip" "$firefox_zip" --title "Legion 3D ${GITHUB_REF_NAME}" --notes-file .github/RELEASE_NOTES.md
+            && gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --clobber \
+            || gh release create "${GITHUB_REF_NAME}" "${files[@]}" --title "Legion 3D ${GITHUB_REF_NAME}" --notes-file .github/RELEASE_NOTES.md
       # First submission and store listing are created manually. These steps update an existing item only.
       - name: Upload and publish Chrome Web Store update (optional)
         env:

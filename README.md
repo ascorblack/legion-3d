@@ -63,20 +63,15 @@
 
 ### Firefox 128+
 
-Сборка Firefox использует тот же игровой код и MAIN-world скрипты, поддерживаемые начиная с Firefox 128.
+Скачай **`legion-3d-<версия>-firefox.xpi`** со [страницы релизов](https://github.com/ascorblack/legion-3d/releases/latest),
+открой его в Firefox (или перетащи в окно браузера) и нажми «Добавить». Файл подписан Mozilla, поэтому расширение
+остаётся после перезапуска браузера. Обновление — открыть `.xpi` новой версии.
 
-```bash
-npm ci
-npm run build:firefox -- --prod
-npm run pack:firefox
-```
-
-Результат: `dist-firefox/` и `legion-3d-<версия>-firefox.zip`.
-Распакуй архив, открой `about:debugging#/runtime/this-firefox`, нажми
-«Загрузить временное дополнение» и выбери `manifest.json`. Затем обнови страницу игры.
-Это неподписанная тестовая сборка: после закрытия Firefox дополнение придётся загрузить снова.
-Для постоянной установки в обычный Firefox нужна подпись Mozilla; автоматическая публикация в Firefox Add-ons не настроена.
 В Firefox нет Keyboard Lock: полноэкранный режим доступен, но защита Ctrl+W работает только через подтверждение закрытия.
+
+Сборка из исходников: `npm run build:firefox -- --prod` → `dist-firefox/`. Неподписанную сборку Firefox загружает
+только временно (`about:debugging#/runtime/this-firefox` → «Загрузить временное дополнение»). Релизы подписывает CI
+через AMO (канал unlisted) — нужны секреты репозитория `AMO_JWT_ISSUER` и `AMO_JWT_SECRET`.
 
 ### Из исходников
 
