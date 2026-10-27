@@ -24,6 +24,7 @@ import { skyDome, stars, glowPoints } from './sky';
 import { getTexture, setTexAnisotropy, disposeTextures } from './tex';
 import { PropKit, PROP_KINDS, disposePropKit, type PropKind } from './props';
 import { PoolLights } from './lightPools';
+import { campOf, type CampLayout } from './camp';
 
 export { createSvgArt } from './svgArt';
 export { groundSpec, makeGroundAt } from './ground';
@@ -56,7 +57,7 @@ function buildGarlands(spans: THREE.Vector3[][], glowTex: THREE.Texture): THREE.
 }
 
 function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.Material> {
-  const P = paletteOf(L.styleId);
+  const P = paletteOf(L.styleId), camp = !!campOf(L);
   const std = (kind: Parameters<typeof getTexture>[0], o: { rough?: number; ns?: number; colors?: string[]; neutral?: boolean; seed?: number; side?: THREE.Side; size?: number } = {}) => {
     const t = getTexture(kind, { neutral: o.neutral ?? true, colors: o.colors, seed: o.seed, size: o.size });
     const m = new THREE.MeshStandardMaterial({
@@ -82,8 +83,11 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
     rock: std('rock', { rough: 1, ns: 0.7 }),
     metal: Object.assign(std('metal', { rough: 0.6, ns: 0.4 }), { metalness: 0.35 }),
     canvas: std('canvas', { colors: ['#ffffff', '#f2f2f2'], rough: 0.95, ns: 0.4, side: THREE.DoubleSide }),
-    paving: std('cobble', { neutral: false, colors: [P.ground, shade(P.ground, 0.08), P.mortar, P.groundL], rough: 1, ns: 0.7, size: 1024 }),
-    lowPaving: std('cobble', { neutral: false, colors: [P.lowA, P.lowB, P.lowMortar, P.groundL], rough: 1, ns: 0.7, seed: 3, size: 1024 }),
+    // the camp: 'paving' = night grass, 'lowPaving' = trodden soil of the trails
+    paving: camp ? std('grass', { neutral: false, colors: ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.35 })
+      : std('cobble', { neutral: false, colors: [P.ground, shade(P.ground, 0.08), P.mortar, P.groundL], rough: 1, ns: 0.7, size: 1024 }),
+    lowPaving: camp ? std('soil', { neutral: false, colors: ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.7, seed: 3 })
+      : std('cobble', { neutral: false, colors: [P.lowA, P.lowB, P.lowMortar, P.groundL], rough: 1, ns: 0.7, seed: 3, size: 1024 }),
     leaf: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),
     flat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
     dark: new THREE.MeshBasicMaterial({ color: '#100d17' }),
@@ -251,9 +255,11 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const fogCol = (sky.userData.horizon as THREE.Color | undefined)?.clone() ?? horizon.clone();
   const fog = new THREE.Fog(fogCol, 34, 260);
 
-  const hemi = new THREE.HemisphereLight(new THREE.Color('#8f9cff'), new THREE.Color('#4a2c30'), 1.15);
+  // the camp has only the fire, torches and tent lanterns (no street lamps): a little more moonlight on the meadow
+  const campLit = !!campOf(L);
+  const hemi = new THREE.HemisphereLight(new THREE.Color('#8f9cff'), new THREE.Color('#4a2c30'), campLit ? 1.45 : 1.15);
   root.add(hemi);
-  const amb = new THREE.AmbientLight(new THREE.Color('#5a5490'), 0.3);
+  const amb = new THREE.AmbientLight(new THREE.Color('#5a5490'), campLit ? 0.42 : 0.3);
   root.add(amb);
   const sun = new THREE.DirectionalLight(new THREE.Color('#bcc8ff'), 1.7);
   sun.shadow.mapSize.set(2048, 2048);
@@ -377,7 +383,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   let inter: Interactable[] | null = null;
   const mapCache = new Map<number, Promise<MapImage>>();
   const world: CityWorld = {
-    root, groundAt, doors, spawn: [L.QW + 660, 1010], update, setQuality, dispose, solidTop,
+    root, groundAt, doors, spawn: (L as CampLayout).spawn ? [...(L as CampLayout).spawn!] as [number, number] : L.id === 'fair' ? [L.QW + 660, 1010] : L.nearest((L.area.x0 + L.area.x1) / 2, (L.area.y0 + L.area.y1) / 2), update, setQuality, dispose, solidTop,
     onDoor: opts.onDoor,
     interactables: () => (inter ||= doorInteractables(L, groundAt, () => world.onDoor)),
     mapImage(r, o = {}) {

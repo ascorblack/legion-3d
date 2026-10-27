@@ -32,6 +32,9 @@ const CROWD = [
   W('frosty', 'Снежок', 5, { shape: 'ball', color: '#8fb6ff', hat: 'party', aura: 'frost', acc: ['bowtie'] }, { w: 'mace', wr: 'rare', s: 'buckler', sr: 'rare' }),
   W('cowpoke', 'Ковбой', 4, { shape: 'egg', hat: 'cowboy', acc: ['mustache', 'tie'], color: '#ffe27a' }, { w: 'axe', wr: 'uncommon', s: 'barrel', sr: 'common' }),
   W('sparky', 'Искра', 6, { shape: 'cone', hat: 'antenna2', aura: 'sparks', color: '#9fe39a' }, { w: 'spear', wr: 'rare', a: 'lorica', ar: 'uncommon', am: 'heavy' }),
+  // Halloween looks (26.10): vampire cape + bats, Frankenstein bolts + cobweb + pumpkin glow + candy bucket
+  W('vamp', 'Вампирчик', 7, { shape: 'bean', color: '#c9b8d8', acc: ['vampcape', 'fangs'], aura: 'bats', eyes: 'big', hat: 'none', mouth: 'open' }, {}),
+  W('franky', 'Франки', 5, { shape: 'box', color: '#9fe39a', acc: ['bolts', 'cobweb', 'candybag'], aura: 'jackglow', eyes: 'dots', hat: 'none' }, {}),
   W('shepherd', 'Пастух', 3, { shape: 'bean', hat: 'bunny', color: '#b9a2ff', eyes: 'dots' }, { w: 'crook', wr: 'common', a: 'robe', ar: 'common' }),
   W('legionary', 'Легионер', 11, { shape: 'tall', hat: 'legion', color: '#ffc94d' }, { w: 'gladius', wr: 'legendary', s: 'scutum', sr: 'rare', a: 'lorica', ar: 'legendary', am: 'heavy' }),
   W('dead_one', 'Упокоенный', 7, { shape: 'bean', hat: 'halo' }, { w: 'club', a: 'leather' }, 1),

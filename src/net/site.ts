@@ -9,6 +9,10 @@ import { createStore, type StoreWriter } from '../store/store';
 import { SX, SZ } from '../world/coords';
 import type { Bus } from '../bridge/bridge';
 import { createGoSender } from '../flight/sendpoint';
+import CONTRACT from '../data/site-contract.json';
+import { runtimeContract, describeFails, type ContractCheck } from './contract';
+import { reportDrift } from '../core/drift';
+import { CAMP, campScene, detectTown, readTownSignals, townMeta, type CampScene, type HeroTownFlags } from './town';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
 const W = window as any;
@@ -57,14 +61,30 @@ export function siteDefaults(login: string): Record<string, unknown> | null {
   } catch { return null; }
 }
 export const styleId = (): string => { try { return String(W.MDDoodle?.active || 'legion'); } catch { return 'legion'; } };
+/** Style a look is drawn in: a hero with a personal style (Печать Метаморфозы, 26.10: `ps` in the look, doodle.js styleFor)
+ *  keeps it in every channel; everyone else is drawn in the channel's style. */
+export const lookStyle = (lk: any, channel: string): string => (lk && typeof lk.ps === 'string' && /^[\w-]{1,30}$/.test(lk.ps) ? lk.ps : channel);
 
 /* ------------------------------------------------------------------ layout */
-function buildLayout(hero: Hero | null): CityLayout | null {
+/** Current town id of the site's City (src/net/town.ts: DOM, picker, sessionStorage, hero flags). */
+export function currentTown(hero: Hero | null): { id: string; via: string } {
+  return detectTown(readTownSignals(W, document, hero as HeroTownFlags | null));
+}
+/** Districts list (GET /api/city/towns — the same read the site's own town picker does), cached for a minute. */
+let townsCache: { at: number; list: any[] } | null = null;
+async function townsList(force = false): Promise<any[]> {
+  if (!force && townsCache && Date.now() - townsCache.at < 60000) return townsCache.list;
+  const r = await api<any>('/api/city/towns');
+  const list = r && r.ok && Array.isArray(r.list) ? r.list : [];
+  townsCache = { at: Date.now(), list };
+  return list;
+}
+/** Town layout the 3D world can be built from, or null (not available yet / not this town). `townMetaOf` = an entry of
+ *  /api/city/towns for district towns. */
+function buildLayout(hero: Hero | null, town: string, townMetaOf: any): CityLayout | null {
   const M = W.LGCityMap, D = W.MDDoodle; if (!M || !D) return null;
-  const where = safe(() => W.LGCity?.where?.(), null) as any;
-  if (where && where.id && where.id !== 'fair') {
-    const L = buildTownLayout(where.id); if (L) return L;
-  }
+  if (town === CAMP) return buildCampLayout(hero);
+  if (town !== 'fair') return townMetaOf ? buildTownLayout(hero, town, townMetaOf) : null;
   let L: any = null; try { L = D.location('fair', { esc: (s: unknown) => String(s ?? '') }); } catch { /* none */ }
   if (!L) return null;
   const ms = !!(hero && hero.ms), mn = !!(hero && hero.mn && Object.keys(hero.mn as object).length);
@@ -94,18 +114,46 @@ function buildLayout(hero: Hero | null): CityLayout | null {
     free: (x, y) => map.free(x, y), nearest: (x, y) => map.nearest(x, y), path: (a, b) => map.path(a, b),
   };
 }
-function buildTownLayout(_id: string): CityLayout | null {
-  // District towns use LGTownGen; the site keeps the generated layout private (TOWN.L). We rebuild it from the towns list.
+/** city.js soonB / bOk for a town's buildings (same hero flags as the fair). */
+function townBuildings(list: any[], hero: Hero | null, magicOk: boolean): Building[] {
+  const h = (hero || {}) as any, mn = !!(h.mn && Object.keys(h.mn).length);
+  return list.filter((b) => (!b.magic || magicOk) && (!b.mine || mn)).map((b) => ({
+    ...b, door: { ...b.door },
+    title: b.id === 'magic' && h.ms ? String(h.ms) : b.title,
+    // a building under construction (b.build, towngen.js buildLeft) is closed like a «soon» one
+    soon: (!!b.soon && !((b.id === 'auction' && h.au) || (b.id === 'storage' && h.sg) || (b.id === 'mine' && mn)))
+      || !!(b.build && safe(() => W.LGTownGen?.buildLeft?.(b, Date.now()), 0)),
+  }));
+}
+function buildTownLayout(hero: Hero | null, id: string, meta: any): CityLayout | null {
+  // District towns: the site keeps its generated layout private (TOWN.L); towngen.js is deterministic, so the same
+  // generate(townMeta(entry of /api/city/towns)) gives the same layout and walk grid as the site (city.js townPrep/buildTown).
   try {
-    const TG = W.LGTownGen, M = W.LGCityMap; if (!TG || !M) return null;
-    const t = (W.LGCity?.towns?.()?.list || []).find((x: any) => x.id === _id); if (!t) return null;
-    const TL = TG.generate(t);
-    const map = TG.map(TL, {});
+    const TG = W.LGTownGen; if (!TG) return null;
+    const TL = TG.generate(townMeta(meta));
+    const MS = !!(hero as any)?.ms;
+    const map = TG.map(TL, { magic: MS });
     return {
-      id: _id, styleId: styleId(), W: TL.W, H: TL.H, QW: 0, area: TL.AREA,
-      obstacles: map.OBST, buildings: TL.BUILDINGS, free: (x, y) => map.free(x, y), nearest: (x, y) => map.nearest(x, y), path: (a, b) => map.path(a, b),
+      id, styleId: styleId(), W: TL.W, H: TL.H, QW: 0, area: TL.AREA,
+      obstacles: (map.OBST || TL.OBST || []) as Obstacle[], buildings: townBuildings(TL.BUILDINGS, hero, MS),
+      free: (x, y) => map.free(x, y), nearest: (x, y) => map.nearest(x, y), path: (a, b) => map.path(a, b),
+      ...(Array.isArray(TL.spawn) ? { spawn: [+TL.spawn[0], +TL.spawn[1]] } : {}),
+    } as CityLayout;
+  } catch (e) { console.warn('[legion-3d] district town layout', id, e); return null; }
+}
+/** The start camp «Перепутье» (campmap.js, loaded by city.js on demand): same building ids as the fair, own scene. */
+function buildCampLayout(hero: Hero | null): CityLayout | null {
+  try {
+    const CM = W.LGCampMap; if (!CM || typeof CM.get !== 'function' || typeof CM.map !== 'function') return null;
+    const TL = CM.get(), map = CM.map(TL), camp = campScene(TL); if (!camp) return null;
+    const L: CityLayout & { camp: CampScene; spawn: [number, number]; title?: string } = {
+      id: CAMP, styleId: styleId(), W: TL.W, H: TL.H, QW: 0, area: TL.AREA,
+      obstacles: (TL.OBST || []) as Obstacle[], buildings: townBuildings(TL.BUILDINGS, hero, false),
+      free: (x, y) => map.free(x, y), nearest: (x, y) => map.nearest(x, y), path: (a, b) => map.path(a, b),
+      camp, spawn: camp.spawn, title: String(TL.name || 'Перепутье'),
     };
-  } catch { return null; }
+    return L;
+  } catch (e) { console.warn('[legion-3d] camp layout', e); return null; }
 }
 const safe = <T,>(f: () => T, d: T): T => { try { return f(); } catch { return d; } };
 
@@ -138,7 +186,19 @@ html.l3d-on #toast{z-index:125!important}
 html.l3d-on #tab-city .cy-view{width:4px!important;height:4px!important;min-height:0!important;overflow:hidden!important;position:absolute!important;left:0;top:0}
 `;
 
-export async function connectSite(opts: { onStatus?: (s: string) => void } = {}): Promise<SiteSession | { error: 'no_login' | 'no_hero' | 'city_locked' | 'site_changed' | 'quest_running'; loginUrl?: string }> {
+/** Boot guard: the runtime site contract (src/data/site-contract.json via src/net/contract.ts). 'break' failures stop
+ *  the boot (splash «Сайт обновился…», the list in the console); 'degrade' ones are logged and reported as drift. */
+export function siteGuard(phase: 'page' | 'city'): { breaks: string[]; degrades: string[] } {
+  const fails = runtimeContract(CONTRACT.checks as ContractCheck[], W, document, phase);
+  const breaks = describeFails(fails.filter((f) => f.severity === 'break'));
+  const degrades = describeFails(fails.filter((f) => f.severity === 'degrade'));
+  for (const f of fails) if (f.severity === 'degrade') reportDrift('site', f.id, f.missing);
+  if (degrades.length) console.warn('[legion-3d] the site changed, some features degrade:', degrades);
+  if (breaks.length) console.error('[legion-3d] the site changed, 3D cannot run:', breaks);
+  return { breaks, degrades };
+}
+
+export async function connectSite(opts: { onStatus?: (s: string) => void } = {}): Promise<SiteSession | { error: 'no_login' | 'no_hero' | 'city_locked' | 'site_changed' | 'quest_running'; loginUrl?: string; missing?: string[] }> {
   const say = opts.onStatus || (() => {});
   const B = bus();
   say('Проверяем вход…');
@@ -157,6 +217,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   if (!document.querySelector('#tab-city.on')) cityBtn.click();
   const ok = await waitFor(() => W.LGCity && W.LGCityMap && W.MDDoodle && W.LGCity.debug && W.LGCity.debug(), 30000, 200);
   if (!ok) return { error: document.querySelector('#tab-city.on') ? 'site_changed' : 'city_locked' };
+  { const g = siteGuard('city'); if (g.breaks.length) return { error: 'site_changed', missing: g.breaks }; }
 
   // Hide the 2D layer, keep interiors. Others hidden in the site client = it stops drawing them (we draw them).
   const style = document.createElement('style'); style.id = 'l3d-hide'; style.textContent = HIDE_CSS; document.head.appendChild(style);
@@ -172,15 +233,40 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   // Layout (re)build — on start, on town change, when hero flags change (mine/magic open)
   let layoutKey = '';
   let mapRef: CityLayout | null = null as CityLayout | null;
+  let townNow = 'fair', townVia = 'default', townWant = '';
   const refreshLayout = () => {
     const h = store.hero;
-    const where = safe(() => W.LGCity.where?.()?.id || 'fair', 'fair');
-    const key = `${where}|${!!h?.ms}|${!!(h?.mn && Object.keys(h.mn as object).length)}|${!!h?.au}|${!!h?.sg}|${styleId()}`;
+    const t = currentTown(h); townNow = t.id; townVia = t.via;
+    const key = `${t.id}|${!!h?.ms}|${!!(h?.mn && Object.keys(h.mn as object).length)}|${!!h?.au}|${!!h?.sg}|${styleId()}`;
     if (key === layoutKey) return;
-    const L = buildLayout(h); if (!L) return;
+    if (t.id !== 'fair' && t.id !== CAMP) {
+      // district town: its entry of /api/city/towns (GET, the same read as the site's town picker) → towngen.js
+      if (townWant === key) return;
+      townWant = key;
+      void townsList(true).then((list) => {
+        townWant = '';
+        if (currentTown(store.hero).id !== t.id) return;   // switched again meanwhile
+        const meta = list.find((x) => x && x.id === t.id);
+        const L = meta && buildLayout(store.hero, t.id, meta);
+        if (!L) { console.warn('[legion-3d] district town not available:', t.id); return; }
+        layoutKey = key; store.setLayout(L); mapRef = L;
+      });
+      return;
+    }
+    const L = buildLayout(h, t.id, null); if (!L) return;   // camp: null until campmap.js is loaded (the City rebuilds → refresh)
     layoutKey = key; store.setLayout(L); mapRef = L;
   };
   refreshLayout();
+  // the site builds a new town asynchronously (townPrep loads campmap.js / towngen.js, then open()): watch the City root
+  let townObs: MutationObserver | null = null;
+  {
+    const root = document.querySelector('#tab-city');
+    if (root && typeof MutationObserver === 'function') {
+      let pend = 0;
+      townObs = new MutationObserver(() => { if (!pend) pend = window.setTimeout(() => { pend = 0; refreshLayout(); }, 150); });
+      townObs.observe(root, { childList: true });   // root.innerHTML = shell / «Город строится…»: direct children only (cheap)
+    }
+  }
 
   /* ---------------- walkers ---------------- */
   const sims = store.walkers as Map<string, Sim>;
@@ -208,11 +294,11 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     let w = sims.get(l), fresh = false;
     if (!w) {
       const [nx, ny] = mapRef ? mapRef.nearest(+e.x || 0, +e.y || 0) : [+e.x || 0, +e.y || 0];
-      w = { login: l, app: appearanceFn(l, e, styleId()), x: nx, y: ny, face: 0, speed: 0, alpha: 0, path: null, lag: 0, raw: e, vx: 0, vy: 0, lookKey: lookKeyOf(e) };
+      w = { login: l, app: appearanceFn(l, e, lookStyle(e?.lk, styleId())), x: nx, y: ny, face: 0, speed: 0, alpha: 0, path: null, lag: 0, raw: e, vx: 0, vy: 0, lookKey: lookKeyOf(e) };
       sims.set(l, w); fresh = true; store.emit('walkers');
     } else {
       const k = lookKeyOf(e);   // one stringify per update (was two)
-      if (k !== w.lookKey) { w.lookKey = k; w.raw = e; w.app = appearanceFn(l, e, styleId()); store.emit('walkers'); }
+      if (k !== w.lookKey) { w.lookKey = k; w.raw = e; w.app = appearanceFn(l, e, lookStyle(e?.lk, styleId())); store.emit('walkers'); }
     }
     follow(w, +e.x, +e.y, +(e.tx ?? e.x), +(e.ty ?? e.y), +e.dt || 0, fresh);
   };
@@ -255,7 +341,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   };
 
   // me (our own walker): position comes from the game, appearance from the hero
-  const heroApp = (h: Hero) => appearanceFn(myLogin, { ...h, n: h.name, lv: h.level, lk: (h.wardrobe?.cur && Object.keys(h.wardrobe.cur).length ? h.wardrobe.cur : h.look), g: h.gear, gh: h.ghost ? 1 : 0 }, styleId());
+  const heroApp = (h: Hero) => appearanceFn(myLogin, { ...h, n: h.name, lv: h.level, lk: (h.wardrobe?.cur && Object.keys(h.wardrobe.cur).length ? h.wardrobe.cur : h.look), g: h.gear, gh: h.ghost ? 1 : 0 }, lookStyle((h.wardrobe?.cur && Object.keys(h.wardrobe.cur).length ? h.wardrobe.cur : h.look), styleId()));
   const startPos = safe(() => W.LGCity.debug()?.me as [number, number] | undefined, undefined);
   store.setMe({ login: myLogin, app: heroApp(me.hero), x: startPos ? startPos[0] : ((mapRef as CityLayout | null)?.QW ?? 1800) + 660, y: startPos ? startPos[1] : 1010, face: 0, speed: 0, alpha: 1, me: true });
 
@@ -388,6 +474,9 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   const art = (): ArtProvider | null => null;   // facades are rasterized by src/world from layout.art when present
 
   const onVis = () => { /* site handles leave/enter on visibility itself */ };
+  // which town the 3D world shows and how it was detected (debug panel, e2e/live.mjs, e2e/contract.mjs)
+  const townInfo = () => ({ id: townNow, via: townVia, layout: mapRef?.id ?? null });
+  W.__l3dTown = townInfo;
   document.addEventListener('visibilitychange', onVis);
 
   return {
@@ -395,6 +484,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     selfPos: () => (store.me ? [store.me.x, store.me.y] : null),
     dispose() {
       for (const u of unsubs) u();
+      townObs?.disconnect();
+      if (W.__l3dTown === townInfo) delete W.__l3dTown;
       document.removeEventListener('visibilitychange', onVis);
       setClassic(true); style.remove();
     },

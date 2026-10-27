@@ -306,4 +306,36 @@ export function addAccessories(p: Parts, acc: string[], k: AccCtx): void {
     for (const s of [-1, 1]) p.add(conform(prep(tube([[s * 0.004, y, 0], [s * 0.05, y - 0.014, 0], [s * 0.1, y + 0.004, 0], [s * 0.12, y + 0.035, 0]], 0.017, 12, 6, 0.7), '#3a2410'), k, 0.018));
   }
   if (has('fangs')) for (const s of [-1, 1]) p.add(conform(prep(cone(0.008, 0.026, 5), '#ffffff'), k, 0.009, T(s * 0.025, my - 0.035, 0, Math.PI, 0, 0, [1, 1, 0.6])));
+  // Halloween accessories (doodle.js, 26.10)
+  if (has('bolts')) for (const s of [-1, 1]) {
+    // Frankenstein neck bolts: a grey bolt sticking out of each side of the neck, a hex nut at its end
+    const r = radiusAt(d, neckY) + shellOff;
+    p.add(prep(cyl(0.022, 0.022, 0.09, 8), '#9aa3ad', T(s * (r + 0.02), neckY + 0.01, 0, 0, 0, Math.PI / 2)));
+    p.add(prep(cyl(0.036, 0.036, 0.03, 6), '#c8ccd3', T(s * (r + 0.07), neckY + 0.01, 0, 0, 0, Math.PI / 2)));
+  }
+  if (has('cobweb')) {
+    // a cobweb on the shoulder (front, character's right): 5 spokes + 3 sagging arcs + a little black spider
+    const x0 = -rN * 0.62, y0 = neckY - 0.03, W = '#efe6ff';
+    const spoke = (a: number, R: number): [number, number, number] => [x0 + Math.cos(a) * R, y0 - Math.sin(a) * R, 0];
+    const angs = [-0.17, 0.26, 0.7, 1.13, 1.57].map((a) => a + Math.PI);   // fanning down-left over the shoulder
+    for (const a of angs) p.add(conform(prep(tube([spoke(a, 0), spoke(a, 0.07), spoke(a, 0.14)], 0.0032, 6, 3), W), k, 0.012));
+    for (const R of [0.05, 0.095, 0.135]) {
+      const pts: [number, number, number][] = [];
+      for (let q = 0; q < angs.length; q++) { pts.push(spoke(angs[q], R)); if (q + 1 < angs.length) pts.push(spoke((angs[q] + angs[q + 1]) / 2, R * 0.86)); }
+      p.add(conform(prep(tube(pts, 0.0028, 18, 3), W), k, 0.012));
+    }
+    const sp = spoke(angs[2], 0.1);
+    p.add(conform(prep(sphere(0.026, 8, 6), '#1c1424', T(sp[0], sp[1], 0, 0, 0, 0, [1, 1, 0.6])), k, 0.02));
+    for (const s of [-1, 1]) for (const dy of [-0.008, 0.008]) p.add(conform(prep(box(0.034, 0.004, 0.004), '#1c1424', T(sp[0] + s * 0.026, sp[1] + dy, 0, 0, 0, s * dy * 30)), k, 0.016));
+  }
+  if (has('candybag')) {
+    // a jack-o'-lantern candy bucket held at the side: ribbed orange pumpkin, carved face, handle, candies on top
+    const y = neckY - 0.33, r = radiusAt(d, y) + shellOff, X = r + 0.1, Z = -0.06;
+    const O = '#ff7a1a';
+    for (const q of [-1, 0, 1]) p.add(prep(sphere(0.085, 12, 9), q ? '#f06a12' : O, T(X + q * 0.032, y, Z, 0, 0, 0, [0.62, 0.82, 0.9])));
+    p.add(prep(torus(0.07, 0.006, 6, 18, Math.PI), INK, T(X, y + 0.045, Z, 0, Math.PI / 2, 0)));
+    for (const s of [-1, 1]) p.add(prep(cone(0.012, 0.022, 3), '#2a1a12', T(X + s * 0.026, y + 0.015, Z - 0.08, -Math.PI / 2, 0, 0)));
+    p.add(prep(box(0.05, 0.01, 0.006), '#2a1a12', T(X, y - 0.022, Z - 0.081)));
+    for (const [cx, cz, c] of [[-0.02, 0, '#ff5a8a'], [0.015, -0.01, '#7fd6e6'], [0.0, 0.02, '#ffd34d']] as const) p.add(prep(sphere(0.016, 8, 6), c, T(X + cx, y + 0.068, Z + cz)));
+  }
 }

@@ -14,19 +14,28 @@ const out = resolve(process.env.L3D_TEST_OUT || 'e2e/.artifacts/firefox');
 mkdirSync(out, { recursive: true });
 const temp = mkdtempSync(join(tmpdir(), 'l3d-firefox-'));
 const manifest = JSON.parse(readFileSync('dist-firefox/manifest.json', 'utf8'));
-const archive = resolve(`legion-3d-${manifest.version}-firefox-store.zip`);
-const release = resolve(`legion-3d-${manifest.version}-firefox.zip`);
+// The GitHub zip is what gets signed and shipped (.xpi); the store zip has the GitHub update check stripped.
+const archive = resolve(`legion-3d-${manifest.version}-firefox.zip`);
+const storeZip = resolve(`legion-3d-${manifest.version}-firefox-store.zip`);
 const archivedManifest = JSON.parse(execFileSync('unzip', ['-p', archive, 'manifest.json'], { encoding: 'utf8' }));
 assert.deepEqual(archivedManifest, manifest);
-const installNote = execFileSync('unzip', ['-p', release, 'INSTALL-RU.txt'], { encoding: 'utf8' });
-assert.ok(installNote.includes('about:debugging'));
+const installNote = execFileSync('unzip', ['-p', archive, 'INSTALL-RU.txt'], { encoding: 'utf8' });
+assert.ok(installNote.includes('.xpi'));
 assert.ok(!installNote.includes('chrome://extensions'));
 const entries = execFileSync('unzip', ['-Z1', archive], { encoding: 'utf8' }).trim().split('\n');
-assert.ok(!entries.some(p => p.endsWith('.map') || p === 'INSTALL-RU.txt'));
+assert.ok(!entries.some(p => p.endsWith('.map')));
+for (const f of ['background.js', 'notify.js']) assert.ok(entries.includes(f), `${f} must be in the package`);
+const storeEntries = execFileSync('unzip', ['-Z1', storeZip], { encoding: 'utf8' }).trim().split('\n');
+const storeManifest = JSON.parse(execFileSync('unzip', ['-p', storeZip, 'manifest.json'], { encoding: 'utf8' }));
+assert.ok(!storeEntries.includes('background.js') && !storeEntries.includes('notify.js') && !storeEntries.includes('INSTALL-RU.txt'));
+assert.ok(!storeManifest.background && !storeManifest.host_permissions && !storeManifest.permissions);
+assert.deepEqual(manifest.background, { scripts: ['background.js'] });
+assert.deepEqual(manifest.host_permissions, ['https://api.github.com/repos/ascorblack/legion-3d/releases/latest']);
+assert.deepEqual(manifest.permissions, ['storage']);
 const gameHtml = readFileSync('dist-dev/game.html', 'utf8')
   .replace(/<link[^>]*https:\/\/[^>]*>/g, '')
   .replace('<script src="game.js">', `<script>localStorage.setItem('l3d.whatsnew.seen', ${JSON.stringify(manifest.version)});window.testErrors=[];const logError=console.error.bind(console);console.error=(...args)=>{testErrors.push(args.map(String).join(' '));logError(...args);};window.addEventListener('error',e=>testErrors.push(e.message));window.addEventListener('unhandledrejection',e=>testErrors.push(String(e.reason)));</script><script src="game.js">`);
-const fixture = `<!doctype html><meta charset="utf-8"><script nonce="fixture">window.bridgeAtStart=!!window.__L3D_BUS;localStorage.setItem('l3d.auto','0');</script><body>Extension fixture<iframe src="/c/frame/"></iframe></body>`;
+const fixture = `<!doctype html><meta charset="utf-8"><script nonce="fixture">window.bridgeAtStart=!!window.__L3D_BUS;localStorage.setItem('l3d.auto','0');window.updMsgs=[];window.addEventListener('message',e=>{if(e.source===window&&e.data&&e.data.__l3d==='update')window.updMsgs.push(e.data);});</script><body>Extension fixture<iframe src="/c/frame/"></iframe></body>`;
 let requests = 0;
 execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(temp, 'key.pem'), '-out', join(temp, 'cert.pem'), '-days', '1', '-subj', '/CN=play.multidonate.ru'], { stdio: 'ignore' });
 const server = createServer({ key: readFileSync(join(temp, 'key.pem')), cert: readFileSync(join(temp, 'cert.pem')) }, (req, res) => {
@@ -97,6 +106,15 @@ try {
   assert.equal(await js('return window.bridgeAtStart'), true);
   assert.equal(await js('return frames[0].bridgeAtStart'), false);
   checks.push('MAIN world at document_start under strict CSP; no iframe injection; launcher at document_idle');
+  // Update notice: notify.js (isolated world) must relay the background worker's answer as plain data. The worker's
+  // single GET to GitHub may fail offline; then the answer carries no `latest`, which is still a valid reply.
+  await until('return window.updMsgs.length > 0', 30000);
+  const upd = await js('return window.updMsgs[0]');
+  assert.equal(upd.current, manifest.version);
+  assert.equal(upd.store, false, 'a temporary/GitHub install has no update_url');
+  assert.deepEqual(Object.keys(upd).filter(k => !['__l3d', 'current', 'store', 'latest', 'url'].includes(k)), []);
+  if (upd.latest) assert.ok(upd.url.startsWith('https://github.com/ascorblack/legion-3d/releases/'));
+  checks.push('update notice relay: background worker -> notify.js -> page message (latest=' + (upd.latest || 'unavailable') + ')');
   await cmd('POST', '/execute/async', { script: "const done=arguments[0];fetch('/api/me').then(r=>r.json()).then(()=>{const es=new EventSource('/api/live');es.addEventListener('city',()=>{es.close();done(true);});});", args: [] });
   await until('return !!window.__L3D_BUS.last.me?.fixture && !!window.__L3D_BUS.last["sse:city"]?.fixture');
   checks.push('fetch and EventSource bridge');

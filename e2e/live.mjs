@@ -7,7 +7,7 @@
 //   {"wait":ms} {"press":"KeyE"} {"key":"KeyW","ms":2000} {"eval":"js expr"} (result printed)
 //   {"shot":"name"} (pauses the engine while capturing: swiftshader is slow) {"stats":1} {"mem":1}
 //   {"watch":ms} sample stats/memory/net every 5 s for ms
-// Safety: every POST except the city presence/movement calls the site's own city client makes is ABORTED at the
+// Safety: every POST except the city presence/movement calls (incl. /api/city/in — «entered building», 27.10) the site's own city client makes is ABORTED at the
 // network layer and reported, so a test can never buy, equip, chat or otherwise act for the account.
 // Never prints cookie values.
 //   --allow-mine: additionally allow the mine presence calls (/api/mine/enter|leave|ping|state) for a read-only capture
@@ -38,7 +38,7 @@ const net = { go: [], posts: {}, blocked: [], slow: [] };
 // --allow-mine: also let through the mine PRESENCE calls the site's own mine client makes when the mine opens
 // (/api/mine/enter|leave|ping|state) — for read-only state capture. Digging, selling, buying, lamp, chat stay blocked.
 const ALLOW_MINE = /\/api\/mine\/(enter|leave|ping|state)(\?|$)/;
-const ALLOW = { test: (u) => /\/api\/city\/(enter|go|ping|leave|state)(\?|$)/.test(u) || (!!opt['allow-mine'] && ALLOW_MINE.test(u)) };
+const ALLOW = { test: (u) => /\/api\/city\/(enter|go|ping|leave|state|in)(\?|$)/.test(u) || (!!opt['allow-mine'] && ALLOW_MINE.test(u)) };
 await c.route('**/api/**', (route) => {
   const r = route.request();
   if (r.method() !== 'GET' && !ALLOW.test(r.url())) { net.blocked.push(r.method() + ' ' + new URL(r.url()).pathname); console.log(ts(), '[BLOCKED]', r.method(), new URL(r.url()).pathname); return route.abort(); }

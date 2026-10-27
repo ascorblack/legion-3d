@@ -189,6 +189,12 @@ and prints:
 - **Site ids without support**: ids missing from `src/data/supported.json` (they get a generic fallback in the game);
 - **API paths we call that the site no longer mentions**: endpoints used in `src/` that disappeared (likely breakage).
 
+The contract (`src/data/site-contract.json`) is checked twice: statically by drift (`kind: 'keys'` = real top-level keys
+of the `window.<obj> = {` literal, comments ignored; `'global'` = the module's exports in node:vm; otherwise a regex) and
+at runtime (`src/net/contract.ts`): the extension's boot guard stops on a missing `break` item («Сайт обновился…», the
+list in the console) and reports `degrade` ones as drift; `L3D_COOKIES=… node e2e/contract.mjs` runs the same check on
+the live page read-only (exit 3 = break).
+
 Workflow: run drift → add support for what matters (model, room mapping, look) → update `supported.json` → `npm test`
 → `npm run drift -- --write` → commit the code with the new snapshot. At runtime the same unknown ids show in the F3
 panel and `window.__l3dDrift`.

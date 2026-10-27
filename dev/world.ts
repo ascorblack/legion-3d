@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { fixtureLayout } from './fixtures';
+import { fixtureLayout, campFixtureLayout } from './fixtures';
 import { buildCity } from '../src/world';
 import { toX, toZ, fromX, fromZ, EYE } from '../src/world/coords';
 import type { QualityLevel } from '../src/contracts';
@@ -36,7 +36,7 @@ const app = document.getElementById('app')!;
   const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 400);
   camera.rotation.order = 'YXZ';
 
-  const layout = fixtureLayout();
+  const layout = qs.get('town') === 'camp' ? campFixtureLayout() : fixtureLayout();
   const t0 = performance.now();
   const world = await buildCity(layout, { quality: q, renderer });
   const buildMs = performance.now() - t0;

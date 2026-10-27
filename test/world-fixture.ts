@@ -1,5 +1,6 @@
 /** Test helper: the static city built in node (no DOM): fake sign atlas, every Batch piece recorded. */
-import { fixtureLayout } from '../dev/fixtures';
+import { fixtureLayout, campFixtureLayout } from '../dev/fixtures';
+import type { CityLayout } from '../src/contracts';
 import { Batch } from '../src/world/batch';
 import { groundSpec, makeGroundAt } from '../src/world/ground';
 import { paletteOf } from '../src/world/palette';
@@ -11,8 +12,8 @@ import type { SignAtlas } from '../src/world/textures';
 import { buildStatic } from '../src/world/static';
 import { ZRecorder } from '../src/world/zfight';
 
-export function staticCity(debug = false) {
-  const L = fixtureLayout();
+export function staticCity(debug = false, layout?: CityLayout) {
+  const L = layout ?? fixtureLayout();
   const spec = groundSpec(L), groundAt = makeGroundAt(spec), P = paletteOf(L.styleId);
   const signs = { add: () => ({ uv: [0, 0, 1, 1] as [number, number, number, number], aspect: 4 }), texture: null } as unknown as SignAtlas;
   const rec = new ZRecorder(); rec.keepBoxes = debug;
@@ -26,3 +27,6 @@ export function staticCity(debug = false) {
   return { L, k, rec, ground, spec, groundAt };
 }
 
+
+/** The start camp «Перепутье» built the same way (test/fixtures/camp-map.json). */
+export const staticCamp = (debug = false) => staticCity(debug, campFixtureLayout());

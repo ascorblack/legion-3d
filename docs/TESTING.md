@@ -114,6 +114,9 @@ It serves a local HTTPS fixture under the matching game hostname (mapped to loca
 profile), so no game account or live server requests are involved. It checks early MAIN-world injection
 under strict CSP, no iframe injection, the launcher, fetch/SSE bridging, WebGL rendering, keyboard
 movement, camera modes, equipment menus, pointer lock after a real click, and classic/resume using the offline demo.
+It also checks that the package carries `background.js` + `notify.js`, and that the update relay works end to end in Firefox
+(background event page → isolated `notify.js` → `window.postMessage` data to the page; the worker's one anonymous GET of GitHub's
+releases/latest may fail offline, which is a valid answer). Unit tests for the notice: `test/update.test.ts` (mocked fetch and storage).
 
 Install [geckodriver](https://github.com/mozilla/geckodriver/releases) on PATH, then:
 

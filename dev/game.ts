@@ -7,7 +7,7 @@ import type { SiteSession } from '../src/contracts/modules';
 import { createStore } from '../src/store/store';
 import { appearanceFrom } from '../src/avatar';
 import { startGame } from '../src/content/game';
-import { fixtureLayout } from './fixtures';
+import { fixtureLayout, campFixtureLayout } from './fixtures';
 import { SX, SZ } from '../src/world/coords';
 import me from '../test/fixtures/me.json';
 import session from '../test/fixtures/city-session.json';
@@ -16,14 +16,19 @@ import { FakeMine, makeBus } from '../src/rooms/mine/fake';
 import mineEnter from '../test/fixtures/mine-enter.json';
 import { FakeQuest } from '../src/quest/fake';
 
-const layout = fixtureLayout();
+// ?town=camp: the start camp «Перепутье» (test/fixtures/camp-map.json), otherwise the fair
+const TOWN = new URLSearchParams(location.search).get('town');
+const layout = TOWN === 'camp' ? campFixtureLayout() : fixtureLayout();
+// ?sky=dusk: an evening sky for photos (the site's own style sky otherwise)
+if (new URLSearchParams(location.search).get('sky') === 'dusk') layout.sky = 'linear-gradient(#1b1640 0%, #3e2f6e 38%, #9a5a86 72%, #f0a070 100%)';
+const SPAWN: [number, number] = (layout as any).spawn || [layout.QW + 660, 1010];
 const store = createStore();
 const hero = structuredClone((me as any).hero) as Hero;
 store.setHero(hero);
 store.setLayout(layout);
 const STYLE = 'cats';
 const heroRaw = (h: Hero) => ({ ...h, n: h.name, lv: h.level, lk: (h as any).wardrobe?.cur || h.look, g: h.gear });
-store.setMe({ login: hero.login, app: appearanceFrom(hero.login, heroRaw(hero), STYLE), x: layout.QW + 660, y: 1010, face: 0, speed: 0, alpha: 1, me: true });
+store.setMe({ login: hero.login, app: appearanceFrom(hero.login, heroRaw(hero), STYLE), x: SPAWN[0], y: SPAWN[1], face: 0, speed: 0, alpha: 1, me: true });
 
 /* ---- bots ---- */
 const LINES = ['привет всем!', 'кто в шахту?', 'продам кирку недорого', 'где тренер?', 'ура, новый уровень!', 'го в поход вечером', 'сколько стоит колпак?', 'всем добрый вечер', 'у кого есть лишняя килька?', 'кузнец опять сломал мне меч :(', 'красивый шатёр', 'мяу'];
@@ -34,7 +39,7 @@ const N = +(new URLSearchParams(location.search).get('bots') || 24);
 for (let i = 0; i < N; i++) {
   const r = raw[i % raw.length];
   const login = `bot${i + 1}`;
-  const [x, y] = layout.nearest(layout.QW + 200 + Math.random() * 2600, 850 + Math.random() * 600);
+  const [x, y] = layout.nearest(layout.QW + 200 + Math.random() * Math.min(2600, layout.W - layout.QW - 400), 850 + Math.random() * Math.min(600, layout.area.y1 - 860));
   const b: Bot = { login, app: appearanceFrom(login, { ...r, l: login, n: `Котик${i + 1}` }, STYLE), x, y, face: Math.random() * 6.28, speed: 0, alpha: 1, path: null, wait: Math.random() * 3 };
   bots.push(b); store.upsertWalker(b);
 }
@@ -45,7 +50,7 @@ const pathTo = (b: Bot) => {
 };
 let chatN = 0;
 setInterval(() => {
-  const b = bots[(Math.random() * bots.length) | 0];
+  const b = bots[(Math.random() * bots.length) | 0]; if (!b) return;   // ?bots=0
   const m: ChatMsg = { id: 'c' + ++chatN, login: b.login, name: b.app.name, text: LINES[(Math.random() * LINES.length) | 0], at: Date.now(), kind: 'g' };
   store.pushChat([m]);
   b.bubble = { text: m.text, until: Date.now() + 4000 + m.text.length * 50, id: m.id };

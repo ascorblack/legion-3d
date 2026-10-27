@@ -91,31 +91,58 @@ export function outlineMat(v: Variant = 'n', lvl = ALPHA_LEVELS, width = 0.012):
 
 /** Additive soft particle material for auras (shared per kind). Positions animated in the shader from uTime. */
 export function auraPointsMat(kind: string, color: string, size: number, rise: number): THREE.ShaderMaterial {
+  // 'bats' (Halloween, doodle.js hwAura): dark bat silhouettes with a pale rim, flapping, circling over the head
+  // (normal blending); 'jackglow': little orange pumpkins rising; everything else: additive sparkles rising
+  const bats = kind === 'bats', jack = kind === 'jackglow';
   return cached(`aura|${kind}`, () => new THREE.ShaderMaterial({
     uniforms: { uTime, uColor: { value: new THREE.Color(color) }, uSize: { value: size }, uRise: { value: rise }, uOpacity: { value: 1 } },
     vertexShader: `
-      attribute vec4 seed; uniform float uTime; uniform float uSize; uniform float uRise; varying float vA;
+      attribute vec4 seed; uniform float uTime; uniform float uSize; uniform float uRise; varying float vA; varying float vFlap;
       void main() {
-        float ph = fract(uTime / (1.6 + seed.w) + seed.z);
         vec3 p = position;
+        ${bats ? `
+        float a = uTime * (0.9 + seed.y * 0.6) * (seed.z > 0.5 ? 1.0 : -1.0) + seed.z * 6.2832;
+        float r = length(position.xz);
+        p = vec3(cos(a) * r, uRise + position.y * 0.5 + sin(uTime * 3.0 + seed.z * 9.0) * 0.06, sin(a) * r);
+        vA = 1.0; vFlap = abs(sin(uTime * 14.0 + seed.z * 30.0));` : `
+        float ph = fract(uTime / (1.6 + seed.w) + seed.z);
         p.y += ph * uRise;
         p.x += sin(uTime * 2.0 + seed.z * 20.0) * 0.04;
-        vA = smoothstep(0.0, 0.2, ph) * (1.0 - smoothstep(0.65, 1.0, ph));
+        vA = smoothstep(0.0, 0.2, ph) * (1.0 - smoothstep(0.65, 1.0, ph)); vFlap = 0.0;`}
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
         gl_PointSize = uSize * (0.6 + seed.x) * 300.0 / max(0.5, -mv.z);
       }`,
     fragmentShader: `
-      uniform vec3 uColor; uniform float uOpacity; varying float vA;
+      uniform vec3 uColor; uniform float uOpacity; varying float vA; varying float vFlap;
       void main() {
-        vec2 d = gl_PointCoord - 0.5; float r = length(d);
+        vec2 d = gl_PointCoord - 0.5; d.y = -d.y;
+        ${bats ? `
+        // body ellipse + two scalloped wings whose tips go up/down with the flap
+        float body = length(vec2(d.x * 3.2, (d.y - 0.02) * 2.2));
+        float ax = abs(d.x), wy = (0.06 + 0.22 * vFlap) * ax * 2.0 - 0.02;
+        float scal = 0.05 * abs(sin(ax * 28.0));
+        float wing = step(ax, 0.46) * step(d.y, wy + 0.08) * step(wy - 0.1 + scal, d.y);
+        float ear = step(abs(ax - 0.05), 0.02) * step(0.1, d.y) * step(d.y, 0.17);
+        float inside = max(max(step(body, 0.25), wing), ear);
+        if (inside < 0.5) discard;
+        float rim = step(0.2, body) * step(body, 0.25);
+        gl_FragColor = vec4(mix(uColor, vec3(0.94, 0.9, 1.0), rim * 0.8 + step(abs(d.y - wy - 0.07), 0.012) * wing * 0.6), uOpacity);` : jack ? `
+        float r = length(vec2(d.x * 1.15, d.y));
+        float a = (1.0 - smoothstep(0.2, 0.26, r)) * vA * uOpacity;
+        float stem = step(abs(d.x), 0.03) * step(0.2, d.y) * step(d.y, 0.32);
+        a = max(a, stem * vA * uOpacity);
+        if (a < 0.01) discard;
+        float rib = 0.75 + 0.25 * cos(d.x * 30.0);
+        gl_FragColor = vec4(mix(uColor * rib, vec3(0.3, 0.5, 0.18), stem), a);` : `
+        float r = length(d);
         float star = max(0.0, 1.0 - r * 2.0);
         float cross = max(0.0, 1.0 - abs(d.x) * 9.0) * max(0.0, 1.0 - abs(d.y) * 2.2) + max(0.0, 1.0 - abs(d.y) * 9.0) * max(0.0, 1.0 - abs(d.x) * 2.2);
         float a = (star * star + cross * 0.6) * vA * uOpacity;
         if (a < 0.01) discard;
-        gl_FragColor = vec4(uColor * (0.8 + star), a);
+        gl_FragColor = vec4(uColor * (0.8 + star), a);`}
       }`,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    transparent: !bats, depthWrite: bats, blending: bats || jack ? THREE.NormalBlending : THREE.AdditiveBlending,
   }));
 }
 

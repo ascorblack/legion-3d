@@ -62,6 +62,10 @@ const AURAS: Record<string, AuraDef> = {
   wisps: { color: '#9fffd0', size: 0.08, rise: 0.8, n: 8 },
   leaves: { color: '#ffb04a', size: 0.06, rise: -0.9, n: 10 },
   haunt: { color: '#b8c4d8', size: 0.1, rise: 0.4, n: 10, glow: '#5a6a88', glowOp: 0.4, additive: false },
+  // Halloween (doodle.js hwAura, 26.10): a small colony of bats circling over the head (rise = flight height above the
+  // root, set from the model's head top below), and an orange pumpkin glow with little pumpkins rising
+  bats: { color: '#2a1f38', size: 0.16, rise: 0, n: 4 },
+  jackglow: { color: '#ff8a1f', size: 0.11, rise: 0.9, n: 7, glow: '#ff7a1a', glowOp: 0.6 },
 };
 const auraGeoCache = new Map<string, THREE.BufferGeometry>();
 function auraGeo(n: number, r: number, h: number, key: string): THREE.BufferGeometry {
@@ -219,6 +223,7 @@ class AvatarImpl implements Avatar, AvatarCombat, AvatarSocial {
     if (def) {
       const r = m.dims.w + 0.12, h = m.headTop;
       const pts = new THREE.Points(auraGeo(def.n, r, h, `${kind}|${r.toFixed(2)}`), auraPointsMat(kind!, def.color, def.size, def.rise));
+      if (kind === 'bats') pts.position.y = h + 0.2;   // the bats circle above the head (shader: rise 0 = orbit plane)
       pts.frustumCulled = true;
       this.auraGroup.add(pts);
       if (def.glow) {

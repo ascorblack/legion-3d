@@ -3,24 +3,62 @@
  * facades between upper buildings and the props. No materials/renderer/DOM needed (tests build the city with a fake
  * sign atlas and run the z-fight detector on the Batch).
  */
-import type { CityLayout } from '../contracts';
-import { toX } from './coords';
+import type { Building, CityLayout } from '../contracts';
+import { toX, toZ } from './coords';
 import { archWallGeo, M } from './batch';
 import type { GroundSpec } from './ground';
 import { type Ctx, box, shade } from './kit';
-import { buildBuilding, house, isUpper } from './buildings';
+import { buildBuilding, house, isUpper, BUILDING_DZ, solidFrontOf } from './buildings';
 import { buildTerrain, buildBackdrop } from './terrain';
 import { placeProps, type Placed } from './place';
+import { campOf, buildCampTerrain, buildCampProps } from './camp';
+
+/** A building; on a layout without the lower street (camp, district towns) the lower-street models (storage barn,
+ *  mine…) get a virtual retaining wall 3 m behind their front, so they keep their depth instead of collapsing to 0. */
+function buildOnFlat(k: Ctx, b: Building, spec: GroundSpec): void {
+  if (spec.hasLow || !LOW_MODELS.has(b.id)) { buildBuilding(k, b); return; }
+  const wz = k.wallZ;
+  k.wallZ = toZ(b.hit[3]) - 3.2;
+  try { buildBuilding(k, b); } finally { k.wallZ = wz; }
+}
+const LOW_MODELS = new Set(['storage', 'mine', 'mineboard']);
+
+/** Off the fair, move upper building models back so their solid front stays behind the site's first walkable row in
+ *  front of them (every go() point the site accepts must be reachable in 3D). */
+function fitFronts(L: CityLayout): void {
+  for (const b of L.buildings) {
+    if (!isUpper(b)) continue;
+    let yFree = Infinity;
+    for (let x = b.hit[0] + 24; x <= b.hit[1] - 24; x += 8) {
+      for (let y = Math.max(L.area.y0, 790); y < b.door.y + 40; y += 4) if (L.free(x, y)) { yFree = Math.min(yFree, y); break; }
+    }
+    if (!isFinite(yFree)) continue;
+    const dz = Math.min(0, toZ(yFree - 8) - solidFrontOf(b));
+    if (dz < 0) BUILDING_DZ.set(b, dz);
+  }
+}
 
 export function buildStatic(k: Ctx, L: CityLayout, spec: GroundSpec, groundAt: (x: number, y: number) => number, lampHead: number): Placed {
   const P = k.pal;
+  const camp = campOf(L);
+  if (L.id !== 'fair') fitFronts(L);
+  if (camp) {
+    // start camp «Перепутье»: grass, trails, palisades, forest; buildings as at the fair; tents, fire and props
+    k.b.tag = 'terrain';
+    buildCampTerrain(k, L, camp);
+    for (const b of L.buildings) { k.b.tag = b.id; buildOnFlat(k, b, spec); }
+    k.b.tag = 'props';
+    const placed = buildCampProps(k, camp);
+    k.b.tag = '';
+    return placed;
+  }
   k.b.tag = 'terrain';
   buildTerrain(k, L, spec);
   k.b.tag = 'backdrop';
   buildBackdrop(k, L, toX(L.W) / 2, 6);
 
   const upper = L.buildings.filter(isUpper).sort((a, b) => a.hit[0] - b.hit[0]);
-  for (const b of L.buildings) { k.b.tag = b.id; buildBuilding(k, b); }
+  for (const b of L.buildings) { k.b.tag = b.id; buildOnFlat(k, b, spec); }
   // fillers between upper buildings → a continuous street facade
   let x = 0;
   const W = L.W;

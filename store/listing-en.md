@@ -8,7 +8,7 @@ Walk through the Legion game's night-time city on play.multidonate.ru in first o
 
 Controls: WASD to move, Shift to run, Space to jump, mouse to look, V to switch camera, E to interact, Tab for menus, Enter for chat and F8 to return to the classic website. Open a game channel at `https://play.multidonate.ru/c/<channel>/` and sign in as usual; Chrome 111+.
 
-**Disclaimer:** unofficial fan project, not affiliated with the Legion game's developers or MultiDonate. The extension requests no Chrome permissions; it runs only on game channel pages. No data collection or analytics; preferences remain local. [Privacy policy](https://github.com/ascorblack/legion-3d/blob/main/docs/PRIVACY.md).
+**Disclaimer:** unofficial fan project, not affiliated with the Legion game's developers or MultiDonate. It runs only on game channel pages. No data collection or analytics; preferences remain local. The only other network request is made by installs from GitHub (never by store installs): once every 12 hours it reads the latest version number from api.github.com — anonymous, no cookies, nothing about you — and can be switched off in settings. [Privacy policy](https://github.com/ascorblack/legion-3d/blob/main/docs/PRIVACY.md).
 
 - Suggested category: Fun.
 - Single purpose: add an optional 3D game mode and interface to the Legion game website.

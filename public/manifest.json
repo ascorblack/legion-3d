@@ -3,12 +3,16 @@
   "name": "Legion 3D — город от первого лица",
   "short_name": "Legion 3D",
   "homepage_url": "https://github.com/ascorblack/legion-3d",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Неофициальное расширение: превращает сайт игры «Легион» (play.multidonate.ru) в 3D-игру от первого и третьего лица.",
   "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "permissions": ["storage"],
+  "host_permissions": ["https://api.github.com/repos/ascorblack/legion-3d/releases/latest"],
+  "background": { "service_worker": "background.js" },
   "content_scripts": [
     { "matches": ["https://play.multidonate.ru/c/*"], "js": ["bridge.js"], "run_at": "document_start", "world": "MAIN", "all_frames": false },
-    { "matches": ["https://play.multidonate.ru/c/*"], "js": ["game.js"], "run_at": "document_idle", "world": "MAIN", "all_frames": false }
+    { "matches": ["https://play.multidonate.ru/c/*"], "js": ["game.js"], "run_at": "document_idle", "world": "MAIN", "all_frames": false },
+    { "matches": ["https://play.multidonate.ru/c/*"], "js": ["notify.js"], "run_at": "document_idle", "all_frames": false }
   ],
   "minimum_chrome_version": "111"
 }

@@ -1,0 +1,352 @@
+{
+  "about": "What Legion 3D is built on top of: globals, functions, DOM hooks, endpoints and events of the game site. Static (scripts/drift.mjs, no browser): 'keys' = every key must be a real top-level key of the `window.<obj> = {` literal in 'file' (comments ignored); 'global' = the UMD/global module in 'file' exports those keys (run in node:vm) or, failing that, assigns window.<name>; otherwise 're' (JS regex source) must match 'file' (any script if omitted). Runtime (src/net/contract.ts: at boot in the extension and in e2e/contract.mjs): 'keys'/'global' are read from window ('type' function by default for keys), 'dom' selectors queried; 'when' = page | city (City tab open) | lazy (only when the site loaded that script). severity: break = the 3D game cannot work (boot stops with «Сайт обновился»), degrade = one feature degrades (console.warn + 'l3d:drift'). Keep in sync when the code starts relying on something new (docs/EXTENDING.md).",
+  "checks": [
+    {
+      "id": "LG_BASE",
+      "re": "LG_BASE",
+      "why": "channel prefix for /api calls (src/content, bridge)",
+      "severity": "break"
+    },
+    {
+      "id": "LGCity (core)",
+      "kind": "keys",
+      "obj": "LGCity",
+      "file": "city.js",
+      "keys": [
+        "open",
+        "go",
+        "debug",
+        "panel"
+      ],
+      "when": "city",
+      "severity": "break",
+      "why": "hybrid netcode: movement (go), own position (debug().me), interiors (panel) — src/net/site.ts"
+    },
+    {
+      "id": "LGCity (extras)",
+      "kind": "keys",
+      "obj": "LGCity",
+      "file": "city.js",
+      "keys": [
+        "hideOthers",
+        "quality",
+        "forgeStart",
+        "forgeFx",
+        "forgeCancel",
+        "town"
+      ],
+      "when": "city",
+      "severity": "degrade",
+      "why": "hide the 2D crowd, cheap 2D renderer, forge animation (src/rooms/hybrid/anvil.ts), town switch"
+    },
+    {
+      "id": "LGCityMap",
+      "kind": "global",
+      "name": "LGCityMap",
+      "file": "citymap.js",
+      "keys": [
+        "make",
+        "makeFrom",
+        "follow",
+        "stepAlong",
+        "QW",
+        "LOW",
+        "BUILDINGS"
+      ],
+      "when": "city",
+      "severity": "break",
+      "why": "fair layout, walk grid, walker interpolation (src/net/site.ts)"
+    },
+    {
+      "id": "LGCityArt",
+      "kind": "global",
+      "name": "LGCityArt",
+      "file": "cityart.js",
+      "keys": [
+        "quarter",
+        "lower"
+      ],
+      "type": "function",
+      "when": "city",
+      "severity": "degrade",
+      "why": "reference art of the quarter / lower street (layout.art)"
+    },
+    {
+      "id": "MDDoodle",
+      "kind": "global",
+      "name": "MDDoodle",
+      "file": "doodle.js",
+      "keys": [
+        "defaultsFor",
+        "location"
+      ],
+      "type": "function",
+      "when": "city",
+      "severity": "break",
+      "why": "fair location (obstacles, sky) and default looks by nick"
+    },
+    {
+      "id": "MDDoodle.active",
+      "kind": "global",
+      "name": "MDDoodle",
+      "file": "doodle.js",
+      "keys": [
+        "active"
+      ],
+      "type": "any",
+      "when": "page",
+      "severity": "degrade",
+      "why": "channel art style id"
+    },
+    {
+      "id": "LGGameData",
+      "kind": "global",
+      "name": "LGGameData",
+      "file": "game-data.js",
+      "keys": [
+        "baseCmd"
+      ],
+      "type": "function",
+      "when": "page",
+      "severity": "degrade",
+      "why": "expedition commands (src/quest)"
+    },
+    {
+      "id": "LGInventory.art",
+      "kind": "global",
+      "name": "LGInventory",
+      "file": "inventory.js",
+      "keys": [
+        "art"
+      ],
+      "type": "function",
+      "when": "page",
+      "severity": "degrade",
+      "why": "item icons in menus (src/ui/icons.ts)"
+    },
+    {
+      "id": "LGMine",
+      "kind": "global",
+      "name": "LGMine",
+      "file": "mine.js",
+      "keys": [
+        "open",
+        "close",
+        "on"
+      ],
+      "type": "any",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "3D mine room (src/rooms/mine)"
+    },
+    {
+      "id": "LGCampMap",
+      "kind": "global",
+      "name": "LGCampMap",
+      "file": "campmap.js",
+      "keys": [
+        "get",
+        "map"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "start camp «Перепутье» layout and walk grid (src/net/site.ts buildCampLayout)"
+    },
+    {
+      "id": "LGTownGen",
+      "kind": "global",
+      "name": "LGTownGen",
+      "file": "towngen.js",
+      "keys": [
+        "generate",
+        "map",
+        "buildLeft"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "district town layouts (src/net/site.ts buildTownLayout)"
+    },
+    {
+      "id": "/api/city/towns",
+      "re": "/api/city/towns",
+      "file": "city.js",
+      "severity": "degrade",
+      "why": "district towns list (GET) for their layouts"
+    },
+    {
+      "id": "town hooks (data-town, lgCityTown)",
+      "re": "dataset\\.town\\s*=[\\s\\S]*lgCityTown|lgCityTown[\\s\\S]*dataset\\.town\\s*=",
+      "file": "city.js",
+      "severity": "degrade",
+      "why": "current town detection (src/net/town.ts): .cy[data-town], sessionStorage lgCityTown"
+    },
+    {
+      "id": "tab #tab-city",
+      "kind": "dom",
+      "sel": "#tab-city",
+      "re": "tab-city|data-tab=\\\\?[\"']city",
+      "when": "page",
+      "severity": "break",
+      "why": "switching to the City tab at boot"
+    },
+    {
+      "id": "City tab button",
+      "kind": "dom",
+      "sel": ".tabs button[data-tab=\"city\"]",
+      "re": "data-tab",
+      "when": "page",
+      "severity": "break",
+      "why": "opening the City (src/net/site.ts)"
+    },
+    {
+      "id": "DOM .cy-view",
+      "kind": "dom",
+      "sel": "#tab-city .cy-view",
+      "re": "cy-view",
+      "when": "city",
+      "severity": "break",
+      "why": "shrunk 2D view under the canvas"
+    },
+    {
+      "id": "DOM .cy-room",
+      "kind": "dom",
+      "sel": "#tab-city .cy-room",
+      "re": "cy-room",
+      "when": "city",
+      "severity": "break",
+      "why": "interior panels"
+    },
+    {
+      "id": "DOM .cy-chat",
+      "kind": "dom",
+      "sel": "#tab-city .cy-chat",
+      "re": "cy-chat",
+      "when": "city",
+      "severity": "break",
+      "why": "chat dock"
+    },
+    {
+      "id": "DOM .cy-chat-tabs",
+      "kind": "dom",
+      "sel": "#tab-city .cy-chat-tabs",
+      "re": "cy-chat-tabs",
+      "when": "city",
+      "severity": "degrade",
+      "why": "chat tabs"
+    },
+    {
+      "id": "DOM .cy-chat-l",
+      "kind": "dom",
+      "sel": "#tab-city .cy-chat-l",
+      "re": "cy-chat-l",
+      "when": "city",
+      "severity": "degrade",
+      "why": "chat lines"
+    },
+    {
+      "id": "DOM .cy-chat-f",
+      "kind": "dom",
+      "sel": "#tab-city .cy-chat-f",
+      "re": "cy-chat-f",
+      "when": "city",
+      "severity": "degrade",
+      "why": "chat form (send, «!идея бум» interception)"
+    },
+    {
+      "id": "DOM .cy (town root)",
+      "kind": "dom",
+      "sel": "#tab-city .cy",
+      "re": "class=\"cy\"",
+      "when": "city",
+      "severity": "degrade",
+      "why": "town detection: data-town on the City root"
+    },
+    {
+      "id": "SSE /api/live",
+      "re": "/api/live|['\"`]/live['\"`]",
+      "why": "bridge tees the EventSource",
+      "severity": "break"
+    },
+    {
+      "id": "SSE event me",
+      "re": "addEventListener\\(\\s*['\"`]me['\"`]",
+      "why": "hero state",
+      "severity": "break"
+    },
+    {
+      "id": "SSE event city",
+      "re": "addEventListener\\(\\s*['\"`]city['\"`]",
+      "why": "other players, chat",
+      "severity": "break"
+    },
+    {
+      "id": "SSE event mine",
+      "re": "addEventListener\\(\\s*['\"`]mine['\"`]",
+      "why": "mine room",
+      "severity": "degrade"
+    },
+    {
+      "id": "SSE event q",
+      "re": "addEventListener\\(\\s*['\"`]q['\"`]",
+      "why": "expedition HUD and 3D view",
+      "severity": "degrade"
+    },
+    {
+      "id": "SSE event j",
+      "re": "addEventListener\\(\\s*['\"`]j['\"`]",
+      "why": "journal → milestones, confetti",
+      "severity": "degrade"
+    },
+    {
+      "id": "city delta keys",
+      "file": "city.js",
+      "re": "\\.a\\b[\\s\\S]{0,4000}\\.m\\b[\\s\\S]{0,4000}\\.g\\b",
+      "why": "arrivals/moves/gone in the city batch",
+      "severity": "break"
+    },
+    {
+      "id": "chat say",
+      "re": "/city/say",
+      "why": "chat input",
+      "severity": "break"
+    },
+    {
+      "id": "DOM data-cyexit",
+      "re": "cyexit",
+      "why": "leaving rooms",
+      "severity": "degrade"
+    },
+    {
+      "id": "DOM .mn",
+      "re": "['\"`. ]mn['\"` ]|className\\s*=\\s*['\"`]mn\\b",
+      "why": "mine overlay",
+      "severity": "degrade"
+    },
+    {
+      "id": "DOM .mn-board-w",
+      "re": "mn-board-w",
+      "why": "mine board overlay",
+      "severity": "degrade"
+    },
+    {
+      "id": "DOM .cy-read",
+      "re": "cy-read",
+      "why": "board reading overlay",
+      "severity": "degrade"
+    },
+    {
+      "id": "DOM .tr-win",
+      "re": "tr-win",
+      "why": "trade window",
+      "severity": "degrade"
+    },
+    {
+      "id": "LG_DOCK",
+      "re": "LG_DOCK",
+      "why": "boot guard (embedded dock page)",
+      "severity": "degrade"
+    }
+  ]
+}

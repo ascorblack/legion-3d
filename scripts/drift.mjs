@@ -6,8 +6,10 @@
 //   npm run drift -- https://play.multidonate.ru/c/<channel>/
 //   npm run drift -- --local=.local/site-new       # read already downloaded scripts (offline)
 //   npm run drift -- --write                       # accept the current site as the new snapshot
+//   npm run drift -- --save=.local/site-YYYY-MM-DD   # also keep the downloaded scripts
 //   npm run drift -- --json                        # machine-readable report
-//   npm run drift -- --strict                      # exit 2 when anything is new/removed/unsupported
+//   npm run drift -- --strict                      # exit 2 when anything is new/removed/unsupported/changed
+//   (always) exit 3 when a 'break' check of src/data/site-contract.json fails or an endpoint we call vanished
 //
 // Extracted: building ids (citymap.js run as UMD in node:vm), room ids (city.js `const ROOM = {` keys), look catalog
 // (doodle.js `const CATALOG = {` + event looks), game data (game-data.js → self.LG_GAME_DATA: classes and every other
@@ -17,11 +19,13 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAPSHOT = join(ROOT, 'src/data/site-snapshot.json');
 const SUPPORTED = join(ROOT, 'src/data/supported.json');
+const CONTRACT = join(ROOT, 'src/data/site-contract.json');
 const DEFAULT_URL = 'https://play.multidonate.ru/c/zakvielchannel/';
 
 /* ------------------------------------------------------------------ download */
@@ -95,7 +99,9 @@ export function braceBlock(src, i) {
   }
   return null;
 }
-/** Top-level keys of an object literal text. */
+/** Top-level keys of an object literal text: `key: v`, `'key': v`, shorthand `key,` / `key }`, methods `key(…) {`,
+ *  `async key(…)`, `get key()`. Comments (also between keys, also after the last one) are skipped; a key that only
+ *  appears inside a `//` comment is NOT a key (city.js 27.10: `where`/`towns` ended up in a trailing comment). */
 export function topKeys(block) {
   const keys = [];
   let d = 0, q = null, start = true;
@@ -103,10 +109,15 @@ export function topKeys(block) {
     const c = block[k];
     if (q) { if (c === '\\') k++; else if (c === q) q = null; continue; }
     if (c === '/' && block[k + 1] === '/') { k = block.indexOf('\n', k); if (k < 0) break; continue; }
-    if (c === '/' && block[k + 1] === '*') { k = block.indexOf('*/', k + 2) + 1; continue; }
+    if (c === '/' && block[k + 1] === '*') { k = block.indexOf('*/', k + 2) + 1; if (k <= 0) break; continue; }
     if (d === 0 && start) {
-      const m = /^\s*(?:(['"])([^'"]+)\1|([A-Za-z_$][\w$]*))\s*:/.exec(block.slice(k, k + 80));
-      if (m) { keys.push(m[2] || m[3]); k += m[0].length - 1; start = false; continue; }
+      if (/\s/.test(c)) continue;
+      const rest = block.slice(k, k + 120);
+      const m = /^(?:(['"])([^'"]+)\1|(?:(?:async|get|set|static)\s+)?\*?([A-Za-z_$][\w$]*))\s*(?=[:(,}]|\/[/*]|$)/.exec(rest);
+      // k stops on the last char of the match: a following ',' (shorthand) resets `start`, '(' (method) nests
+      if (m) { keys.push(m[2] || m[3]); start = false; k += m[0].length - 1; continue; }
+      if (c === '.' && block.startsWith('...', k)) { start = false; continue; }   // spread
+      start = false;
     }
     if (c === '"' || c === "'" || c === '`') { q = c; continue; }
     if ('{[('.includes(c)) d++;
@@ -226,6 +237,83 @@ export function compactJson(o) {
   return JSON.stringify(o, null, 2).replace(/\[\n\s*((?:(?:"[^"\n]*"|-?[\d.]+|true|false|null),?\n\s*)+)\]/g, (_, body) => '[' + body.split(/,?\n\s*/).filter(Boolean).join(', ') + ']');
 }
 
+/* ------------------------------------------------------------------ contract + fingerprints */
+
+/** Top-level keys of the object literal assigned by `window.<obj> = {` (or `root.<obj> =` / `self.<obj> =`) in src. */
+export function objectKeys(src, obj) {
+  const re = new RegExp(`(?:window|self|globalThis|root)\\.${obj.replace(/[$]/g, '\\$')}\\s*=\\s*\\{`, 'g');
+  const out = new Set();
+  for (const m of src.matchAll(re)) { const b = braceBlock(src, m.index + m[0].length - 1); if (b) for (const k of topKeys(b)) out.add(k); }
+  return out;
+}
+/** Exports of a UMD / global script run in node:vm (module.exports, or what it assigns on window/self); null if it throws. */
+export function moduleExports(files, file, name, seen = new Map()) {
+  const path = Object.keys(files).find((p) => p.endsWith('/' + file)); if (!path) return null;
+  if (seen.has(path)) return seen.get(path);
+  seen.set(path, null);
+  try {
+    const module = { exports: {} }, g = {};
+    const req = (p) => moduleExports(files, String(p).split('/').pop().replace(/^index\.js$/, 'world.js'), '', seen) || {};
+    const ctx = { module, exports: module.exports, require: req, console: { log() {}, warn() {}, error() {}, info() {} }, Math, JSON, Date, Object, Array, Set, Map, String, Number, Promise };
+    ctx.self = ctx.window = ctx.globalThis = g;
+    vm.runInNewContext(files[path], ctx, { timeout: 5000 });
+    const ex = Object.keys(module.exports).length ? module.exports : (name && g[name]) || null;
+    seen.set(path, ex);
+    return ex;
+  } catch { return null; }
+}
+const keyRe = (k) => new RegExp(`(?:^|[^\\w$.])${k.replace(/[$]/g, '\\$')}\\s*(?:[:(,}]|=>|\\s*=\\s*\\()`);
+
+/** Every entry of src/data/site-contract.json checked against the site's scripts → the failing ones (with `missing`).
+ *  kind 'keys': each key must be a real top-level key of the `window.<obj> = {` literal (a key inside a comment is not);
+ *  kind 'global': the module's exports (node:vm) or, when it cannot run outside a browser, `<name>` + each key in the text;
+ *  otherwise (also 'dom'): `re` must match. */
+export function checkContract(files, contract) {
+  const failed = [];
+  for (const c of contract.checks || []) {
+    const names = Object.keys(files).filter((k) => !c.file || k.endsWith('/' + c.file));
+    if (!names.length) { failed.push({ ...c, reason: `script ${c.file} not found` }); continue; }
+    if (c.kind === 'keys') {
+      const have = new Set(); for (const n of names) for (const k of objectKeys(files[n], c.obj)) have.add(k);
+      if (!have.size) { failed.push({ ...c, reason: `window.${c.obj} = { … } not found`, missing: [c.obj] }); continue; }
+      const missing = (c.keys || []).filter((k) => !have.has(k));
+      if (missing.length) failed.push({ ...c, reason: `${c.obj} has no ${missing.join(', ')}`, missing });
+      continue;
+    }
+    if (c.kind === 'global') {
+      const ex = c.file ? moduleExports(files, c.file, c.name) : null;
+      let missing;
+      if (ex) missing = (c.keys || []).filter((k) => !(k in ex));
+      else {
+        const lit = new Set(); for (const n of names) for (const k of objectKeys(files[n], c.name)) lit.add(k);
+        const text = names.map((n) => files[n]).join('\n');
+        if (!new RegExp(`\\b${c.name}\\b`).test(text)) { failed.push({ ...c, reason: `${c.name} not found`, missing: [c.name] }); continue; }
+        missing = (c.keys || []).filter((k) => !lit.has(k) && !keyRe(k).test(text));
+      }
+      if (missing.length) failed.push({ ...c, reason: `${c.name} has no ${missing.join(', ')}`, missing });
+      continue;
+    }
+    let re; try { re = new RegExp(c.re); } catch { failed.push({ ...c, reason: 'bad regex' }); continue; }
+    if (!names.some((k) => re.test(files[k]))) failed.push({ ...c, reason: 'not found' });
+  }
+  return failed;
+}
+
+/** Short content hash of every script (path without the channel, without ?v=) — shows WHICH files changed. */
+export function fingerprints(files) {
+  const out = {};
+  for (const [k, v] of Object.entries(files)) out[k.replace(/^\/c\/[^/]+/, '/c/…').split('?')[0]] = createHash('sha256').update(v).digest('hex').slice(0, 12);
+  return Object.fromEntries(Object.entries(out).sort());
+}
+
+export function diffPrints(cur, old) {
+  if (!old) return null;
+  const changed = [], added = [], removed = [];
+  for (const [k, h] of Object.entries(cur)) { if (!(k in old)) added.push(k); else if (old[k] !== h) changed.push(k); }
+  for (const k of Object.keys(old)) if (!(k in cur)) removed.push(k);
+  return { changed, added, removed };
+}
+
 /* ------------------------------------------------------------------ report */
 
 function print(cur, R, meta) {
@@ -249,6 +337,18 @@ function print(cur, R, meta) {
   const un = Object.entries(R.unsupported);
   if (!un.length) console.log(f('g', '  none'));
   for (const [k, l] of un) console.log(`  ${k}: ${f('y', l.join(', '))}`);
+  console.log('\n' + f('b', 'Contract (what the extension is built on) — src/data/site-contract.json'));
+  if (!meta.contract.length) console.log(f('g', `  all ${meta.contractN} checks found`));
+  for (const c of meta.contract) console.log(`  ${f(c.severity === 'break' ? 'r' : 'y', (c.severity === 'break' ? 'BREAK ' : 'degrade ') + c.id)} — ${c.reason}${c.file ? ' in ' + c.file : ''} · ${c.why}`);
+  console.log('\n' + f('b', 'Scripts changed since the snapshot (content hash)'));
+  const fp = meta.prints;
+  if (!fp) console.log(f('d', '  (no fingerprints in the snapshot yet — run with --write)'));
+  else if (!fp.changed.length && !fp.added.length && !fp.removed.length) console.log(f('g', '  none'));
+  else {
+    if (fp.changed.length) console.log('  changed: ' + f('y', fp.changed.join(', ')));
+    if (fp.added.length) console.log('  new: ' + f('g', fp.added.join(', ')));
+    if (fp.removed.length) console.log('  gone: ' + f('r', fp.removed.join(', ')));
+  }
   console.log('\n' + f('b', 'API paths we call that the site no longer mentions'));
   console.log(R.broken.length ? '  ' + f('r', R.broken.join(', ')) : f('g', '  none'));
   if (Object.keys(R.changes).length) console.log(f('d', '\nAfter updating the code: npm run drift -- --write   (see docs/EXTENDING.md)'));
@@ -259,20 +359,34 @@ async function main() {
   const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => { const i = a.indexOf('='); return i < 0 ? [a.slice(2), true] : [a.slice(2, i), a.slice(i + 1)]; }));
   const url = args.find((a) => !a.startsWith('--')) || DEFAULT_URL;
   const src = opt.local ? readLocal(opt.local) : await download(url);
+  if (typeof opt.save === 'string') {   // keep a copy of the downloaded scripts (for a diff with an older copy)
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(opt.save, { recursive: true });
+    for (const [k, v] of Object.entries(src.files)) writeFileSync(join(opt.save, k.split('/').pop()), v);
+  }
   const { data, errors } = extract(src.files);
   const snap = existsSync(SNAPSHOT) ? JSON.parse(readFileSync(SNAPSHOT, 'utf8')) : null;
   const sup = existsSync(SUPPORTED) ? JSON.parse(readFileSync(SUPPORTED, 'utf8')) : null;
   const R = compare(data, snap, sup, ourApi());
-  if (opt.json) console.log(JSON.stringify({ site: data, ...R, errors, failed: src.failed }, null, 2));
-  else print(data, R, { source: opt.local ? `local ${opt.local}` : url, failed: src.failed, errors, snapAt: snap?.at });
+  const contract = existsSync(CONTRACT) ? JSON.parse(readFileSync(CONTRACT, 'utf8')) : { checks: [] };
+  const contractFailed = checkContract(src.files, contract);
+  const prints = fingerprints(src.files);
+  const printDiff = diffPrints(prints, snap?.fingerprints);
+  if (opt.json) console.log(JSON.stringify({ site: data, ...R, contract: contractFailed, scriptsChanged: printDiff, errors, failed: src.failed }, null, 2));
+  else print(data, R, { source: opt.local ? `local ${opt.local}` : url, failed: src.failed, errors, snapAt: snap?.at, contract: contractFailed, contractN: contract.checks.length, prints: printDiff });
   if (opt.write) {
     if (errors.length) { console.error('\nnot writing the snapshot: extraction errors above'); process.exit(1); }
     const { scripts, ...rest } = data;
-    const snapObj = { at: new Date().toISOString().slice(0, 10), source: opt.local ? 'local' : new URL(url).origin + '/c/…', scripts: scripts.map((s) => s.replace(/^\/c\/[^/]+/, '/c/…')), ...rest };
+    const snapObj = { at: new Date().toISOString().slice(0, 10), source: opt.local ? 'local' : new URL(url).origin + '/c/…', scripts: scripts.map((s) => s.replace(/^\/c\/[^/]+/, '/c/…')), ...rest, fingerprints: prints };
     writeFileSync(SNAPSHOT, compactJson(snapObj) + '\n');
     console.log(`\nsnapshot written: ${SNAPSHOT.replace(ROOT + '/', '')}`);
   }
-  if (opt.strict && (Object.keys(R.changes).length || Object.keys(R.unsupported).length || R.broken.length)) process.exit(2);
+  // exit codes: 3 = a 'break' contract check failed or an endpoint we call vanished (the extension is likely broken);
+  // 2 (--strict only) = anything new / changed / unsupported (review needed).
+  if (contractFailed.some((c) => c.severity === 'break') || R.broken.length) process.exit(3);
+  const anyChange = Object.keys(R.changes).length || Object.keys(R.unsupported).length || contractFailed.length
+    || (printDiff && (printDiff.changed.length || printDiff.added.length || printDiff.removed.length));
+  if (opt.strict && anyChange) process.exit(2);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) main().catch((e) => { console.error(e); process.exit(1); });

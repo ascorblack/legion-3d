@@ -36,6 +36,8 @@ if (only !== 'dev') {
     const manifest = JSON.parse(readFileSync(`${dist}/manifest.json`, 'utf8'));
     cpSync('docs/INSTALL-FIREFOX-RU.txt', `${dist}/INSTALL-RU.txt`);
     delete manifest.minimum_chrome_version;
+    // Firefox has no extension service workers: MV3 uses a non-persistent event page (background.scripts, Firefox 121+).
+    manifest.background = { scripts: ['background.js'] };
     manifest.browser_specific_settings = { gecko: {
       id: 'legion-3d@ascorblack',
       strict_min_version: '128.0',
@@ -43,7 +45,7 @@ if (only !== 'dev') {
     } };
     writeFileSync(`${dist}/manifest.json`, JSON.stringify(manifest, null, 2) + '\n');
   }
-  ctxs.push(await esbuild.context({ ...common, entryPoints: { bridge: 'src/bridge/bridge.ts', game: 'src/content/main.ts' }, outdir: dist }));
+  ctxs.push(await esbuild.context({ ...common, entryPoints: { bridge: 'src/bridge/bridge.ts', game: 'src/content/main.ts', background: 'src/update/background.ts', notify: 'src/update/notify.ts' }, outdir: dist }));
 }
 if (only !== 'ext' && existsSync('dev')) {
   mkdirSync('dist-dev', { recursive: true });

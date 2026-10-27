@@ -8,7 +8,7 @@
  * again on reload — the launcher button stays with a tooltip explaining why.
  */
 import type { SiteSession } from '../contracts/modules';
-import { connectSite } from '../net/site';
+import { connectSite, siteGuard, currentTown } from '../net/site';
 import { startGame, type Game } from './game';
 import CSS from './main.css';
 
@@ -65,7 +65,11 @@ async function toggle() {
   let site: SiteSession | null = null;
   try {
     const s = await connectSite({ onStatus: (t) => splash.set(t) });
-    if ('error' in s) { splash.error(s.error, s.loginUrl); return; }
+    if ('error' in s) {
+      if (s.missing?.length) console.error('[legion-3d] site contract broken:\n  ' + s.missing.join('\n  '));
+      splash.error(s.error, s.loginUrl);
+      return;
+    }
     site = s;
     splash.set('Строим 3D…');
     game = await startGame(s, splash.set);
@@ -140,6 +144,14 @@ function gpuNotice(on: boolean) {
   const mine = el;
   setTimeout(() => { if (mine.isConnected) mine.remove(); }, 15000);   // no restore event → do not hang forever
 }
+
+/* ------------------------------------------------------------------ probes (read-only; e2e/contract.mjs, e2e/live.mjs) */
+/** Runtime site contract now ('page' = just loaded, 'city' = City tab open): failing checks, never throws. */
+W.__l3dContract = (phase: 'page' | 'city' = 'city') => { try { return siteGuard(phase); } catch (e) { return { breaks: ['guard crashed: ' + String(e)], degrades: [] }; } };
+/** Which town the site's City shows (src/net/town.ts), from the page + the hero the bridge saw (/api/me, SSE me). */
+W.__l3dTownNow = () => {
+  try { const B = W.__L3D_BUS, d = B?.last?.['sse:me'] || B?.last?.me, h = d ? (d.hero || (d.login ? d : null)) : null; return currentTown(h); } catch (e) { return { id: '?', via: String(e) }; }
+};
 
 /* ------------------------------------------------------------------ boot */
 if (/^\/c\/[^/]+\/?$/.test(location.pathname) && !W.LG_DOCK) {

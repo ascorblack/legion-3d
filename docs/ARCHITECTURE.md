@@ -1,11 +1,16 @@
 # Architecture
 
 ```
-Chrome MV3 extension, two content scripts, both in the page's MAIN world (no extension permissions):
+Chrome MV3 extension, two content scripts in the page's MAIN world (no extension permissions for the game itself; the update notice below adds `storage` + one host):
 
   bridge.js   document_start  tees EventSource events and fetch() JSON of the page into a bus (window.__L3D_BUS)
   game.js     document_idle   the game: store, engine, world, avatars, UI; boots when the user enters 3D mode
+  notify.js   document_idle   ISOLATED world: relays the update worker's answer to the page (postMessage, data only)
+  background.js  service worker (Firefox: event page): the update check, below
 ```
+
+**Update notice** (`src/update/`): a background worker `background.js` (the only code that touches the network: one GET of GitHub's releases/latest, ≤ 1 per 12 h, skipped when the installed manifest has `update_url` = store install) and an isolated-world relay `notify.js` that postMessages `{current, store, latest, url}` as plain data to `src/features/update.ts` (toast, pause-menu row, setting «Проверять обновления (GitHub)»). Permissions: `storage` + host `https://api.github.com/repos/ascorblack/legion-3d/releases/latest`.
+
 
 ## Why MAIN world + "hybrid" netcode
 The site already owns auth (httpOnly cookie), the live SSE channel and a careful city client (presence

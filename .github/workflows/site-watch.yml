@@ -1,0 +1,42 @@
+name: Site watch
+# Every 6 hours: download the game site's public scripts (GET only, ~40 files) and compare them with what the
+# extension is built on (src/data/site-contract.json) and with the last accepted snapshot (src/data/site-snapshot.json).
+# Opens (or updates) one issue labelled «site-drift» when something changed; the title turns red when the extension is
+# likely broken (a 'break' contract check failed or an endpoint we call vanished).
+on:
+  schedule: [{ cron: '17 */6 * * *' }]
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Drift report
+        id: drift
+        run: |
+          set +e
+          node scripts/drift.mjs --strict > report.txt 2>&1; code=$?
+          set -e
+          cat report.txt
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+      - name: Open or update the issue
+        if: steps.drift.outputs.code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.drift.outputs.code }}
+        run: |
+          gh label create site-drift --color D93F0B --description 'The game site changed' 2>/dev/null || true
+          if [ "$CODE" = "3" ]; then title='🔴 Сайт игры изменился — расширение, вероятно, сломано'; else title='🟡 Сайт игры изменился — нужна проверка'; fi
+          { echo "Автопроверка $(date -u '+%F %H:%M') UTC, код $CODE (3 = сломано, 2 = есть изменения)."; echo; echo '```'; sed 's/\x1b\[[0-9;]*m//g' report.txt; echo '```';
+            echo; echo 'Что делать: docs/EXTENDING.md → «Сайт обновился». После правок: `npm run drift -- --write`.'; } > body.md
+          n=$(gh issue list --label site-drift --state open --json number --jq '.[0].number')
+          if [ -n "$n" ]; then gh issue edit "$n" --title "$title" && gh issue comment "$n" --body-file body.md
+          else gh issue create --title "$title" --label site-drift --body-file body.md; fi
+      - name: Fail on breakage
+        if: steps.drift.outputs.code == '3'
+        run: exit 1

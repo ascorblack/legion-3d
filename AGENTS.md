@@ -48,7 +48,12 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
 | expedition HUD | `src/quest` | docs/GAME-DESIGN.md §7 |
 
 ## Known gaps / roadmap
-- District towns (other cities during an expedition) are built from `LGTownGen` only partially; the fair city is complete.
+- Towns: the current town (fair / start camp «Перепутье» `camp` / district id) is detected in `src/net/town.ts` (City DOM
+  `.cy[data-town]`, picker, sessionStorage `lgCityTown`, hero `hm`/`cp`/`tw`) — `LGCity.where/towns` no longer exist.
+  The camp is real 3D (`src/world/camp.ts`, layout from `window.LGCampMap`); district towns get their layout and walk grid
+  from `LGTownGen` + GET `/api/city/towns` but are drawn with the generic street (no river/plazas art yet).
+- Site contract: `src/data/site-contract.json` is checked statically (`npm run drift`) and at runtime (boot guard in
+  `src/net/site.ts` via `src/net/contract.ts`; `node e2e/contract.mjs` against the live page).
 - Buildings open through the room manager: 3D shops (`shop3d`), 3D interiors with the site's panel over them
   (`hybrid`) and the 3D mine (`mine3d`); a kind whose module is missing or fails falls back to the site's own screen.
 - After a site update run `npm run drift` (docs/EXTENDING.md) — it lists new/removed ids and what we do not support.

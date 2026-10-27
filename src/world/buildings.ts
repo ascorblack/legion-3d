@@ -441,10 +441,19 @@ export function modelOf(b: Building): BuildingModel {
   return BUILDING_MODELS[b.id] ?? (isUpper(b) ? GENERIC : GENERIC_LOW);
 }
 
+/** Depth offset (m, ≤ 0) of a building's street model: on layouts other than the fair (camp, district towns) the site's
+ *  walk grid may allow walking right in front of a facade where the fair model projects (tent, shop, anvil), so the
+ *  model is moved back until its solid front clears the first walkable row (src/world/static.ts fitFronts). */
+export const BUILDING_DZ = new WeakMap<Building, number>();
+/** Estimated solid front (m) of a building's model at dz = 0 (attachments up to +0.3 m). */
+export function solidFrontOf(b: Building): number {
+  const m = modelOf(b); return -0.15 + (m.solidFront ?? m.front ?? 0) + 0.3;
+}
+
 export function buildBuilding(k: Ctx, b: Building): void {
   const x0 = toX(b.hit[0]), x1 = toX(b.hit[1]);
   const h = Math.max(2.5, (800 - b.hit[2]) * 0.01);
-  const zf = -0.15;
+  const zf = -0.15 + (BUILDING_DZ.get(b) ?? 0);
   const model = modelOf(b);
   // how far the facade's attachments (signs, sills, turrets, lamps) stand out at body height: the Infinity solid must
   // cover them, or the FP eye (near plane 5 cm) walks into a sign / turret and sees its inside (audit: eye clearance)
@@ -473,7 +482,7 @@ export function buildBuilding(k: Ctx, b: Building): void {
  * adit frame / board / gate front on the lower street. Used for the door hit volumes.
  */
 export function entranceZ(b: Building): number {
-  if (isUpper(b)) return -0.15 + (modelOf(b).front ?? 0);
+  if (isUpper(b)) return -0.15 + (BUILDING_DZ.get(b) ?? 0) + (modelOf(b).front ?? 0);
   return lowEntranceZ(b);
 }
 

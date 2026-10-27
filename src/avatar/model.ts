@@ -224,7 +224,9 @@ function buildModel(app: Appearance, key: string): ModelData {
   }
 
   /* ---- capes (computed first: the tail routes around a cape) ---- */
-  const capeCol = acc.includes('cape') ? (l.capeColor || '#c0182b') : acc.includes('pioneer') ? '#35507a' : null;
+  // vampcape (Halloween, doodle.js): black cape with a red lining, high pointed collar, gold clasps
+  const vamp = acc.includes('vampcape') && !acc.includes('cape');
+  const capeCol = acc.includes('cape') ? (l.capeColor || '#c0182b') : vamp ? '#1c1424' : acc.includes('pioneer') ? '#35507a' : null;
   const hasCape = !!capeCol;
   const hasTail = cat || monkey;
   const t0 = rest[B.tail1], t1 = rest[B.tail2];
@@ -266,7 +268,7 @@ function buildModel(app: Appearance, key: string): ModelData {
 
   /* ---- cape: two layers (outer colour, darker lining) + a rim, so it has thickness and never z-fights ---- */
   if (capeCol) {
-    const pioneer = !acc.includes('cape');
+    const pioneer = !acc.includes('cape') && !vamp;
     const yTop = neckY + 0.02, yBot = hasTail ? t0.y + 0.1 : 0.06;
     const armorOff = g.a ? 0.014 : 0;
     const TH = 0.014;                     // cloth thickness
@@ -309,7 +311,7 @@ function buildModel(app: Appearance, key: string): ModelData {
       return geo;
     };
     const skin: Skin = (_x, y) => { const w = Math.min(1, Math.max(0, (yTop - y) / (yTop - yBot))); return [B.cape1, B.cape2, 1 - Math.min(1, w * 1.3)]; };
-    const outerC = col(capeCol), innerC = new THREE.Color().copy(pioneer ? col('#9fc4ea') : outerC).multiplyScalar(pioneer ? 0.85 : 0.68);
+    const outerC = col(capeCol), innerC = vamp ? col('#b0182a') : new THREE.Color().copy(pioneer ? col('#9fc4ea') : outerC).multiplyScalar(pioneer ? 0.85 : 0.68);
     const rimC = new THREE.Color().copy(outerC).multiplyScalar(0.8);
     const outer = grid(0, false), inner = grid(TH, true), edge = rim();
     // the rim is a thin strip seen from both sides: add it with both windings (cheap, no orientation guesswork)
@@ -322,7 +324,16 @@ function buildModel(app: Appearance, key: string): ModelData {
     const cpts: [number, number, number][] = [];
     const rc = radiusAt(d, yTop) + 0.02 + armorOff;
     for (let i = 0; i <= 12; i++) { const a = Math.PI / 2 - 0.35 + ((Math.PI + 0.7) * i) / 12; sectionXZ(d, rc, a, pt); cpts.push([pt.x, yTop + 0.004, pt.z]); }
-    p.add(tube(cpts, 0.016, 24, 6), pioneer ? '#cfe8ff' : '#ffc94d', undefined, B.body);
+    p.add(tube(cpts, 0.016, 24, 6), pioneer ? '#cfe8ff' : vamp ? '#1c1424' : '#ffc94d', undefined, B.body);
+    if (vamp) {
+      // the high collar: two pointed panels standing up behind the head (red inside, black outside)
+      for (const s of [-1, 1]) {
+        // the body (= head) widens above the neck: stand the panels just outside it, flaring out and back
+        const yc = yTop + 0.09, a = Math.PI + s * 0.8; sectionXZ(d, Math.max(rc, radiusAt(d, yc)) + 0.03, a, pt);
+        const panel = (k2: number, c: string) => p.add(cone(0.1, 0.26, 3), c, T(pt.x * k2, yc, pt.z * k2, 0.35, s * 0.6, -s * 0.45, [1, 1, 0.22]), B.body);
+        panel(1.03, '#1c1424'); panel(0.99, '#b0182a');
+      }
+    }
     for (const s of [-1, 1]) {
       const a = s > 0 ? Math.PI / 2 - 0.35 : -(Math.PI / 2 - 0.35); sectionXZ(d, rc + 0.01, a, pt);
       if (pioneer) p.add(star(0.03, 0.012), '#ffd36b', T(pt.x, yTop - 0.005, pt.z, 0, s * 0.9, 0), B.body);

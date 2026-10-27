@@ -112,7 +112,11 @@
       "mustache",
       "cape",
       "pioneer",
-      "fangs"
+      "fangs",
+      "bolts",
+      "candybag",
+      "cobweb",
+      "vampcape"
     ],
     "auras": [
       "gold",
@@ -122,7 +126,9 @@
       "halo",
       "wisps",
       "leaves",
-      "haunt"
+      "haunt",
+      "bats",
+      "jackglow"
     ],
     "weapons": [
       "sword",
