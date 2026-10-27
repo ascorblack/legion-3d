@@ -13,3 +13,11 @@
 3. Открой `https://play.multidonate.ru/c/<канал>/`, войди через Twitch. **F8** — 3D ⇄ обычный сайт.
 
 Работает в Chrome 111+ и других браузерах на Chromium. Расширение неофициальное, разрешений Chrome не запрашивает. Подробности — в [README](https://github.com/ascorblack/legion-3d#readme).
+
+### Firefox 128+
+
+Скачай архив `legion-3d-<версия>-firefox.zip`, распакуй его и открой
+`about:debugging#/runtime/this-firefox` → «Загрузить временное дополнение» → `manifest.json`.
+После закрытия Firefox дополнение нужно загрузить заново: ZIP не подписан Mozilla.
+Для постоянной установки в обычный Firefox нужна подпись; автоматической публикации в AMO нет.
+В Firefox полноэкранный режим не блокирует Ctrl+W через Keyboard Lock, остаётся подтверждение закрытия.

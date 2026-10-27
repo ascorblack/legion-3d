@@ -105,3 +105,46 @@ What a live run should show (checklist used for releases):
 Note: headless Chromium renders WebGL on the CPU (SwiftShader), so its fps says nothing about real performance and
 the first frames may stall for seconds while shaders compile. Measure performance in a normal browser with the
 in-game overlay (F3).
+
+## 4. Firefox extension integration (offline)
+
+The Firefox build requires Firefox 128+ because both content scripts use `world: "MAIN"`.
+Unlike the live runner, this check installs the actual extension into a disposable browser profile.
+It serves a local HTTPS fixture under the matching game hostname (mapped to localhost only in that
+profile), so no game account or live server requests are involved. It checks early MAIN-world injection
+under strict CSP, no iframe injection, the launcher, fetch/SSE bridging, WebGL rendering, keyboard
+movement, camera modes, equipment menus, pointer lock after a real click, and classic/resume using the offline demo.
+
+Install [geckodriver](https://github.com/mozilla/geckodriver/releases) on PATH, then:
+
+```bash
+npx playwright install --with-deps firefox
+npm run build:firefox -- --prod
+npm run pack:firefox
+npm run build:firefox -- --only=dev  # expose dev inspection hooks in the offline demo only
+npm run e2e:firefox
+# Or test a specific installed Firefox and geckodriver:
+FIREFOX=/absolute/path/to/firefox GECKODRIVER=/absolute/path/to/geckodriver npm run e2e:firefox
+```
+
+The runner also needs `openssl` and `unzip` on PATH to generate a short-lived local test certificate.
+Logs, a screenshot and a JSON result are saved in `e2e/.artifacts/firefox/`.
+CI runs the same check with Playwright's pinned Firefox build under `xvfb-run` and Mesa software GL.
+On Linux without a display use `LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a npm run e2e:firefox`;
+plain headless Firefox may fail to create WebGL without an X server. Manual release testing should also
+exercise pointer lock (click, mouse look, Esc, re-lock), fullscreen and sound in a desktop Firefox;
+headless rendering does not establish real GPU performance or browser-level shortcut behavior.
+
+To validate and package for Firefox:
+
+```bash
+npm run build:firefox -- --prod --only=ext
+npx --yes web-ext@10.8.0 lint --source-dir dist-firefox
+npm run pack:firefox
+```
+
+`data_collection_permissions` is ignored before desktop Firefox 140; the validator reports this
+compatibility warning when supporting Firefox 128. The `none` declaration describes the existing
+privacy policy (no developer-operated data collection). Existing dynamic `innerHTML` warnings
+must be reviewed separately before signing/submitting to AMO; passing lint is not an AMO approval.
+The resulting ZIP is unsigned and can be loaded temporarily through `about:debugging`.

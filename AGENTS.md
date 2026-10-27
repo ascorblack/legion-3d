@@ -1,6 +1,6 @@
 # AGENTS.md — notes for contributors and coding agents
 
-Legion 3D is a Chrome MV3 extension that turns the game site play.multidonate.ru («Легион») into a 3D game with
+Legion 3D is a Chrome/Firefox MV3 extension that turns the game site play.multidonate.ru («Легион») into a 3D game with
 first- and third-person cameras. Start with: [README](README.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/SITE-NOTES.md](docs/SITE-NOTES.md), [docs/GAME-DESIGN.md](docs/GAME-DESIGN.md), [docs/TESTING.md](docs/TESTING.md),
 `src/contracts/index.ts`, `src/contracts/modules.ts`.
@@ -19,6 +19,8 @@ first- and third-person cameras. Start with: [README](README.md), [docs/ARCHITEC
 ```bash
 npm ci
 npm run build          # dist/ = unpacked extension, dist-dev/ = demo pages (every dev/*.ts)
+npm run build:firefox -- --prod  # dist-firefox/ = Firefox 128+ (unsigned)
+npm run e2e:firefox    # actual Firefox extension + offline demo; see docs/TESTING.md
 npm run typecheck
 npm test               # vitest
 npm run drift          # what changed on the site since src/data/site-snapshot.json

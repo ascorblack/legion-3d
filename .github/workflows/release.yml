@@ -20,14 +20,17 @@ jobs:
           v=$(node -p "require('./dist/manifest.json').version")
           [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "manifest $v != tag ${GITHUB_REF_NAME}"; exit 1; }
       - run: node scripts/pack.mjs
+      - run: npm run build:firefox -- --prod --only=ext
+      - run: npm run pack:firefox
       - name: Publish release
         env: { GH_TOKEN: '${{ github.token }}' }
-        # only the user zip goes to the GitHub release; the -store.zip is for the Chrome Web Store step below
+        # Only user archives go to GitHub; store payloads remain separate.
         run: |
           zip="legion-3d-${GITHUB_REF_NAME#v}.zip"
+          firefox_zip="legion-3d-${GITHUB_REF_NAME#v}-firefox.zip"
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
-            && gh release upload "${GITHUB_REF_NAME}" "$zip" --clobber \
-            || gh release create "${GITHUB_REF_NAME}" "$zip" --title "Legion 3D ${GITHUB_REF_NAME}" --notes-file .github/RELEASE_NOTES.md
+            && gh release upload "${GITHUB_REF_NAME}" "$zip" "$firefox_zip" --clobber \
+            || gh release create "${GITHUB_REF_NAME}" "$zip" "$firefox_zip" --title "Legion 3D ${GITHUB_REF_NAME}" --notes-file .github/RELEASE_NOTES.md
       # First submission and store listing are created manually. These steps update an existing item only.
       - name: Upload and publish Chrome Web Store update (optional)
         env:

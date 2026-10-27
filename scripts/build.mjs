@@ -1,6 +1,6 @@
-// Build: content scripts → dist/ (unpacked extension); every dev/*.ts → dist-dev/ (standalone demo pages).
+// Build: content scripts → dist/ or dist-firefox/ (unpacked extension); every dev/*.ts → dist-dev/ (standalone demo pages).
 import * as esbuild from 'esbuild';
-import { cpSync, mkdirSync, rmSync, readdirSync, existsSync, readFileSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, readdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 /** Bullets of the current manifest version in CHANGELOG.md (max 3) → baked into the bundle for the «Что нового» card. */
 function changelogBullets() {
@@ -18,18 +18,32 @@ function changelogBullets() {
 const watch = process.argv.includes('--watch');
 const prod = process.argv.includes('--prod');
 const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7);   // e.g. --only=dev
+const browser = process.argv.find((a) => a.startsWith('--browser='))?.slice(10) || 'chrome';
+if (!['chrome', 'firefox'].includes(browser)) throw new Error(`Unsupported browser: ${browser}`);
+const dist = browser === 'firefox' ? 'dist-firefox' : 'dist';
 const common = {
-  bundle: true, format: 'iife', target: 'chrome111', sourcemap: prod ? false : 'linked',
+  bundle: true, format: 'iife', target: browser === 'firefox' ? 'firefox128' : 'chrome111', sourcemap: prod ? false : 'linked',
   minify: prod, legalComments: 'none', logLevel: 'warning',
   define: { __DEV__: String(!prod), __L3D_CHANGELOG__: JSON.stringify(changelogBullets()) },
   loader: { '.css': 'text', '.svg': 'text' },
 };
 const ctxs = [];
 if (only !== 'dev') {
-  rmSync('dist', { recursive: true, force: true });
-  mkdirSync('dist', { recursive: true });
-  cpSync('public', 'dist', { recursive: true });
-  ctxs.push(await esbuild.context({ ...common, entryPoints: { bridge: 'src/bridge/bridge.ts', game: 'src/content/main.ts' }, outdir: 'dist' }));
+  rmSync(dist, { recursive: true, force: true });
+  mkdirSync(dist, { recursive: true });
+  cpSync('public', dist, { recursive: true });
+  if (browser === 'firefox') {
+    const manifest = JSON.parse(readFileSync(`${dist}/manifest.json`, 'utf8'));
+    cpSync('docs/INSTALL-FIREFOX-RU.txt', `${dist}/INSTALL-RU.txt`);
+    delete manifest.minimum_chrome_version;
+    manifest.browser_specific_settings = { gecko: {
+      id: 'legion-3d@ascorblack',
+      strict_min_version: '128.0',
+      data_collection_permissions: { required: ['none'] },
+    } };
+    writeFileSync(`${dist}/manifest.json`, JSON.stringify(manifest, null, 2) + '\n');
+  }
+  ctxs.push(await esbuild.context({ ...common, entryPoints: { bridge: 'src/bridge/bridge.ts', game: 'src/content/main.ts' }, outdir: dist }));
 }
 if (only !== 'ext' && existsSync('dev')) {
   mkdirSync('dist-dev', { recursive: true });

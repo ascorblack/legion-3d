@@ -12,7 +12,10 @@
     "test": "vitest run",
     "e2e": "node e2e/run.mjs",
     "pack": "node scripts/pack.mjs",
-    "drift": "node scripts/drift.mjs"
+    "drift": "node scripts/drift.mjs",
+    "build:firefox": "node scripts/build.mjs --browser=firefox",
+    "pack:firefox": "node scripts/pack.mjs --browser=firefox",
+    "e2e:firefox": "node e2e/firefox.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

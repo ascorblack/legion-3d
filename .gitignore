@@ -8,3 +8,4 @@ e2e/.artifacts/
 .local/
 dist-dev/
 /video/
+dist-firefox/
