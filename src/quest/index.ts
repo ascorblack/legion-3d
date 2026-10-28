@@ -67,9 +67,11 @@ export function cardOf(v: QuestView | null, me: { login: string; role: string },
       urge: V.my ? { kind: 'ok', text: `твой голос: ${V.my}` } : { kind: 'say', text: 'номер варианта' }, inParty };
   }
   if (q.loot) return { icon: '🎁', title: `Делёж: ${q.loot.name}`, right: '', until: q.loot.until, urge: q.loot.my ? { kind: 'ok', text: 'твой голос учтён' } : { kind: 'info', text: 'Голосуй в чате, кому отдать вещь (номер, ник или «случайно»)' }, inParty };
-  const urge: Card['urge'] = q.gather && !inParty ? { kind: 'say', text: 'поход' } : undefined;
-  return { icon: '🗺', title: `${KIND_RU[q.k] || 'Поход'}${q.t ? ' · ' + q.t : ''}`, right: q.n ? `отряд ${q.n}` : '', until: q.gather?.until, inParty,
-    where: inParty ? 'ты в отряде' : q.party === 'ghost' ? 'ты призрак в этом походе' : q.party === 'q' ? 'ты в очереди в отряд' : 'ты не в отряде', urge };
+  // 28.10 (quest.js gwName): the Halloween gather at the portal — join with «портал»
+  const hwG = !!(q.gather && q.gather.hw);
+  const urge: Card['urge'] = q.gather && !inParty ? { kind: 'say', text: hwG ? 'портал' : 'поход' } : undefined;
+  return { icon: hwG ? '🎃' : '🗺', title: hwG ? `Сбор у портала${q.t ? ' · ' + q.t : ''}` : `${KIND_RU[q.k] || 'Поход'}${q.t ? ' · ' + q.t : ''}`, right: q.n ? `отряд ${q.n}` : '', until: q.gather?.until, inParty,
+    where: inParty ? 'ты в отряде' : q.party === 'ghost' ? 'твой герой — призрак в этом походе' : q.party === 'q' ? 'ты в очереди в отряд' : 'ты не в отряде', urge };
 }
 function meIn(b: any, me: { login: string; role: string }) {
   const i = b.me, p = i >= 0 && b.form ? b.form[i] : null, f = !p && Array.isArray(b.mf) ? b.mf : null;

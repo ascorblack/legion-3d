@@ -22,6 +22,21 @@ export function forcedEvent(search: string = typeof location !== 'undefined' ? l
   return v ? v.toLowerCase() : null;
 }
 
+/**
+ * Forced event (src/features/hwcity.ts: the site's «Ночь Тыквенной Луны» forces Halloween in the Fair even outside its
+ * dates). Honoured in «Авто» and «Всегда», never in «Выкл». `key` = a build variant: a different key rebuilds the event.
+ */
+let override: { id: string; key: string; when?: () => boolean } | null = null;
+let onOverride: (() => void) | null = null;
+/** `when`: the override applies only while it returns true (e.g. only in the Fair). */
+export function setEventOverride(id: string | null, key = '', when?: () => boolean): void {
+  const next = id ? { id, key, when } : null;
+  if (override?.id === next?.id && override?.key === next?.key) return;
+  override = next;
+  onOverride?.();
+}
+export const eventOverride = () => override;
+
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
 /** The game services an interactive event may use (keys, gating, the crowd's avatars, combat knock-back). */
@@ -68,17 +83,19 @@ export default coreFeature({
     });
     const eg = eventGame(ctx);
     const group = new THREE.Group(); group.name = 'events'; ctx.scene.add(group);
-    let cur: { ev: SeasonalEvent; world: unknown; stop: () => void } | null = null;
+    let cur: { ev: SeasonalEvent; world: unknown; key: string; stop: () => void } | null = null;
 
     const choose = (): SeasonalEvent | null => {
       const forced = forcedEvent();
       if (forced === 'off') return null;
+      const mode = parseMode(settingValue(EVENT_SETTING, 'auto'));
+      if (override && mode !== 'off' && !forced && override.when?.() !== false) { const ev = EVENTS.find((e) => e.id === override!.id); if (ev) return ev; }
       return pickEvent(EVENTS, new Date(), parseMode(settingValue(EVENT_SETTING, 'auto')), forced, settingValue(EVENT_PICK_SETTING, 'near'));
     };
     const stop = () => { if (!cur) return; const c = cur; cur = null; try { c.stop(); } catch (e) { console.warn('[l3d] event dispose', e); } };
     const refresh = () => {
-      const world = ctx.world(), ev = choose();
-      if (cur && cur.ev === ev && cur.world === world) return;
+      const world = ctx.world(), ev = choose(), key = override && ev && override.id === ev.id && override.when?.() !== false ? override.key : '';
+      if (cur && cur.ev === ev && cur.world === world && cur.key === key) return;
       stop();
       if (!ev) return;
       const sub = new Set<() => void>();
@@ -92,10 +109,10 @@ export default coreFeature({
       };
       try {
         const dispose = ev.setup(ec);
-        cur = { ev, world, stop: () => { try { dispose(); } finally { for (const u of sub) u(); sub.clear(); } } };
+        cur = { ev, world, key, stop: () => { try { dispose(); } finally { for (const u of sub) u(); sub.clear(); } } };
         const k = 'l3d.event.seen.' + ev.id, today = dayKey(new Date());
         let seen: string | null = null; try { seen = localStorage.getItem(k); } catch { /* private mode */ }
-        if (seen !== today && !forcedEvent() && parseMode(settingValue(EVENT_SETTING, 'auto')) === 'auto') {
+        if (seen !== today && !forcedEvent() && !key && parseMode(settingValue(EVENT_SETTING, 'auto')) === 'auto') {
           try { localStorage.setItem(k, today); } catch { /* */ }
           ctx.ui.toast(ev.greeting ?? `${ev.title}: город украшен — отключить можно в настройках («События»).`);
         }
@@ -105,6 +122,7 @@ export default coreFeature({
       }
     };
 
+    onOverride = refresh;
     refresh();
     const onSet = (e: Event) => { const k = (e as CustomEvent).detail?.key; if (!k || k === EVENT_SETTING || k === EVENT_PICK_SETTING) refresh(); };
     window.addEventListener('l3d:settings', onSet);
@@ -115,6 +133,6 @@ export default coreFeature({
       acc += dt; if (acc > 60) { acc = 0; refresh(); }
     });
     ctx.dev.seasonal = { refresh, active: () => cur?.ev.id ?? null, group };
-    return () => { offF(); offW(); window.removeEventListener('l3d:settings', onSet); stop(); group.removeFromParent(); offRow(); offPick(); eg.dispose(); };
+    return () => { onOverride = null; offF(); offW(); window.removeEventListener('l3d:settings', onSet); stop(); group.removeFromParent(); offRow(); offPick(); eg.dispose(); };
   },
 });

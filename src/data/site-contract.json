@@ -347,6 +347,43 @@
       "re": "LG_DOCK",
       "why": "boot guard (embedded dock page)",
       "severity": "degrade"
+    },
+    {
+      "id": "hero.hwc (Ночь Тыквенной Луны)",
+      "file": "city.js",
+      "re": "\\.hwc\\b",
+      "why": "Halloween night in the City: hero.hwc {look, portal} from /api/me and SSE me → forced decoration, «dead» Fair, portal at the gate, ghost cats (src/features/hwcity.ts); absent = no night",
+      "severity": "degrade"
+    },
+    {
+      "id": "LGCityHW",
+      "kind": "global",
+      "name": "LGCityHW",
+      "file": "cityhw.js",
+      "keys": [
+        "at",
+        "portal",
+        "items",
+        "npcSpots"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "the site's Halloween city art; we mirror at(sc) (portal at the gate door, bottom at the gate ground) and items() (cauldron, candles, witch, bats, cobwebs) in src/events/halloween/hwcity.ts"
+    },
+    {
+      "id": "quest gather.hw",
+      "file": "quest.js",
+      "re": "gather\\.hw",
+      "why": "«🎃 Сбор у портала» (join word «портал») in the quest HUD and the expedition 3D gather (src/quest, src/expedition/adapter.ts)",
+      "severity": "degrade"
+    },
+    {
+      "id": "battle topBoss",
+      "file": "battle.js",
+      "re": "topBoss",
+      "why": "hw_pumpkin leader = Pumpkin Golem, taller than the rank-and-file (src/expedition/adapter.ts foeArtOf → 'golem')",
+      "severity": "degrade"
     }
   ]
 }

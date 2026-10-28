@@ -24,6 +24,9 @@ if (new URLSearchParams(location.search).get('sky') === 'dusk') layout.sky = 'li
 const SPAWN: [number, number] = (layout as any).spawn || [layout.QW + 660, 1010];
 const store = createStore();
 const hero = structuredClone((me as any).hero) as Hero;
+// ?hwc=look|portal|lp: the site's «Ночь Тыквенной Луны» (hero.hwc); live: __demo.hwc('lp' | 'look' | 'portal' | 'off')
+const hwcOf = (v: string | null) => (v === 'look' ? { look: true, portal: false } : v === 'portal' ? { look: true, portal: true, at: Date.now() } : v === 'lp' ? { look: true, portal: true, at: Date.now() } : v === 'p' ? { look: false, portal: true } : null);
+{ const v = new URLSearchParams(location.search).get('hwc'); if (v) (hero as any).hwc = hwcOf(v); }
 store.setHero(hero);
 store.setLayout(layout);
 const STYLE = 'cats';
@@ -121,5 +124,5 @@ const site: SiteSession = {
 startGame(site, (s) => console.log('[demo]', s)).then((g) => {
   const ui = (window as any).__l3dGame?.ui;
   if (ui) toastDemo = (t) => ui.toast(t);
-  (window as any).__demo = { g, store, bots, hero };
+  (window as any).__demo = { g, store, bots, hero, hwc: (v: string) => { (hero as any).hwc = hwcOf(v); store.setHero(structuredClone(hero)); } };
 }).catch((e) => { console.error('demo failed', e); document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f88;position:fixed;top:0;left:0;z-index:999">${String(e?.stack || e)}</pre>`); });

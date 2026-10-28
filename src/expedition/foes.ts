@@ -27,6 +27,7 @@ export class Foes {
   private inst: THREE.InstancedMesh[] = [];
   private outl: THREE.InstancedMesh[] = [];
   private crowns: THREE.InstancedMesh;
+  private counts = new Int32Array(FOE_ARTS.length);
   private _m = new THREE.Matrix4(); private _q = new THREE.Quaternion(); private _e = new THREE.Euler(0, 0, 0, 'YXZ'); private _p = new THREE.Vector3(); private _s = new THREE.Vector3(); private _c = new THREE.Color();
   constructor(private mats: ExpMats) {
     this.root.name = 'exp-foes';
@@ -79,7 +80,7 @@ export class Foes {
   flee(): void { for (const A of this.list) if (!A.dead) { A.act = 'flee'; A.actT = 0; A.actLen = 99; } }
 
   update(dt: number, t: number): void {
-    const counts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const counts = this.counts; counts.fill(0);
     let crowns = 0;
     for (const A of this.list) {
       A.actT += dt;

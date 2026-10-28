@@ -120,7 +120,7 @@ class Camp extends Base implements SetPiece {
     this.env.decals.add(0, 0.01, 0, 3.4, '#ff9a4a', 0.35, 1, 0);
     if (this.relabel && this.banner && this.mode === 'gather') {
       const sec = this.env.secLeft(s.until);
-      this.banner.set('СБОР ОТРЯДА', `${s.n} ${plural(s.n, 'котик', 'котика', 'котиков')}${s.until ? ' · ' + mmss(sec) : ''}`);
+      this.banner.set(s.hw ? '🎃 СБОР У ПОРТАЛА' : 'СБОР ОТРЯДА', `${s.n} ${plural(s.n, 'котик', 'котика', 'котиков')}${s.until ? ' · ' + mmss(sec) : ''}`);
     }
   }
 }

@@ -85,6 +85,8 @@ export interface Hero {
   soc?: { score: number; rank: string; rankName: string; icon: string; place: number; total: number; bad?: boolean };
   sk?: unknown; ac?: unknown; mn?: Record<string, unknown>;
   busy?: boolean;
+  /** «Ночь Тыквенной Луны» (site 28.10, city.js hwNow): the City's Halloween look / the portal at the gate (src/events/halloween/hwcity.ts). */
+  hwc?: { look?: boolean; portal?: boolean; at?: number } | null;
   [k: string]: unknown;
 }
 

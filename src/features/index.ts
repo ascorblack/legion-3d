@@ -44,6 +44,7 @@ import emotes from './emotes';
 import boom from './boom';
 import closeguard from './closeguard';
 import update from './update';
+import hwcity from './hwcity';
 
 export const FEATURES: (Feature | CoreFeature)[] = [
   settings, itemModels, menus, camera, crowd, labels, doors, controls, rooms, contentRooms, overlay, classic, quest, photo, debug, whatsnew, seasonal, sound,
@@ -58,6 +59,7 @@ export const FEATURES: (Feature | CoreFeature)[] = [
   flight, emotes, boom,
   closeguard,
   update,
+  hwcity,
 ];
 
 /** Run every feature's setup in order. A failing feature is logged and skipped (the game still starts). */

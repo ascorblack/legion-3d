@@ -59,3 +59,11 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
 - After a site update run `npm run drift` (docs/EXTENDING.md) — it lists new/removed ids and what we do not support.
 - Skills, achievements, wardrobe, rating and news menus show a short native summary plus the site's own panel.
 - If the site leaves the City tab by itself (an expedition starts), 3D mode does not react yet.
+
+## Release screenshots
+Every release ships screenshots of what it adds, in full quality: rendered on a real GPU at the highest quality level
+(q3, pixel ratio 1, scale 1) and 2560×1440, HUD off, demo names only — no real nicknames. Saved as JPEG at full
+resolution (`ffmpeg -i shot.png -q:v 2 shot.jpg`, ≤ 5 MB) in `docs/releases/<version>/`, linked from
+`.github/RELEASE_NOTES.md` as `![Что это](docs/releases/<version>/name.jpg)`. The release workflow rewrites them to raw
+URLs at the tag (`scripts/release-notes.mjs`); check with `node scripts/release-notes.mjs --check`.
+Shot scripts take `--gpu --q=3 --w=2560 --h=1440 --profile=<persistent dir>` (see dev/camp-shots.mjs, scripts/video/README.md § Windows).

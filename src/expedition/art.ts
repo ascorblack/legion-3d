@@ -182,11 +182,11 @@ export function catHullGeo(): THREE.BufferGeometry {
 /* ------------------------------------------------------------------ foes */
 
 /** Head height (m, unscaled) — crowns, hp bars and telegraph signs sit above it. */
-export const FOE_TOP: Record<FoeArt, number> = { wolf: 1.15, skeleton: 1.5, bandit: 1.4, boar: 1.0, drowner: 1.35, spider: 1.0, bat: 1.75, ghost: 1.55, slime: 0.95, pumpkin: 1.2 };
+export const FOE_TOP: Record<FoeArt, number> = { wolf: 1.15, skeleton: 1.5, bandit: 1.4, boar: 1.0, drowner: 1.35, spider: 1.0, bat: 1.75, ghost: 1.55, slime: 0.95, pumpkin: 1.2, golem: 1.75 };
 /** Body radius for hits. */
-export const FOE_R: Record<FoeArt, number> = { wolf: 0.55, skeleton: 0.4, bandit: 0.45, boar: 0.55, drowner: 0.5, spider: 0.65, bat: 0.45, ghost: 0.45, slime: 0.5, pumpkin: 0.45 };
+export const FOE_R: Record<FoeArt, number> = { wolf: 0.55, skeleton: 0.4, bandit: 0.45, boar: 0.55, drowner: 0.5, spider: 0.65, bat: 0.45, ghost: 0.45, slime: 0.5, pumpkin: 0.45, golem: 0.62 };
 /** Fliers bob in the air. */
-export const FOE_FLY: Record<FoeArt, number> = { wolf: 0, skeleton: 0, bandit: 0, boar: 0, drowner: 0, spider: 0, bat: 1.0, ghost: 0.25, slime: 0, pumpkin: 0 };
+export const FOE_FLY: Record<FoeArt, number> = { wolf: 0, skeleton: 0, bandit: 0, boar: 0, drowner: 0, spider: 0, bat: 1.0, ghost: 0.25, slime: 0, pumpkin: 0, golem: 0 };
 
 export function foeGeo(a: FoeArt): THREE.BufferGeometry {
   return cached('foe:' + a, () => {
@@ -330,6 +330,23 @@ export function foeGeo(a: FoeArt): THREE.BufferGeometry {
         for (const s of [-1, 1]) { b.add(cone(0.08, 0.1, 3), '#2a1206', T(s * 0.12, 0.72, -0.36, -Math.PI / 2, 0, 0)); b.add(cyl(0.05, 0.05, 0.3, 5), '#3a5a2a', T(s * 0.12, 0.15, 0)); }
         b.add(box(0.28, 0.06, 0.05), '#2a1206', T(0, 0.52, -0.38));
         b.add(sph(0.06, 6, 4), '#ffd34d', T(0, 0.62, -0.3));
+        break;
+      }
+      case 'golem': {
+        // the Pumpkin Golem (hw_pumpkin leader, «Тыквенный голем»): a hulk of rotten pumpkins on vine legs, vine arms
+        // with pumpkin fists, a glowing jack-o'-lantern head and a crown of bone shards (site: topBoss 212 vs top 146)
+        const o = '#b8561c', od = '#7e3a14', vine = '#3a4436', bone = '#c4beac';
+        for (const s of [-1, 1]) b.add(cyl(0.09, 0.12, 0.42, 6), vine, T(s * 0.2, 0.21, 0));
+        for (let i = 0; i < 7; i++) { const a2 = (i / 7) * Math.PI * 2; b.add(sph(0.3, 10, 8), i % 2 ? o : od, T(Math.cos(a2) * 0.2, 0.78, Math.sin(a2) * 0.2, 0, 0, 0, [0.85, 1.05, 0.85])); }
+        b.add(sph(0.27, 10, 8), od, T(0, 1.02, 0.02, 0, 0, 0, [1.1, 0.8, 1]));
+        for (const s of [-1, 1]) {
+          b.add(cyl(0.06, 0.07, 0.62, 6), vine, T(s * 0.5, 0.85, -0.05, 0.3, 0, s * 0.55));
+          b.add(sph(0.16, 9, 7), o, T(s * 0.66, 0.55, -0.15));
+        }
+        b.add(sph(0.3, 12, 9), o, T(0, 1.38, 0, 0, 0, 0, [1, 0.85, 1]));
+        for (const s of [-1, 1]) b.add(cone(0.07, 0.09, 3), '#ffd34d', T(s * 0.11, 1.45, -0.27, -Math.PI / 2, 0, 0));
+        b.add(box(0.26, 0.06, 0.05), '#ffd34d', T(0, 1.3, -0.28));
+        for (let i = 0; i < 5; i++) b.add(cone(0.035, 0.15, 4), bone, T((i - 2) * 0.08, 1.66, 0, 0, 0, (i - 2) * 0.12));
         break;
       }
       case 'slime':

@@ -45,14 +45,30 @@ export const isTight = (b: BiomeId) => b === 'cave' || b === 'mine' || b === 'du
 
 /* ------------------------------------------------------------------ foes */
 
-export type FoeArt = 'wolf' | 'skeleton' | 'bandit' | 'boar' | 'drowner' | 'spider' | 'bat' | 'ghost' | 'slime' | 'pumpkin';
-export const FOE_ARTS: readonly FoeArt[] = ['wolf', 'skeleton', 'bandit', 'boar', 'drowner', 'spider', 'bat', 'ghost', 'slime', 'pumpkin'];
+export type FoeArt = 'wolf' | 'skeleton' | 'bandit' | 'boar' | 'drowner' | 'spider' | 'bat' | 'ghost' | 'slime' | 'pumpkin' | 'golem';
+export const FOE_ARTS: readonly FoeArt[] = ['wolf', 'skeleton', 'bandit', 'boar', 'drowner', 'spider', 'bat', 'ghost', 'slime', 'pumpkin', 'golem'];
+/**
+ * Halloween foes (site questfoes.js 'enemies-hollow', 27–28.10): hw_* key → our model. The leader of hw_pumpkin is the
+ * Pumpkin Golem («Тыквенный голем», battle.js topBoss: much taller than the rank-and-file) → 'golem' (foeArtOf).
+ */
+export const HW_FOES: Record<string, FoeArt> = {
+  hw_pumpkin: 'pumpkin', hw_pumpkinlet: 'pumpkin', hw_jack: 'pumpkin', hw_ghost: 'ghost', hw_bat: 'bat', hw_crow: 'bat', hw_witch: 'ghost',
+  hw_zombie: 'skeleton', hw_skeleton: 'skeleton', hw_spider: 'spider', hw_cat: 'wolf', hw_scarecrow: 'bandit',
+};
+/** foeArt + the leader variants (hw_pumpkin leader = the pumpkin golem). */
+export function foeArtOf(type: unknown, name: unknown, lead: boolean): FoeArt {
+  const t = String(type ?? '').toLowerCase();
+  if (lead && t === 'hw_pumpkin') return 'golem';
+  if (/голем/i.test(String(name ?? '')) && /тыкв|pump/i.test(t + ' ' + String(name ?? ''))) return 'golem';
+  return foeArt(type, name);
+}
 /**
  * Foe art key (battle.js: wolf skeleton bandit boar drowner spider bat; hw_* Halloween, dg_* dungeon packs) → our model.
  * Unknown keys go by stems (also of the display name), then a slime blob.
  */
 export function foeArt(type: unknown, name: unknown = ''): FoeArt {
   const t = String(type ?? '').toLowerCase();
+  if (HW_FOES[t]) return HW_FOES[t];
   const base = t.replace(/^(hw|dg|dgb)_/, '');
   if ((FOE_ARTS as readonly string[]).includes(base)) return base as FoeArt;
   const s = base + ' ' + String(name ?? '').toLowerCase();
@@ -114,6 +130,8 @@ export interface SceneState {
   /** changes when the 3D set must be rebuilt (kind/biome/battle) */
   setKey: string;
   title: string; sub: string; ter: string; biome: BiomeId;
+  /** the Halloween gather at the portal (q.gather.hw, site 28.10): «🎃 Сбор у портала», join word «портал» */
+  hw: boolean;
   /** party size and the drawn party (detailed + generic) */
   n: number; party: Member[]; reserve: number;
   inParty: boolean; partyState: string;
@@ -190,7 +208,7 @@ export interface AdaptCtx { login: string; role: string; roster: Roster }
 /* ------------------------------------------------------------------ the adapter */
 
 const EMPTY: SceneState = {
-  kind: 'off', setKey: 'off', title: '', sub: '', ter: '', biome: 'meadow', n: 0, party: [], reserve: 0, inParty: false, partyState: '', myRole: 'recruit',
+  kind: 'off', setKey: 'off', title: '', sub: '', hw: false, ter: '', biome: 'meadow', n: 0, party: [], reserve: 0, inParty: false, partyState: '', myRole: 'recruit',
   until: 0, battle: null, boss: null, vote: null, trap: null, shop: null, event: null, loot: null, town: null, dungeon: null, lair: null, cmds: [], status: '',
 };
 
@@ -211,7 +229,7 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   const myRole = c.role || 'recruit';
   if (q.b && typeof q.b === 'object') c.roster.remember(q.b);
   const n = Math.max(0, Math.round(num(q.n, 0)));
-  const s: SceneState = { ...EMPTY, ter, biome, n, inParty, partyState: str(q.party), myRole, title: str(q.t), cmds: [], party: [] };
+  const s: SceneState = { ...EMPTY, ter, biome, n, inParty, partyState: str(q.party), myRole, title: str(q.t), cmds: [], party: [], hw: !!(q.gather && q.gather.hw) };
   const me = { login: c.login, role: myRole, in: inParty };
 
   // which scene
@@ -245,8 +263,9 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   if (kind === 'vote' && q.vote) voteOf(q, s);
   if (kind === 'gather') {
     s.until = num(q.gather?.until, 0);
-    s.status = `Сбор отряда: ${n} ${plural(n, 'котик', 'котика', 'котиков')}`;
-    s.cmds.push(inParty ? { kind: 'ok', text: 'ты в отряде', note: 'ждём остальных' } : { kind: 'say', text: 'поход', note: 'вступить в отряд' });
+    s.status = `${s.hw ? '🎃 Сбор у портала' : 'Сбор отряда'}: ${n} ${plural(n, 'котик', 'котика', 'котиков')}`;
+    s.cmds.push(inParty ? { kind: 'ok', text: 'ты в отряде', note: 'ждём остальных' } : q.party === 'ghost' ? { kind: 'info', text: 'твой герой — призрак в этом походе' }
+      : { kind: 'say', text: s.hw ? 'портал' : 'поход', note: s.hw ? 'шагнуть в Изнанку с отрядом' : 'вступить в отряд' });
   }
   if (kind === 'travel') { s.status = `В пути${s.title ? ': ' + s.title : ''}`; travelCmds(q, s); }
   if (kind === 'rest') { s.status = 'Привал у костра'; travelCmds(q, s); }
@@ -266,7 +285,7 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
 }
 
 function travelCmds(q: any, s: SceneState) {
-  if (!s.inParty) s.cmds.push(q.party === 'q' ? { kind: 'ok', text: 'ты в очереди', note: 'вступишь на остановке' } : q.party === 'ghost' ? { kind: 'info', text: 'ты призрак в этом походе' } : { kind: 'say', text: 'поход', note: q.cm === false ? 'вступить (на остановке)' : 'вступить в отряд' });
+  if (!s.inParty) s.cmds.push(q.party === 'q' ? { kind: 'ok', text: 'ты в очереди', note: 'вступишь на остановке' } : q.party === 'ghost' ? { kind: 'info', text: 'твой герой — призрак в этом походе' } : { kind: 'say', text: 'поход', note: q.cm === false ? 'вступить (на остановке)' : 'вступить в отряд' });
 }
 
 /* ---- battle ---- */
@@ -302,7 +321,7 @@ function battleOf(b: QuestBattle, s: SceneState, c: AdaptCtx) {
   s.myRole = myRole;
   const foes: FoeState[] = arr<any[]>(b.foes).filter((f) => Array.isArray(f)).slice(0, 24).map((f, i) => {
     const hp01 = clamp01(f[3]);
-    return { i, art: foeArt(f[1], f[4]), type: str(f[1], 'unknown'), side: fronts.includes(f[0]) ? f[0] : side(f[0], fronts[i % fronts.length]), lead: !!f[2], hp: hp01, dead: hp01 <= 0, name: str(f[4]) };
+    return { i, art: foeArtOf(f[1], f[4], !!f[2]), type: str(f[1], 'unknown'), side: fronts.includes(f[0]) ? f[0] : side(f[0], fronts[i % fronts.length]), lead: !!f[2], hp: hp01, dead: hp01 <= 0, name: str(f[4]) };
   });
   const tele = b.tele && typeof b.tele === 'object' && typeof b.tele.word === 'string'
     ? { word: b.tele.word, text: str(b.tele.text), got: num(b.tele.got, 0), need: num(b.tele.need, 0), ok: !!b.tele.ok } : null;

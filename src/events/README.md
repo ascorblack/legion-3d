@@ -60,6 +60,22 @@ cobwebs = 10–11 (no real lights, no shadow casters). Counts per quality: `HALL
 Dev page: `dist-dev/events.html?event=halloween&q=2` (buttons switch the event / quality while it runs); in the game
 `dist-dev/game.html?event=halloween` (`__l3dGame.seasonal.active()`).
 
+### «Ночь Тыквенной Луны» (site 28.10, `hero.hwc`) — `src/features/hwcity.ts`
+The site's Halloween night in the City (`hero.hwc = { look, portal, at }` from /api/me and SSE `me`; city.js hwNow / cityhw.js).
+Only the Fair (layout id `fair`) transforms; the camp and district towns stay. Setting «События → Ночь Тыквенной Луны» (`l3d.hwcity`).
+| file | what |
+|---|---|
+| `halloween/hwcity.ts` | pure: `parseHwc`, `hwcMode` (look → decoration + «dead» city, portal → portal + ghost cats), `portalSpot` (cityhw at(sc): centred on the gate door, bottom on its ground, flush on the facade; pushed back until no walkable cell — `layout.free` and not inside a solid — is covered), `planHwExtras` (cauldron, candles, witch circle, facade cobwebs) |
+| `halloween/hwgeo.ts` | extras as ONE merged mesh (witch flown in the vertex shader via `aFly`), the portal's stone arch |
+| `halloween/portal.ts` | the portal: frame + vortex shader quad + street glow (3 draws), `setOpen(0…1)` |
+| `halloween/dead.ts` | `DeadGrade`: a shader tail on every world material (shared uniform), cold-grey world lights, street lights / lamp glows / garland bulbs / lamp pools off; `dispose()` restores everything |
+| `halloween/ghosts.ts` | `GhostCrowd`: every crowd avatar and the own hero via `Appearance.ghost`, translucent FP paws (view-model materials swapped) |
+
+`look` forces the Halloween event through `setEventOverride('halloween', 'hw', () => fair)` (src/features/seasonal.ts; honoured in «Авто»/«Всегда», never «Выкл»)
+with `halloweenOpts.hw = true` (+1 draw: extras; +8 bats, +10 webs). Portal open: +3 draws → ≤ 15 at q2. Transitions are smooth
+(grade 2.6 s, portal 1.8 s, ghosts ≤ 3 rebuilds/frame). Dev: `dist-dev/game.html?hwc=look|portal|p`, live `__demo.hwc('lp'|'look'|'off')`,
+`__l3dGame.hwcity.state()`. Release shots: `node dev/hw-shots.mjs`.
+
 ## New Year (`newyear/`)
 | file | what |
 |---|---|

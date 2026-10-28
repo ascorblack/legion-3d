@@ -29,9 +29,9 @@ const gl = opt.gpu ? ['--use-gl=angle', '--ignore-gpu-blocklist', '--enable-gpu'
 const winGl = ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'];
 const glArgs = opt.gpu && process.platform === 'win32' ? winGl : gl;
 const b = opt.profile
-  ? await chromium.launchPersistentContext(opt.profile, { headless: true, executablePath: process.env.CHROMIUM || undefined, args: glArgs, viewport: { width: 1920, height: 1080 } })
+  ? await chromium.launchPersistentContext(opt.profile, { headless: true, executablePath: process.env.CHROMIUM || undefined, args: glArgs, viewport: { width: +(opt.w || 1920), height: +(opt.h || 1080) } })
   : await chromium.launch({ executablePath: process.env.CHROMIUM || undefined, args: ['--no-sandbox', ...glArgs] });
-const p = await b.newPage({ viewport: { width: 1920, height: 1080 } });
+const p = await b.newPage({ viewport: { width: +(opt.w || 1920), height: +(opt.h || 1080) } });
 p.on('pageerror', (e) => console.log('[pageerror]', e.message));
 await p.addInitScript({ content: "const opt_event = " + JSON.stringify(opt.event || 'off') + "; try { localStorage.setItem('l3d.whatsnew.enabled', '0'); localStorage.setItem('l3d.event.mode', opt_event); localStorage.setItem('l3d.names', 'off'); } catch (e) {}" });
 await p.goto('file://' + resolve('dist-dev/game.html') + '?town=camp&bots=0' + (opt.sky ? '&sky=' + opt.sky : ''));

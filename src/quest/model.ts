@@ -182,7 +182,8 @@ export interface QuestPayload {
   party?: PartyState;
   /** false → the party is moving: joining = queue until the next stop */
   cm?: boolean;
-  gather?: { until: number };
+  /** hw: the Halloween gather at the portal (site 28.10, «🎃 Сбор у портала», join word «портал») */
+  gather?: { until: number; hw?: unknown };
   /** danger note (★3+: losses on death) */
   dg?: string;
   /** my worn items at ≤ 30% durability: [name, percent] */

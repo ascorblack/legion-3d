@@ -39,6 +39,8 @@ jobs:
           xpi="legion-3d-${GITHUB_REF_NAME#v}-firefox.xpi"
           mv amo/*.xpi "$xpi"
           echo "xpi=$xpi" >> "$GITHUB_OUTPUT"
+      - name: Release notes with screenshots
+        run: node scripts/release-notes.mjs "${GITHUB_REPOSITORY}" "${GITHUB_REF_NAME}" .github/RELEASE_NOTES.md release-notes.md
       - name: Publish release
         env: { GH_TOKEN: '${{ github.token }}', XPI: '${{ steps.firefox.outputs.xpi }}' }
         # Only user files go to GitHub: the Chrome zip and the signed Firefox .xpi. Store payloads stay separate.
@@ -47,7 +49,7 @@ jobs:
           [[ -n "$XPI" ]] && files+=("$XPI")
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
             && gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --clobber \
-            || gh release create "${GITHUB_REF_NAME}" "${files[@]}" --title "Legion 3D ${GITHUB_REF_NAME}" --notes-file .github/RELEASE_NOTES.md
+            || gh release create "${GITHUB_REF_NAME}" "${files[@]}" --title "Legion 3D ${GITHUB_REF_NAME}" --notes-file release-notes.md
       # First submission and store listing are created manually. These steps update an existing item only.
       - name: Upload and publish Chrome Web Store update (optional)
         env:
