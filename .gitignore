@@ -9,3 +9,4 @@ e2e/.artifacts/
 dist-dev/
 /video/
 dist-firefox/
+amo-metadata.gen.json

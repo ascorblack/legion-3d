@@ -66,9 +66,10 @@ jobs:
           node scripts/pack.mjs --browser=firefox
           rm -rf amo-listed && mkdir amo-listed && unzip -q "legion-3d-$v-firefox-store.zip" -d amo-listed
           git archive --format=zip -o "legion-3d-$v-source.zip" HEAD
+          node scripts/amo-metadata.mjs "$v" amo-metadata.gen.json
           npx --yes web-ext@10.8.0 sign --source-dir amo-listed --artifacts-dir amo-listed-out --channel listed \
             --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" \
-            --amo-metadata store/amo-metadata.json --upload-source-code "legion-3d-$v-source.zip" --approval-timeout 0
+            --amo-metadata amo-metadata.gen.json --upload-source-code "legion-3d-$v-source.zip" --approval-timeout 0
       # First submission and store listing are created manually. These steps update an existing item only.
       - name: Upload and publish Chrome Web Store update (optional)
         env:
