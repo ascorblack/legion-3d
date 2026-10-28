@@ -3,7 +3,7 @@ import type { Hero, Item, ApiResult } from '../contracts';
 import { type Ctx, h } from './ctx';
 import {
   esc, rarOf, SLOT_NAME, WEAR_SLOTS, equipped, deltas, bagCells, catOf, CAT_NAME, CAT_ORDER, hpInfo, xpInfo, stLabel,
-  XS_KEYS, XS_LABEL, XPCT, num, ST_HELP, edible, plainCountdown, timeAgo, coinStyle, CLASS_NAME, type Cell,
+  XS_KEYS, XS_LABEL, XPCT, num, ST_HELP, edible, plainCountdown, timeAgo, coinStyle, CLASS_NAME, roleTitle, type Cell,
 } from './data';
 import { cellHtml, cardHtml } from './card';
 import { slotSilhouette, statIcon } from './icons';
@@ -14,6 +14,7 @@ import { settingRows, settingRow, readRow, writeRow, pauseItems as extPauseItems
 import type { TabEntry } from './tabs';
 import { MapView } from './map';
 import { earnedMedals } from '../collect/medals';
+import { bossName } from '../quest/model';
 import { milestones } from '../collect/milestones';
 import type { GameContext } from '../contracts/ext';
 
@@ -22,10 +23,12 @@ export const STANDALONE = ['pause', 'settings', 'help'];
 export const ALIAS: Record<string, string> = { character: '', journal: 'log', equipment: 'gear', inventory: 'bag', rating: 'legion', world: 'map', controls: 'help' };
 
 const JK: Record<string, [string, string]> = {
-  fight: ['⚔️', 'Бой'], boss: ['🐉', 'Закхуэль'], dice: ['🎲', 'Кости'], event: ['🎭', 'Событие'], trap: ['🪤', 'Ловушка'], shop: ['🛒', 'Покупка'],
+  fight: ['⚔️', 'Бой'], boss: ['🐉', 'Босс'], dice: ['🎲', 'Кости'], event: ['🎭', 'Событие'], trap: ['🪤', 'Ловушка'], shop: ['🛒', 'Покупка'],
   ench: ['🔨', 'Заточка'], auc: ['⚖️', 'Аукцион'], look: ['🎩', 'Облик'], loot: ['🎁', 'Вещь'], find: ['🔍', 'Находка'], coins: ['🪙', 'Монеты'],
   hero: ['⭐', 'Герой'], award: ['🏅', 'Награда'], store: ['📦', 'Склад'], ach: ['🏆', 'Достижение'], trade: ['🤝', 'Обмен'], bug: ['🐞', 'Репорт'],
 };
+/** The journal's boss kind is named after the channel's Prologue boss (quest view `bn`, default «Закхуэль»). */
+const jkBoss = (q: unknown): [string, string] => ['🐉', bossName(q as { bn?: unknown } | null).n];
 const JT: [string, string][] = [['all', 'Все'], ['fight', 'Бой'], ['shop', 'Покупки'], ['find', 'Находки'], ['coins', 'Монеты'], ['ach', 'Достижения']];
 const JRK: Record<string, Record<string, string>> = {
   dice: { win: 'Выиграл', lose: 'Проиграл', tie: 'Ничья' }, fight: { win: 'Победа', lose: 'Поражение' }, boss: { win: 'Победа', lose: 'Поражение' },
@@ -282,7 +285,7 @@ export class Menus {
       : `<p class="mut" style="margin:0;font-weight:700;font-size:12.5px">В сумке нет вещей для этого слота.</p>`;
     const busyIc = H.busy || H.ghost ? ` <span title="${esc(lock || '')}" style="display:inline-block;width:18px;height:18px;vertical-align:-3px">${statIcon(H.ghost ? 'ghost' : 'lock', 'si')}</span>` : '';
     return `<div class="page p-gear" data-page="gear">${this.pan('', 'Снаряжение', `
-      <div class="dollc"><div class="who"><b>${esc(H.name)}</b><span class="lvl">Ур. ${H.level}</span>${busyIc}<div class="cls">${esc(H.roleName || CLASS_NAME[H.role] || '')}${H.soc ? ` · <span class="emo">${esc(H.soc.icon)}</span> ${esc(H.soc.rankName)}` : ''}</div></div>
+      <div class="dollc"><div class="who"><b>${esc(H.name)}</b><span class="lvl">Ур. ${H.level}</span>${busyIc}<div class="cls">${esc(roleTitle(H))}${H.soc ? ` · <span class="emo">${esc(H.soc.icon)}</span> ${esc(H.soc.rankName)}` : ''}</div></div>
         <div class="doll"><div class="ring"></div>${medHtml}<svg class="figure" viewBox="0 0 92 120" aria-hidden="true"><path d="M22 34 L28 8 L42 26 Q46 25 50 26 L64 8 L70 34 Q80 46 80 64 L80 92 Q80 114 46 114 Q12 114 12 92 L12 64 Q12 46 22 34 Z" fill="#ffcf6a" opacity=".16"/><circle cx="34" cy="56" r="5" fill="#ffcf6a" opacity=".3"/><circle cx="58" cy="56" r="5" fill="#ffcf6a" opacity=".3"/></svg>${slots}</div>${penHtml}</div>
       <div class="det"><button type="button" class="btn ghost sm" data-gear-snapshot>📸 Снимок</button>${back}<div class="scroll">${card}<div class="h3">Подходит в слот <span class="mut">${fits.length}</span></div>${list}</div></div>`)}</div>`;
   }
@@ -344,7 +347,7 @@ export class Menus {
     const jl = last == null ? `<p class="mut" style="margin:0">Загружаю…</p>` : last.length ? `<ul class="jl">${last.map((e) => this.jRow(e)).join('')}</ul>` : `<p class="mut" style="margin:0">Записей пока нет.</p>`;
     return `<div class="page p-stats" data-page="stats">${this.pan('', 'Характеристики', `<div class="scroll">
       <div class="shead"><div class="medal"><span class="ears"></span><span class="lv">${H.level}</span><span class="lvt">Ур.</span></div>
-        <div class="nm"><b>${esc(H.name)}</b><div>«${esc(H.roleName || CLASS_NAME[H.role] || '')}» · Уровень ${H.level}</div></div>
+        <div class="nm"><b>${esc(H.name)}</b><div>«${esc(roleTitle(H))}» · Уровень ${H.level}</div></div>
         ${s ? `<div class="soc"><span class="chip click${s.bad ? ' bad' : ''}" data-act="tab" data-m="legion"><span class="emo">${esc(s.icon)}</span>${esc(s.rankName)} · ${s.score}</span><small>место ${s.place} из ${s.total.toLocaleString('ru-RU')}</small></div>` : ''}</div>
       <div class="sbars"><span>Опыт</span><div class="bar xp"><i class="fill" style="width:calc(${(xp.pct * 100).toFixed(1)}% - 4px)"></i><span class="t">${xp.xneed == null ? 'максимум' : `${xp.xin} / ${xp.xneed}`}</span></div>
         <span>Здоровье</span><div class="bar hp${hp.pct < 0.3 ? ' low' : ''}${H.ghost ? ' dead' : ''}"><i class="fill" style="width:calc(${(hp.pct * 100).toFixed(1)}% - 4px)"></i><span class="t">${hp.now} / ${hp.max}</span></div></div>
@@ -378,7 +381,7 @@ export class Menus {
     finally { this.jLoading = false; if (this.cur === 'log' || this.cur === 'stats') this.render(); }
   }
   private jRow(e: JEntry): string {
-    const [ic] = JK[e.k] || ['✦', ''];
+    const [ic] = e.k === 'boss' ? jkBoss(this.c.host.store.quest) : JK[e.k] || ['✦', ''];
     const rk = e.r ? ((JRK[e.k] && JRK[e.k][e.r]) ?? JR[e.r] ?? '') : '';
     const d = new Date(e.at);
     const tm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -491,7 +494,7 @@ export class Menus {
     return `<div class="page p-map" data-page="map">${this.pan('', 'Карта', `
       <div class="mhead"><div class="mt"><b>${name}</b><span class="mut">${size}${size ? ' · ' : ''}${n + 1} ${n + 1 === 1 ? 'герой' : 'в городе'}</span></div>
         <div class="legend">${legend}</div>
-        <button type="button" class="btn ghost sm" data-act="classic" data-spec="world" title="Карта мира и Похода — в оригинальном окне сайта">Карта мира</button></div>
+        <button type="button" class="btn ghost sm" data-act="classic" data-spec="world" title="Карта мира и Похода — в оригинальном окне сайта">Карта мира</button><button type="button" class="btn ghost sm" data-act="tab" data-m="travel" title="Другие города и каналы (L)">Путешествие</button></div>
       ${body}
       <div class="mfoot"><span><b>Тяни</b> — двигать</span><span><b>Колесо</b> — масштаб</span><span><b>Клик по зданию</b> — «Идти сюда»</span><span><b>Двойной клик</b> по улице — идти туда</span></div>`)}</div>`;
   }

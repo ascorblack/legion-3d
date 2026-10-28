@@ -14,8 +14,15 @@ export type SettingRow = RangeRow | SegRow | InfoRow;
 
 const ROWS = new Map<string, SettingRow>();
 
+/** What is wrong with a row's default ('' = fine): a seg `def` must be one of its option values, a range `def` inside [min, max]. */
+export function rowProblem(r: SettingRow): string {
+  if (r.kind === 'seg') return r.options.some(([v]) => v === r.def) ? '' : `def «${r.def}» is not one of its options (${r.options.map(([v]) => v).join(', ')})`;
+  if (r.kind === 'range') return Number.isFinite(r.def) && r.def >= r.min && r.def <= r.max ? '' : `def ${r.def} outside [${r.min}, ${r.max}]`;
+  return '';
+}
 /** Add (or replace) a row; returns an unregister function. */
 export function registerSettingRow(r: SettingRow): () => void {
+  const bad = rowProblem(r); if (bad) console.warn('[l3d] setting row', r.key, bad);
   ROWS.set(r.key, r);
   return () => { if (ROWS.get(r.key) === r) ROWS.delete(r.key); };
 }

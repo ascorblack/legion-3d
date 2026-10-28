@@ -4,6 +4,7 @@
  * scenes never dispose these (disposeMineArt() for tests/dev).
  */
 import * as THREE from 'three';
+import { themeOf, mixHex } from './layers';
 
 /* ============================================================ palettes */
 
@@ -34,10 +35,25 @@ const BIO: Record<string, Omit<MinePal, 'mush' | 'fog'>> = {
   ruin: { rock: ['#9a948a', '#bab4aa', '#6a645a'], hard: ['#7a746a', '#968f84', '#4e4840'], floor: '#4a4640', floorL: '#5e5a52', wall: '#2a2824', wallL: '#3e3a34', deco: 'carved' },
 };
 const MUSH: Record<string, string> = { meadow: '#5ff0d8', forest: '#b8f060', taiga: '#8ad8ff', ice: '#a8e8ff', swamp: '#7af07a', blight: '#d07aff', coast: '#6ad0ff', desert: '#ffb84a', ruin: '#9ae0c8', ash: '#ff8a3a', mount: '#5ff0d8' };
-/** Palette of a floor: by nature (biome) or by depth layer (craftworld layerOf). */
-export function minePal(biome: string, n: number): MinePal {
+/** Deep layers glow with their own lamp colour (mushrooms / spores take it). */
+const DEEP_GLOW = new Set(['grotto', 'crystal', 'lake', 'dwarf', 'fossil', 'mirror', 'heart', 'abyss']);
+/**
+ * Palette of a floor, as the site's mine-biome.js (28.10): 12 depth layers (every 5 floors, layers.ts) tinted by the
+ * mine's nature; nature extras (moss, puddles, lava in ash mines, decorations) stay. `depth = false` → the older
+ * 3-layer / per-nature palettes (kept for comparison, setting «Пласты глубины»).
+ */
+export function minePal(biome: string, n: number, depth = true): MinePal {
   let L: Omit<MinePal, 'mush' | 'fog'>;
-  if (biome === 'ash') L = ASH; else if (BIO[biome]) L = BIO[biome];
+  if (depth) {
+    const T = themeOf(n, biome), X = biome === 'ash' ? ASH : BIO[biome];
+    // 3D lighting is dimmer than the site's flat SVG: lift the deepest (near-black) walls a little so the cave keeps its shape
+    const lift = (c: string, k: number) => mixHex(c, T.rock[0], k);
+    L = {
+      rock: T.rock, hard: T.hard, floor: lift(T.floor, 0.12), floorL: lift(T.floorL, 0.12), wall: lift(T.wall, 0.18), wallL: lift(T.wallL, 0.18),
+      moss: X ? X.moss : T.id === 'roots', deco: X ? X.deco : undefined, pud: X ? X.pud : T.id === 'lake' ? '#2a5a78' : undefined,
+      lava: biome === 'ash' || T.id === 'abyss' ? '#ff5a1a' : undefined, glow: DEEP_GLOW.has(T.id) ? T.lc : undefined,
+    };
+  } else if (biome === 'ash') L = ASH; else if (BIO[biome]) L = BIO[biome];
   else { L = LAYERS[0]; for (const l of LAYERS) if (n >= l.from) L = l; }
   // cool, deep fog: distance falls into blue-violet shadow (warm lanterns read against it)
   const fog = '#' + new THREE.Color(L.wall).multiplyScalar(0.45).lerp(new THREE.Color('#121830'), 0.45).getHexString();
@@ -195,6 +211,113 @@ export function badgeTexture(lv: number, on: boolean): THREE.CanvasTexture {
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 2;
     return t;
   });
+}
+
+/** Badge of a queued stone (site: number «1», «2» over the stone): rose circle, the queue place big, the level small.
+ *  Same footprint as badgeTexture (square, drawn at 0.8 m). Cached per (lv, place). */
+export function badgeQueueTexture(lv: number, place: number): THREE.CanvasTexture {
+  return memo(`badgeq:${lv}:${place}`, () => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d')!;
+    x.beginPath(); x.arc(64, 64, 54, 0, Math.PI * 2);
+    x.fillStyle = '#ff8fa3'; x.fill();
+    x.lineWidth = 12; x.strokeStyle = '#15122e'; x.stroke();
+    x.fillStyle = '#15122e'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = 'bold 60px system-ui, sans-serif'; x.fillText(String(place), 64, 56);
+    x.font = 'bold 22px system-ui, sans-serif'; x.fillText(`${lv} ур.`, 64, 96);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 2;
+    return t;
+  });
+}
+
+/** A gold coin glyph (canvas), the HUD's money mark — drawn, not an emoji, so it looks the same everywhere. */
+function coin(x: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  x.fillStyle = '#f2b843'; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+  x.strokeStyle = '#8a5a14'; x.lineWidth = Math.max(1.5, r * 0.16); x.stroke();
+  x.strokeStyle = '#ffe9a0'; x.lineWidth = Math.max(1, r * 0.12); x.beginPath(); x.arc(cx, cy, r * 0.62, 0, Math.PI * 2); x.stroke();
+}
+const ru = (v: number) => String(+v.toFixed(2)).replace('.', ',');
+/** Plate of the HUD style: dark rounded body, thin gold border. */
+function plate(x: CanvasRenderingContext2D, w: number, h: number, r: number): void {
+  x.fillStyle = 'rgba(19, 15, 33, 0.96)'; x.beginPath(); x.roundRect(2, 2, w - 4, h - 4, r); x.fill();
+  x.strokeStyle = 'rgba(232, 184, 92, 0.95)'; x.lineWidth = 2.5; x.stroke();
+}
+/** Bright colour of an ore or rock (for the sign's ore chip). */
+export const resCol = (r: string): string => ORE[r]?.[0] || ROCK[r] || '#ffcf3a';
+
+/** Level badge with a buyer-price tag (1–3 coins = relative price band, then price per piece) to its right.
+ *  128×64 canvas, the circle in the left half exactly like badgeTexture; cached per (lv, band, price). */
+export function badgePriceTexture(lv: number, count: 1 | 2 | 3, price: number): THREE.CanvasTexture {
+  return memo(`mine:badgeprice:${lv}:${count}:${price}`, () => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+    const x = c.getContext('2d')!;
+    // tag (behind the circle), styled as part of the badge: cream body, the badge's dark ring, gold coin(s), dark price
+    const tx = 168 + (count - 1) * 13, label = ru(price);
+    x.font = 'bold 60px system-ui, sans-serif';
+    const right = Math.min(250, tx + Math.min(76, x.measureText(label).width) + 16);
+    x.fillStyle = '#fff3d6'; x.beginPath(); x.roundRect(72, 22, right - 72, 84, 38); x.fill();
+    x.strokeStyle = '#15122e'; x.lineWidth = 8; x.stroke();
+    for (let i = count - 1; i >= 0; i--) coin(x, 146 + i * 13, 64, 19);
+    x.fillStyle = '#15122e'; x.textBaseline = 'middle'; x.textAlign = 'left';
+    x.fillText(label, tx, 68, 76);
+    // the level circle, same proportions as badgeTexture (64 px → 128 px)
+    x.beginPath(); x.arc(64, 64, 54, 0, Math.PI * 2);
+    x.fillStyle = '#ffd23f'; x.fill(); x.lineWidth = 12; x.strokeStyle = '#15122e'; x.stroke();
+    x.fillStyle = '#15122e'; x.font = 'bold 56px system-ui, sans-serif'; x.textAlign = 'center'; x.fillText(String(lv), 64, 68);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 2; return t;
+  });
+}
+
+export const SIGN_W = 512, SIGN_H = 152;
+/** Plate height inside the sign canvas; below it a small tail points down at the stone. */
+const PLATE_H = 136;
+export interface SignDraw { main: string; share: string; perHour: string | null; res: string; price: number | null }
+/** Fit a line into maxW by shrinking the font (no wrapping: the sign stays two lines). */
+function fit(x: CanvasRenderingContext2D, text: string, px: number, weight: string, maxW: number, extra = 0): number {
+  let s = px;
+  for (; s > 14; s -= 2) { x.font = `${weight} ${s}px system-ui, sans-serif`; if (x.measureText(text).width + extra * s <= maxW) break; }
+  return s;
+}
+/** Aimed-stone sign (HUD style): ore chip + buyer price on the left, ETA · diggers big, share · coins/hour below.
+ *  Repaints the given canvas; the caller does it only when the text changes. */
+export function drawEstimateSign(canvas: HTMLCanvasElement, d: SignDraw): void {
+  const x = canvas.getContext('2d')!, W = canvas.width, H = PLATE_H;
+  x.clearRect(0, 0, W, canvas.height);
+  plate(x, W, H, 30);
+  // tail: ties the plate to its stone
+  x.fillStyle = 'rgba(19, 15, 33, 0.96)'; x.beginPath(); x.moveTo(W / 2 - 16, H - 3.5); x.lineTo(W / 2, canvas.height - 2); x.lineTo(W / 2 + 16, H - 3.5); x.closePath(); x.fill();
+  x.strokeStyle = 'rgba(232, 184, 92, 0.95)'; x.lineWidth = 2.5; x.beginPath(); x.moveTo(W / 2 - 16, H - 2); x.lineTo(W / 2, canvas.height - 2); x.lineTo(W / 2 + 16, H - 2); x.stroke();
+  // ore chip: a faceted gem of the resource colour, buyer price under it
+  const gx = 56, gy = 50, col = resCol(d.res);
+  x.save(); x.translate(gx, gy);
+  x.fillStyle = col; x.beginPath(); x.moveTo(0, -24); x.lineTo(22, -8); x.lineTo(14, 20); x.lineTo(-14, 20); x.lineTo(-22, -8); x.closePath(); x.fill();
+  x.fillStyle = 'rgba(255,255,255,0.45)'; x.beginPath(); x.moveTo(0, -24); x.lineTo(22, -8); x.lineTo(0, -2); x.lineTo(-22, -8); x.closePath(); x.fill();
+  x.strokeStyle = 'rgba(20,14,30,0.85)'; x.lineWidth = 2.5; x.beginPath(); x.moveTo(0, -24); x.lineTo(22, -8); x.lineTo(14, 20); x.lineTo(-14, 20); x.lineTo(-22, -8); x.closePath(); x.stroke();
+  x.restore();
+  if (d.price != null) {
+    x.textBaseline = 'middle'; x.textAlign = 'left';
+    fit(x, ru(d.price), 30, 'bold', 58); const pw = x.measureText(ru(d.price)).width;
+    const sx = gx - (pw + 24) / 2;
+    x.fillStyle = '#fff1cf'; x.fillText(ru(d.price), sx, 103);
+    coin(x, sx + pw + 13, 102, 10);
+  }
+  x.strokeStyle = 'rgba(232, 184, 92, 0.35)'; x.lineWidth = 2; x.beginPath(); x.moveTo(110, 20); x.lineTo(110, H - 20); x.stroke();
+  // text block
+  const L = 128, maxW = W - L - 22;
+  x.textAlign = 'left'; x.textBaseline = 'middle';
+  fit(x, d.main, 40, 'bold', maxW);
+  x.fillStyle = '#fff3d6'; x.fillText(d.main, L, 48);
+  const tail = d.perHour ? ` · ${d.perHour}` : '', unit = d.perHour ? '/ч' : '';
+  const full = d.share + tail;
+  const fs = fit(x, full + unit, 31, 'bold', maxW, d.perHour ? 0.9 : 0);
+  x.fillStyle = '#f4e8cc'; x.fillText(d.share, L, 98);
+  if (d.perHour) {
+    let cx = L + x.measureText(d.share).width;
+    x.fillStyle = '#ffd36b'; x.fillText(tail, cx, 98); cx += x.measureText(tail).width + 4;
+    const r = fs * 0.36;
+    coin(x, cx + r, 97, r); cx += r * 2 + 3;
+    x.fillStyle = '#ffd36b'; x.fillText(unit, cx, 98);
+  }
 }
 
 export function disposeMineArt(): void {

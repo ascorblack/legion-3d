@@ -8,6 +8,11 @@
  * the room manager (onChange → door open + close, ambience space), menus (ctx.onMenu), the crosshair target tick
  * (ctx.interact.target) and the 'l3d:sfx' window event for everything else (shop purchase, mine hits — see
  * src/audio/index.ts). Settings (group «Звук»): Общая громкость, Окружение, Эффекты, Интерфейс, Звук в фоне.
+ *
+ * Background signals: an 'l3d:sfx' detail with { bg: true } (the mine's «камень выкопан» chimes, src/rooms/mine/afk.ts)
+ * plays even in a hidden tab with «Звук в фоне: Выкл» when the mine setting «Сигнал шахты в фоне» (l3d.mine.bgsig) is on: the
+ * ambience is ducked to 0, the context resumed and unmuted for the chime (master volume applies), then muted and
+ * suspended again. The detail may also carry delay (s) and key (cooldown key).
  */
 import * as THREE from 'three';
 import type { Unsub } from '../contracts';
@@ -15,6 +20,10 @@ import { registerSettingRow, settingValue, type RangeRow } from '../ui/settings-
 import { toX, toZ } from '../world/coords';
 import { SoundEngine, loadBank, StepTracker, BubbleLimiter, spaceFor, surfaceFor, landGain, shouldMute, type Bank, type Space, type SfxEventDetail } from '../audio';
 import { coreFeature } from './types';
+import { bgAlertMode } from '../rooms/mine/afk';
+
+/** Mine signal switch (registered by the mine, src/rooms/mine/afk.ts). */
+const K_MINE_SIG = 'l3d.mine.bgsig';
 
 const K = { master: 'l3d.vol.master', amb: 'l3d.vol.amb', sfx: 'l3d.vol.sfx', ui: 'l3d.vol.ui', bg: 'l3d.snd.bg' } as const;
 const pct = (v: number) => Math.round(v * 100) + '%';
@@ -39,8 +48,10 @@ export default coreFeature({
 
     /* ---- mute state: classic site, hidden tab (unless «Звук в фоне») ---- */
     let suspendT = 0;
+    // a background signal is playing in a muted hidden tab: applyMute leaves the engine alone until it ends
+    let waking = false, wakeT = 0, duckBase = 1;
     const applyMute = () => {
-      if (!eng || !ac) return;
+      if (!eng || !ac || waking) return;
       const m = shouldMute({ classic: ctx.state.classic, hidden: document.hidden, background: settingValue<string>(K.bg, 'off') === 'on' });
       eng.setMuted(m);
       if (m) { if (!suspendT && ac.state === 'running') suspendT = window.setTimeout(() => { suspendT = 0; if (eng?.isMuted && ac?.state === 'running') void ac.suspend(); }, 1500); }
@@ -85,17 +96,56 @@ export default coreFeature({
       if (k === K.bg) applyMute();
     };
     window.addEventListener('l3d:settings', onSettings);
-    document.addEventListener('visibilitychange', applyMute);
+    const onVis = () => { if (waking && !document.hidden) endWake(); else applyMute(); };
+    document.addEventListener('visibilitychange', onVis);
     // the classic site pauses the engine (no frames): poll the flag
     const poll = window.setInterval(applyMute, 300);
-    offs.push(() => { window.removeEventListener('l3d:settings', onSettings); document.removeEventListener('visibilitychange', applyMute); clearInterval(poll); });
+    offs.push(() => { window.removeEventListener('l3d:settings', onSettings); document.removeEventListener('visibilitychange', onVis); clearInterval(poll); });
+
+    /* ---- background signal: wake a muted hidden tab for one chime ---- */
+    const endWake = () => {
+      if (wakeT) { clearTimeout(wakeT); wakeT = 0; }
+      if (!waking) return;
+      const late = wakeOpen ? [] : wakeQ.splice(0);
+      waking = false; wakeOpen = false; wakeQ.length = 0;
+      applyMute();
+      if (eng && !eng.isMuted) for (const p of late) p();   // the tab came back before the chime: play it now
+      // the beds come back only once the master is down again
+      window.setTimeout(() => { if (!waking) eng?.setDuck(duckBase); }, eng?.isMuted ? 700 : 0);
+    };
+    const wakeQ: (() => void)[] = [];
+    let wakeOpen = false;
+    const wake = (play: () => void) => {
+      const e = eng, a = ac; if (!e || !a) return;
+      if (suspendT) { clearTimeout(suspendT); suspendT = 0; }
+      if (waking) {
+        if (!wakeOpen) { wakeQ.push(play); return; }
+        play(); if (wakeT) clearTimeout(wakeT); wakeT = window.setTimeout(endWake, 2500); return;
+      }
+      waking = true; wakeOpen = false; wakeQ.length = 0; wakeQ.push(play);
+      e.setDuck(0);   // ambience down first (it stays muted under the master meanwhile)
+      void Promise.resolve(a.state === 'suspended' ? a.resume() : undefined).catch(() => { /* */ }).then(() => {
+        // give the bed duck ~4 time constants before the master opens
+        wakeT = window.setTimeout(() => {
+          if (!waking || !eng) return;
+          wakeOpen = true;
+          eng.setMuted(false, 0.03);
+          for (const p of wakeQ.splice(0)) p();
+          wakeT = window.setTimeout(endWake, 2500);
+        }, 900);
+      });
+    };
 
     /* ---- generic trigger ---- */
     const onSfx = (e: Event) => {
-      const d = (e as CustomEvent<SfxEventDetail>).detail;
+      const d = (e as CustomEvent<SfxEventDetail & { bg?: boolean; delay?: number; key?: string }>).detail;
       if (!eng || !d || typeof d.id !== 'string') return;
       const id = d.id === 'door.open' && space === 'tent' ? 'tent.flap' : d.id;   // the tent's exit is a cloth flap
-      eng.play(id, { ...(typeof d.x === 'number' ? { x: d.x, y: d.y, z: d.z } : {}), gain: typeof d.gain === 'number' ? d.gain : 1, ...(typeof d.rate === 'number' ? { rate: d.rate } : {}), ...(typeof d.follow === 'function' ? { follow: d.follow } : {}) });
+      const play = () => { eng?.play(id, { ...(typeof d.x === 'number' ? { x: d.x, y: d.y, z: d.z } : {}), gain: typeof d.gain === 'number' ? d.gain : 1, ...(typeof d.rate === 'number' ? { rate: d.rate } : {}), ...(typeof d.follow === 'function' ? { follow: d.follow } : {}), ...(typeof d.delay === 'number' ? { delay: d.delay } : {}), ...(typeof d.key === 'string' ? { key: d.key } : {}) }); };
+      if (!d.bg) { play(); return; }
+      const mode = bgAlertMode({ classic: ctx.state.classic, hidden: document.hidden, background: settingValue<string>(K.bg, 'off') === 'on', signal: settingValue<string>(K_MINE_SIG, 'on') === 'on' });
+      if (mode === 'play' && !waking) play();
+      else if (mode !== 'skip') wake(play);
     };
     window.addEventListener('l3d:sfx', onSfx);
     offs.push(() => window.removeEventListener('l3d:sfx', onSfx));
@@ -130,7 +180,7 @@ export default coreFeature({
     }));
 
     /* ---- menus ---- */
-    offs.push(ctx.onMenu((id) => { eng?.play(id ? 'ui.open' : 'ui.close'); eng?.setDuck(id ? 0.7 : 1); }));
+    offs.push(ctx.onMenu((id) => { duckBase = id ? 0.7 : 1; eng?.play(id ? 'ui.open' : 'ui.close'); if (!waking) eng?.setDuck(duckBase); }));
 
     /* ---- jump / land ---- */
     const ctl = ctx.controller();
@@ -193,6 +243,8 @@ export default coreFeature({
       disposed = true;
       for (const u of offs.reverse()) { try { u(); } catch { /* */ } }
       if (suspendT) clearTimeout(suspendT);
+      if (wakeT) clearTimeout(wakeT);
+      waking = false;
       eng?.dispose(); eng = null;
       if (ac) { void ac.close().catch(() => { /* */ }); ac = null; }
       bank.clear();

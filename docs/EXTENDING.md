@@ -58,7 +58,7 @@ ctx.registries.keys.register('emote.wave', {
 
 Bindings run before the UI's own keys, in registration order. Keys taken by the UI: Tab, Enter, T, /, Esc (pause),
 F1–F3, C I B P K Y J O M R N. Built-in bindings: V (camera), E (use), F (secondary action),
-Esc (leave a room / the site's building screen), F3 (drift list). Space (jump) is read by the player controller
+Esc (leave a room / the site's building screen), F3 (drift list), F10 (debug panel — only while the debug mode is on). Space (jump) is read by the player controller
 from `input.consumeJump()`.
 
 ## An interactable (something to use)
@@ -198,3 +198,20 @@ the live page read-only (exit 3 = break).
 Workflow: run drift → add support for what matters (model, room mapping, look) → update `supported.json` → `npm test`
 → `npm run drift -- --write` → commit the code with the new snapshot. At runtime the same unknown ids show in the F3
 panel and `window.__l3dDrift`.
+
+## Debug mode (testing a new thing)
+
+Settings → Отладка → «Режим отладки» (`src/features/debug-mode.ts`, code in `src/debug/`; off by default and then
+nothing of it is registered). When you add something, make it visible there instead of waiting for the site:
+
+- **an item model / look** — the test dimension's stands and mannequins read the registry and `CATALOG`
+  (`src/debug/dimension.ts` `layout()`), new keys show up by themselves;
+- **an expedition scene kind** — add a mock to `src/debug/questMocks.ts` (`QUEST_MOCKS`: id, group, `expect` = the scene
+  kind the adapter must produce); `test/debug-mocks.test.ts` adapts every mock;
+- **a room kind** — add a portal in `DebugMode.portals()` (`src/debug/index.ts`); rooms opened from the dimension get a
+  RoomContext with stub actions (nothing reaches the site) and exit back to the dimension;
+- **a foe / NPC** — `foeList()` / `NPCS` in `src/debug/dimension.ts`.
+
+Debug spaces are client-only like hybrid rooms (`src/debug/space.ts`: go sender paused, `ctx.setSpace`, back to the
+exact point). Dev pages hand recorded data (demo stock, camp / Fair layouts, the FakeMine) through
+`window.__l3dDebugDemo` (dev/game.ts), read only in dev builds. Checks: `node dev/debug-check.mjs`.

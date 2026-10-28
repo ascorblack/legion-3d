@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { Appearance } from '../contracts';
 import type { Avatar } from '../contracts/modules';
-import { getModel, releaseModel, B, BONE_COUNT, BONE_PARENT, type ModelData } from './model';
+import { getModel, releaseModel, faceKeyOf, B, BONE_COUNT, BONE_PARENT, type ModelData } from './model';
 import { faceTexture, facePatch, moodFace, MOOD_FACE, type Mood, type FaceKey } from './face';
 import { toonMat, outlineMat, faceMat, alphaLevel, ALPHA_LEVELS, uTime, auraPointsMat, glowMat, glowSolidMat, type Variant } from './materials';
 import { nickExtras, jhash } from './appearance';
@@ -114,6 +114,8 @@ class AvatarImpl implements Avatar, AvatarCombat, AvatarSocial {
   private skel: THREE.Skeleton | null = null;
   private mesh: THREE.SkinnedMesh | null = null;
   private outline: THREE.SkinnedMesh | null = null;
+  /** Face decal key of THIS avatar's look (faceKeyOf). */
+  private faceKey = '';
   private face: THREE.Mesh | null = null;
   private low: THREE.Mesh | null = null;
   private auraGroup = new THREE.Group();
@@ -202,9 +204,10 @@ class AvatarImpl implements Avatar, AvatarCombat, AvatarSocial {
     // face decal follows the body bone
     const ex = nickExtras(this.app.login, this.app.styleId);
     void ex;
-    const fk = m.faceKey.split('|');
+    this.faceKey = faceKeyOf(this.app, m.dims);   // this avatar's own eyes / mouth / blush (the model is shared)
+    const fk = this.faceKey.split('|');
     const tex = faceTexture({ eyes: fk[0], mouth: fk[1], blush: fk[2] === '1', iris: +fk[3], style: fk[4], narrow: fk[5] === '1', ghost: fk[6] === '1' });
-    const face = new THREE.Mesh(facePatch(m.dims, m.key), faceMat(tex, m.faceKey, v, this.lvl));
+    const face = new THREE.Mesh(facePatch(m.dims, m.key), faceMat(tex, this.faceKey, v, this.lvl));
     face.position.y = -rest[B.body].y;
     face.renderOrder = 1;
     face.name = 'avatar-face';
@@ -253,10 +256,10 @@ class AvatarImpl implements Avatar, AvatarCombat, AvatarSocial {
     if (this.outline) this.outline.visible = vis && lod === 0 && !fp;
     if (this.face && this.model) {
       this.face.visible = vis && lod < 2 && !fp;
-      const fk = this.model.faceKey.split('|');
+      const fk = this.faceKey.split('|');
       const dz = this.dizzy, md = dz ? null : this.mood;
       const f: FaceKey = { eyes: dz ? 'dizzy' : fk[0], mouth: dz ? 'wobble' : fk[1], blush: fk[2] === '1', iris: +fk[3], style: fk[4], narrow: fk[5] === '1', ghost: fk[6] === '1' };
-      this.face.material = faceMat(faceTexture(moodFace(f, md)), this.model.faceKey + (dz ? '|dizzy' : md ? '|' + md : ''), v, this.lvl);
+      this.face.material = faceMat(faceTexture(moodFace(f, md)), this.faceKey + (dz ? '|dizzy' : md ? '|' + md : ''), v, this.lvl);
     }
     if (this.low) { this.low.visible = vis && lod === 2 && !fp; this.low.material = toonMat(v, this.lvl); }
     this.auraGroup.visible = vis && lod === 0 && !fp;
@@ -321,6 +324,9 @@ class AvatarImpl implements Avatar, AvatarCombat, AvatarSocial {
       bones[B.cape1].rotation.x = -k * (0.1 * w + run * 0.22) - Math.abs(Math.sin(tt * 3.1)) * 0.02;
       bones[B.cape2].rotation.x = -k * (0.26 * w + run * 0.32) - Math.abs(Math.sin(tt * 5.3 + 0.6)) * (0.04 + 0.07 * w) * k;
       bones[B.cape2].rotation.z = Math.sin(tt * 2.3) * 0.05;
+    } else if (this.model!.wings) {
+      // imp wings (cherts) hang on the free cape1 bone: a lazy beat when idle, quicker on the move (span scale)
+      bones[B.cape1].scale.x = 1 + Math.sin(tt * (2.2 + 5 * w + run * 4)) * (0.1 + 0.08 * w);
     }
     // sitting: legs forward over the seat edge, paws on the lap, a slow tail swing and a little lean back
     if (this.sitAmt > 0.001) {

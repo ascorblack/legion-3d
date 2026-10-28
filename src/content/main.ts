@@ -6,9 +6,16 @@
  * hidden others) a failed start calls site.dispose(), which restores it. Auto-start runs once per page load; when
  * WebGL is unavailable this is remembered for the browser session (sessionStorage) and the game is not auto-started
  * again on reload — the launcher button stays with a tooltip explaining why.
+ *
+ * Expedition-only boot: while the hero is IN an expedition party the site locks its City tab (connectSite →
+ * 'city_locked' / 'quest_running'). Then the game boots without a city (src/net/expedition-site.ts, startGame
+ * opts.expeditionOnly): the 3D expedition, HUD, menus, F8. «Вернуться в город» (window 'l3d:return-city', or F8 back
+ * from the classic site once the City is open again) disposes that game and runs the normal boot in place.
  */
 import type { SiteSession } from '../contracts/modules';
 import { connectSite, siteGuard, currentTown } from '../net/site';
+import { connectExpedition, cityTab } from '../net/expedition-site';
+import { RETURN_EVENT } from '../features/expedition-only';
 import { startGame, type Game } from './game';
 import CSS from './main.css';
 
@@ -19,6 +26,8 @@ const W = window as any;
 /* ------------------------------------------------------------------ launcher button + toggle */
 let game: Game | null = null;
 let booting = false;
+/** The running game is the expedition-only one (no city). */
+let expGame = false;
 
 const ssGet = (k: string) => { try { return sessionStorage.getItem(k); } catch { return null; } };
 const ssSet = (k: string, v: string | null) => { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch { /* */ } };
@@ -40,10 +49,21 @@ function launcher() {
     if (e.code === 'F8') { e.preventDefault(); e.stopPropagation(); toggle(); }
   }, true);
   W.addEventListener('l3d:classic', (e: CustomEvent) => { if (game && e.detail?.on) game.classicPanel(); });
+  W.addEventListener(RETURN_EVENT, () => { void returnToCity(); });
   W.addEventListener('l3d:contextlost', () => gpuNotice(true));
   W.addEventListener('l3d:contextrestored', () => gpuNotice(false));
   let auto = true; try { auto = localStorage.getItem(LS_AUTO) !== '0'; } catch { /* default on */ }
   if (auto && !ssGet(SS_NOGL)) setTimeout(() => { if (!game && !booting) toggle(); }, 600);
+}
+
+/** Leave the expedition-only game and boot the city in place (the site's City tab is open again). */
+async function returnToCity() {
+  if (booting || !game || !expGame) return;
+  const g = game;
+  if (typeof g.dispose !== 'function') { location.reload(); return; }
+  try { g.dispose(); } catch (e) { console.error('[legion-3d] expedition game dispose failed', e); location.reload(); return; }
+  game = null; expGame = false;
+  await toggle();
 }
 
 /** WebGL could not be created (src/engine NoWebGLError, code 'no_webgl'; three's own message as a fallback). */
@@ -55,6 +75,8 @@ const isNoWebGL = (e: unknown) => {
 async function toggle() {
   if (booting) return;
   if (game) {
+    // back from the classic site after the expedition: the City is open again → boot the city instead
+    if (game.classic && expGame && cityTab() === 'open') { lsSet(LS_AUTO, '1'); void returnToCity(); return; }
     if (game.classic) { game.resume(); lsSet(LS_AUTO, '1'); }
     else { game.toClassic(); lsSet(LS_AUTO, '0'); }
     return;
@@ -65,6 +87,20 @@ async function toggle() {
   let site: SiteSession | null = null;
   try {
     const s = await connectSite({ onStatus: (t) => splash.set(t) });
+    if ('error' in s && (s.error === 'city_locked' || s.error === 'quest_running')) {
+      // in an expedition party: the City is locked — boot the 3D expedition without the city
+      splash.set('Ты в походе — собираем 3D-поход…');
+      const xs = await connectExpedition();
+      if (xs) {
+        site = xs;
+        game = await startGame(xs, splash.set, { expeditionOnly: true });
+        expGame = true;
+        splash.close();
+        ssSet(SS_NOGL, null);
+        lsSet(LS_AUTO, '1');
+        return;
+      }
+    }
     if ('error' in s) {
       if (s.missing?.length) console.error('[legion-3d] site contract broken:\n  ' + s.missing.join('\n  '));
       splash.error(s.error, s.loginUrl);
@@ -73,6 +109,7 @@ async function toggle() {
     site = s;
     splash.set('Строим 3D…');
     game = await startGame(s, splash.set);
+    expGame = false;
     splash.close();
     ssSet(SS_NOGL, null);
     const b = document.getElementById('l3d-launch'); if (b) b.title = TITLE;

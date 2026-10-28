@@ -65,6 +65,10 @@ export class Crowd {
   march = 0;
   /** show the names of the others (off in battles: only mine) */
   names = true;
+  /** how many nameplates at most (detailed avatars + the first instanced cats in party order; 1 draw call each) */
+  labelCap = 24;
+  /** camera position (set by the scene each frame): far nameplates grow so they stay readable on wide battle shots */
+  readonly camPos = new THREE.Vector3(0, 6, 12);
 
   constructor(private mats: ExpMats, private o: CrowdOpts) {
     this.root.name = 'exp-crowd';
@@ -115,7 +119,11 @@ export class Crowd {
       if (a.av) a.av.setLod(m.me || (i < 2 && list.length <= 16) ? 0 : 1);
       a.tx = s.x; a.tz = s.z; a.tface = s.face;
       if (o.instant) { a.x = s.x; a.z = s.z; a.face = s.face; }
-      if (a.label) a.label.set(m.me ? `ТЫ · ${short(m.name)}` : short(m.name));
+      // nameplates: detailed avatars always have one; instanced cats get one while under the cap (party order)
+      if (!a.label && (m.me || i < this.labelCap)) { a.label = new Label(m.me ? 'me' : 'name', 384, 80, m.me ? 0.32 : 0.22); this.root.add(a.label.obj); }
+      else if (a.label && !a.av && !m.me && i >= this.labelCap) { a.label.dispose(); a.label = null; }
+      const nm = short(m.name || m.login);
+      if (a.label) a.label.set(m.me ? `ТЫ · ${nm}` : nm);
       next.push(a);
     });
     this.actors.length = 0; this.actors.push(...next);
@@ -226,7 +234,7 @@ export class Crowd {
         if (av.setDraw) av.setDraw(a.act === 'shoot' ? (k < 0.7 ? k / 0.7 : 0) : 0);
         if (av.setFlash) av.setFlash(a.flash * 0.8);
         av.update(dt, t, a.speed);
-        if (a.label) { a.label.obj.position.set(a.x + ox, a.av.headTop + 0.42 + y, a.z + oz); a.label.obj.visible = a.act !== 'down' && (a.m.me || this.names); }
+        if (a.label) { a.label.obj.position.set(a.x + ox, a.av.headTop + 0.42 + y, a.z + oz); this.fitLabel(a.label); a.label.obj.visible = a.act !== 'down' && (a.m.me || this.names); }
       } else if (a.k >= 0) {
         this._e.set(a.act === 'down' ? -pitch : pitch, a.face, roll, 'YXZ');
         this._q.setFromEuler(this._e);
@@ -235,6 +243,7 @@ export class Crowd {
         this._m.compose(this._p, this._q, this._s);
         this.inst[a.v].setMatrixAt(a.k, this._m);
         used++;
+        if (a.label) { a.label.obj.position.set(a.x + ox, y + 1.3, a.z + oz); this.fitLabel(a.label); a.label.obj.visible = a.act !== 'down' && (a.m.me || this.names); }
       }
     }
     // crowd LOD: many instanced cats → the light model without outlines
@@ -255,6 +264,11 @@ export class Crowd {
   }
 
   /** Detailed avatars' draw calls (tests/perf). */
+  /** keep a nameplate at least ~the size it has at 6 m from the camera (sprites shrink with distance) */
+  private fitLabel(l: Label) {
+    const d = l.obj.position.distanceTo(this.camPos), k = Math.max(1, Math.min(2.6, d / 6));
+    l.obj.scale.set(l.height * (l.w / l.h) * k, l.height * k, 1);
+  }
   get detailedCount(): number { let n = 0; for (const a of this.actors) if (a.av) n++; return n; }
 
   clear(): void { for (const a of this.actors) this.drop(a); this.actors.length = 0; this.byLogin.clear(); this.dirty = true; }

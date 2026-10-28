@@ -27,6 +27,12 @@ const SNAPSHOT = join(ROOT, 'src/data/site-snapshot.json');
 const SUPPORTED = join(ROOT, 'src/data/supported.json');
 const CONTRACT = join(ROOT, 'src/data/site-contract.json');
 const DEFAULT_URL = 'https://play.multidonate.ru/c/zakvielchannel/';
+// Channel-specific bundles differ by art style (cityfair.js / doodle.js carry the channel's styles: zakvielchannel has
+// «cats» + «legion», most other channels only «legion»). These channels are fingerprinted too (their /c/<channel>/*.js),
+// so a change in another style's bundle is noticed. Public channel ids only.
+const EXTRA_CHANNELS = ['exx1dae'];
+// Data files loaded on demand that the scripts list does not contain (world map geometry).
+const EXTRA_FILES = ['/site/worldgeo.json'];
 
 /* ------------------------------------------------------------------ download */
 
@@ -302,7 +308,10 @@ export function checkContract(files, contract) {
 /** Short content hash of every script (path without the channel, without ?v=) — shows WHICH files changed. */
 export function fingerprints(files) {
   const out = {};
-  for (const [k, v] of Object.entries(files)) out[k.replace(/^\/c\/[^/]+/, '/c/…').split('?')[0]] = createHash('sha256').update(v).digest('hex').slice(0, 12);
+  for (const [k, v] of Object.entries(files)) {
+    const extra = EXTRA_CHANNELS.some((c) => k.startsWith('/c/' + c + '/'));
+    out[(extra ? k : k.replace(/^\/c\/[^/]+/, '/c/…')).split('?')[0]] = createHash('sha256').update(v).digest('hex').slice(0, 12);
+  }
   return Object.fromEntries(Object.entries(out).sort());
 }
 
@@ -370,6 +379,23 @@ async function main() {
   const R = compare(data, snap, sup, ourApi());
   const contract = existsSync(CONTRACT) ? JSON.parse(readFileSync(CONTRACT, 'utf8')) : { checks: [] };
   const contractFailed = checkContract(src.files, contract);
+  if (!opt.local) {
+    const origin = new URL(url).origin;
+    const chans = typeof opt.channels === 'string' ? opt.channels.split(',').filter(Boolean) : EXTRA_CHANNELS;
+    for (const ch of chans) {
+      try {
+        const html = await get(`${origin}/c/${ch}/`);
+        for (const m of html.matchAll(/<script[^>]+src="(\/c\/[^/"]+\/[\w.-]+\.js)/g)) {
+          try { src.files['/c/' + ch + '/' + m[1].split('/').pop()] = await get(origin + m[1]); } catch (e) { src.failed.push(String(e.message || e)); }
+        }
+        for (const f of ['cityfair.js', 'doodle.js', 'questfoes.js', 'questdungeon.js']) {
+          const k = '/c/' + ch + '/' + f; if (src.files[k]) continue;
+          try { src.files[k] = await get(`${origin}/c/${ch}/${f}`); } catch { /* not every channel loads every bundle up front */ }
+        }
+      } catch (e) { src.failed.push(`channel ${ch}: ${e.message || e}`); }
+    }
+    for (const f of EXTRA_FILES) { try { src.files[f] = await get(origin + f); } catch (e) { src.failed.push(String(e.message || e)); } }
+  }
   const prints = fingerprints(src.files);
   const printDiff = diffPrints(prints, snap?.fingerprints);
   if (opt.json) console.log(JSON.stringify({ site: data, ...R, contract: contractFailed, scriptsChanged: printDiff, errors, failed: src.failed }, null, 2));

@@ -39,7 +39,7 @@ const MONKEYS: Pal = {
 const VEGGIES: Pal = { ...LEGION, roof: '#4f9a3a', roof2: '#e8892a', plaster: '#f1e6c8', sign: '#3f7a2a', signTx: '#fff0a8', flag: '#e8455c', leaf: '#3f7a3a' };
 
 export function paletteOf(style: string): Pal {
-  return style === 'cats' ? CATS : style === 'monkeys' ? MONKEYS : style === 'veggies' ? VEGGIES : style === 'legion' ? LEGION : CATS;
+  return style === 'cats' ? CATS : style === 'monkeys' ? MONKEYS : style === 'veggies' ? VEGGIES : style === 'legion' || style === 'cherts' ? LEGION : CATS;   // cherts: the site uses Legion's fair
 }
 
 /** Parse 'linear-gradient(#a 0%, #b 40%, …)' → stops [{c, p}] (p 0..1). Missing % are spread evenly. */

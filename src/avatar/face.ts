@@ -4,6 +4,7 @@
  */
 import * as THREE from 'three';
 import { INK, radiusAt, sectionXZ, type BodyDims } from './geom';
+import { chEyes, chMouth, chFreckles, CH_FACE_INK } from './cherts-face';
 
 /** Face texture covers x ∈ [-FW, FW] and y ∈ [eyeY - FB, eyeY + FT] (metres) of the body front. */
 export const FW = 0.27, FT = 0.2, FB = 0.34;
@@ -34,8 +35,25 @@ export function moodFace(f: FaceKey, mood: Mood | null | undefined): FaceKey {
   return m ? { ...f, eyes: m.eyes, mouth: m.mouth, blush: f.blush || !!m.blush } : f;
 }
 
-export function faceTexture(f: FaceKey): THREE.CanvasTexture {
-  const key = faceKeyStr(f);
+/** Eyes / mouths this file draws (moods included); everything else goes through the *_NEAR maps. */
+export const FACE_EYES = new Set(['dots', 'big', 'wide', 'cyclops', 'stars', 'happy', 'sleepy', 'slit', 'dizzy', 'laugh', 'surprised', 'puzzled', 'sad', 'love', 'angry', 'void', 'jack']);
+export const FACE_MOUTHS = new Set(['open', 'grin', 'tongue', 'wobble', 'smile', 'o', 'frown', 'laugh', 'none']);
+/** Site eye / mouth ids we have no own drawing for → the nearest one we have (site doodle.js EXTRA_NAMES + style pools). */
+export const EYES_NEAR: Record<string, string> = { crazy: 'surprised', derp: 'big', mad: 'angry', lash: 'dots', glam: 'happy', heart: 'love', starg: 'stars', sly: 'puzzled', wink: 'puzzled', closed: 'happy', round: 'big' };
+export const MOUTHS_NEAR: Record<string, string> = { smirk: 'grin', teeth: 'grin', fangs: 'grin', cat: 'smile', w: 'smile', sad: 'frown', ooh: 'o', laughing: 'laugh' };
+/** A face key with ids we cannot draw mapped to the nearest (the cherts imps draw 'sly' / 'slit' themselves). Unknown
+ *  ids without a near one fall back to dots / open, but are reported once. */
+const warned = new Set<string>();
+export function nearFace(f: FaceKey): FaceKey {
+  const imp = f.style === 'cherts' && !f.ghost && f.eyes === 'sly';
+  const eyes = imp || FACE_EYES.has(f.eyes) ? f.eyes : EYES_NEAR[f.eyes] ?? 'dots';
+  const mouth = FACE_MOUTHS.has(f.mouth) ? f.mouth : MOUTHS_NEAR[f.mouth] ?? 'open';
+  for (const [id, ok, near] of [[f.eyes, eyes === f.eyes, EYES_NEAR[f.eyes]], [f.mouth, mouth === f.mouth, MOUTHS_NEAR[f.mouth]]] as const)
+    if (!ok && !near && !warned.has(id)) { warned.add(id); console.warn('[legion-3d] unknown face part', id, '- drawn as the default'); }
+  return eyes === f.eyes && mouth === f.mouth ? f : { ...f, eyes, mouth };
+}
+export function faceTexture(f0: FaceKey): THREE.CanvasTexture {
+  const f = nearFace(f0), key = faceKeyStr(f);
   let t = texCache.get(key);
   if (t) return t;
   const c = document.createElement('canvas'); c.width = c.height = SZ;
@@ -50,9 +68,9 @@ export function faceTexture(f: FaceKey): THREE.CanvasTexture {
 function drawFace(g: CanvasRenderingContext2D, f: FaceKey) {
   const cx = SZ / 2, ey = EYE_Y, u = PX * 0.0113;   // u: one site SVG unit in px (≈ 5.4 px)
   const ex = (f.narrow ? 9.5 : 11.5) * u, my = ey + 15.5 * u;
-  const cat = f.style === 'cats', monkey = f.style === 'monkeys' || f.style === 'ugabugi';
+  const cat = f.style === 'cats', monkey = f.style === 'monkeys' || f.style === 'ugabugi', imp = f.style === 'cherts';
   g.lineCap = 'round'; g.lineJoin = 'round';
-  const ink = f.ghost ? '#1d2a4a' : INK;
+  const ink = f.ghost ? '#1d2a4a' : imp ? CH_FACE_INK : INK;
   const iris = IRIS[f.iris % IRIS.length];
 
   if (monkey) {   // pale muzzle: heart-ish face plate
@@ -62,7 +80,7 @@ function drawFace(g: CanvasRenderingContext2D, f: FaceKey) {
   }
   // blush
   if (f.blush) {
-    g.fillStyle = 'rgba(255,122,162,.55)';
+    g.fillStyle = imp ? 'rgba(255,176,192,.6)' : 'rgba(255,122,162,.55)';
     for (const s of [-1, 1]) { g.beginPath(); g.ellipse(cx + s * (ex + 9 * u), ey + 8 * u, 4.6 * u, 2.9 * u, 0, 0, Math.PI * 2); g.fill(); }
   }
   // whiskers
@@ -91,7 +109,7 @@ function drawFace(g: CanvasRenderingContext2D, f: FaceKey) {
   // chibi: eyes ~1.3× the doodle size, scaled around the eye line
   g.save(); g.translate(cx, ey); g.scale(1.3, 1.3); g.translate(-cx, -ey);
   xs[0] = cx - ex / 1.3; xs[1] = cx + ex / 1.3;
-  switch (f.eyes) {
+  if (!(imp && !f.ghost && chEyes(g, f.eyes, xs, cx, ey, u, ink, f.iris))) switch (f.eyes) {
     case 'big': case 'wide': for (const x of xs) eyeIris(x, ey, 7 * u); break;
     case 'cyclops': eyeIris(cx, ey - 2 * u, 9.5 * u); break;
     case 'stars':
@@ -181,6 +199,7 @@ function drawFace(g: CanvasRenderingContext2D, f: FaceKey) {
       }
   }
   g.restore();
+  if (imp && !f.ghost && (f.iris & 4)) chFreckles(g, cx, ex, ey, u);
   // nose
   if (cat || monkey) {
     g.fillStyle = cat ? NOSE : '#7a4a3a'; g.strokeStyle = ink; g.lineWidth = 1.6 * u;
@@ -196,7 +215,7 @@ function drawFace(g: CanvasRenderingContext2D, f: FaceKey) {
     g.moveTo(cx, my); g.quadraticCurveTo(cx - w * 0.45, my + 4 * u, cx - w, my + 0.5 * u);
     g.moveTo(cx, my); g.quadraticCurveTo(cx + w * 0.45, my + 4 * u, cx + w, my + 0.5 * u); g.stroke();
   };
-  switch (f.mouth) {
+  if (!(imp && !f.ghost && chMouth(g, f.mouth, cx, my, u, ink, f.iris))) switch (f.mouth) {
     case 'grin':
       if (cat) {
         omega(9 * u);

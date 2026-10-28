@@ -27,7 +27,9 @@ import type { Avatar } from '../../contracts/modules';
 import { GW, GH, N_CELLS, K, CW, SIDE, W, YB, Y0, H, FOOT, ZONE, mx, mz, px, py, cellXY, standable, digSpot, centerOf, hashL, type Rect } from './geo';
 import { MineModel, stoneProgress, type Cell } from './state';
 import { hideOutline, showOutline } from '../../engine/outline';
-import { minePal, rockGeo, crystalGeo, nuggetGeo, mushroomGeos, pickaxeGeo, badgeTexture, oreCol, ROCK, CRYSTAL, type MinePal, type RockGeo } from './art';
+import { minePal, rockGeo, crystalGeo, nuggetGeo, mushroomGeos, pickaxeGeo, badgeTexture, badgePriceTexture, badgeQueueTexture, drawEstimateSign, SIGN_W, SIGN_H, oreCol, ROCK, CRYSTAL, type MinePal, type RockGeo } from './art';
+import { estimateStone, valueCoins, signText } from './econ';
+import { mineSwitch, PREF_ECON, PREF_LAYERS } from './prefs';
 
 const CELL = CW * K;               // 2.4 m
 const HALL_X = (GW * CW / 2) * K;  // 8.4 m: half width of the hall
@@ -83,6 +85,7 @@ const KINDS: { kind: 'round' | 'slab' | 'hard' | 'pillar'; v: number }[] = [
 ];
 interface StoneSlot { kind: number; inst: number; m: THREE.Matrix4; h: number; ore: number[]; mush: number[] }
 
+function readEconOn(): boolean { return mineSwitch(PREF_ECON); }
 export interface MineSceneOpts { quality?: number; style?: string; login: string }
 
 interface Actor { key2: string; av: Avatar; pick: THREE.Group; bone: THREE.Object3D | null; key: string; x: number; z: number; face: number; dig: number; swingT: number; tempo: number; seen: number; anchor: THREE.Vector3; moving: number; ox: number; oz: number; tox: number; toz: number }
@@ -98,6 +101,15 @@ export class MineScene {
   private mStem: THREE.InstancedMesh; private mCap: THREE.InstancedMesh;
   private oreInfo: { cell: number; inst: number; mesh: 0 | 1; m: THREE.Matrix4 }[] = [];
   private badges: THREE.Sprite[] = [];
+  private signCanvas: HTMLCanvasElement | null = null;
+  private signTexture: THREE.CanvasTexture | null = null;
+  private sign: THREE.Sprite | null = null;
+  /** Sign state: which stone / snapshot it shows, when it was last estimated, the drawn text (redraw only on change). */
+  private signQ = ''; private signI = -1; private signSnap = -1; private signMy = -2; private signAt = 0;
+  private signDrawnI = -1; private signMain = ''; private signShare = ''; private signHour: string | null = ''; private signOk = false;
+  /** Economy sign + price glyphs on/off (localStorage 'l3d.mine.econ' = '0' → off). */
+  private econOn = true;
+  private onSettings = (): void => { this.econOn = readEconOn(); };
   private bars: { g: THREE.Group; fill: THREE.Mesh; mat: THREE.MeshBasicMaterial; i: number }[] = [];
   private hl: THREE.Mesh; private hlI = -1;
   private ring: THREE.Mesh;
@@ -148,6 +160,8 @@ export class MineScene {
   constructor(o: MineSceneOpts) {
     this.quality = o.quality ?? 2; this.style = o.style || 'cats'; this.login = String(o.login || '').toLowerCase();
     this.root.name = 'mine';
+    this.econOn = readEconOn();
+    if (typeof window !== 'undefined') window.addEventListener('l3d:settings', this.onSettings);
     this.stoneMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.92, metalness: 0 });
     for (const k of KINDS) {
       const g: RockGeo = rockGeo(k.kind, k.v);
@@ -228,10 +242,10 @@ export class MineScene {
   /** (Re)build everything for the model's floor; cheap no-op when the floor did not change. */
   setFloor(M: MineModel): boolean {
     const st = M.st, F = M.F; if (!st || !F) return false;
-    const key = `${st.seed}.${st.n}`;
+    const depth = mineSwitch(PREF_LAYERS), key = `${st.seed}.${st.n}.${depth ? 1 : 0}`;   // the «Пласты глубины» switch rebuilds on the next view
     if (key === this.floorKey) return false;
     this.floorKey = key; this.dugKey = '';
-    this.pal = minePal(F.biome, F.n);
+    this.pal = minePal(F.biome, F.n, depth);
     this.poolN = 0; this.lanterns = []; this.orePool.fill(-1); this.poolT = 0; this.lightT = 0;
     if (this.kit) { this.root.remove(this.kit.root); this.kit.dispose(); for (const l of this.kit.lights) l.removeFromParent(); }
     for (const a of this.npcs) { a.root.removeFromParent(); a.dispose(); }
@@ -641,13 +655,19 @@ export class MineScene {
 
   /* ================================================================ dynamic: dug stones, badges, colliders */
 
-  /** Apply the view: hide dug stones (+ their ore and mushrooms), front badges, camera colliders. */
-  setView(M: MineModel): void {
+  /** Own stone queue shown on the badges and the sign (index = place − 1). */
+  private queueOf: number[] = [];
+  /**
+   * Apply the view: hide dug stones (+ their ore and mushrooms), front badges, camera colliders. `queue` = the own stone
+   * queue (site fx.q): those stones get a rose «1» / «2» badge instead of the level badge.
+   */
+  setView(M: MineModel, queue: readonly number[] = []): void {
     const st = M.st; if (!st || !M.F) return;
     this.setFloor(M);
-    const key = st.dug + '|' + (st.front || []).join(',') + '|' + (M.dark ? 1 : 0);
+    const key = st.dug + '|' + (st.front || []).join(',') + '|' + (M.dark ? 1 : 0) + '|' + JSON.stringify(st.bp || {}) + '|' + queue.join(',');
     if (key === this.dugKey) return;
     this.dugKey = key;
+    this.queueOf = queue.slice();
     const hidden = new Set<number>();
     for (let i = 0; i < N_CELLS; i++) {
       const s = this.slots[i]; if (!s) continue;
@@ -690,9 +710,13 @@ export class MineScene {
       const s = this.slots[i], c = M.F.cells[i]; if (!s || !c || M.dug[i]) continue;
       let b = this.badges[k];
       if (!b) { b = new THREE.Sprite(new THREE.SpriteMaterial({ depthWrite: false, transparent: true })); b.scale.set(0.8, 0.8, 1); b.renderOrder = 5; this.badges.push(b); this.dynamic.add(b); }
-      (b.material as THREE.SpriteMaterial).map = badgeTexture(c.lv, true); (b.material as THREE.SpriteMaterial).needsUpdate = true;
+      const qk = this.queueOf.indexOf(i);
+      (b.material as THREE.SpriteMaterial).map = b.userData.plain = qk >= 0 ? badgeQueueTexture(c.lv, qk + 1) : badgeTexture(c.lv, true); (b.material as THREE.SpriteMaterial).needsUpdate = true;
+      b.scale.set(0.8, 0.8, 1); b.center.set(0.5, 0.5); b.renderOrder = 5; b.userData.wide = false; b.userData.priced = null;
       const p = cellXY(i); b.position.set(mx(p.cx), s.h + 0.45, mz(p.cy)); b.visible = true; b.userData.i = i; b.userData.y0 = s.h + 0.45;
       this.fronts.setMatrixAt(nf++, _m.makeTranslation(mx(p.cx), 0.03, mz(p.cy)));
+      // the buyer price rides on the badge itself (a tag to its right, one texture): 0 extra draw calls, never collides with it
+      if (c.r && qk < 0) { const band = valueCoins(st.bp?.[c.r], st.bp); if (band) b.userData.priced = badgePriceTexture(c.lv, band, st.bp![c.r]); }
       k++;
     }
     this.fronts.count = nf; this.fronts.instanceMatrix.needsUpdate = true;
@@ -784,8 +808,10 @@ export class MineScene {
       const sp = digSpot(M.dug, M.myI);
       if (sp != null) { const c = centerOf(sp); this.ring.position.set(mx(c.x), 0.02, mz(c.y)); this.ring.visible = true; this.ring.scale.setScalar(1 + Math.sin(t * 4) * 0.06); }
     } else this.ring.visible = false;
-    // badges bob
+    this.updateEstimateSign(M, now, aimI >= 0 ? aimI : this.lookedAt(_f));
+    // badges bob (price glyphs bob with their badge)
     for (const b of this.badges) if (b.visible) b.position.y = b.userData.y0 + Math.sin(t * 2.2 + b.userData.i) * 0.06;
+    this.updatePrices(feet, aimI);
     // progress bars of stones being dug («здоровье» камня: full at start, empty at the end)
     let k = 0;
     if (st && st.bl) for (const key in st.bl) {
@@ -796,7 +822,7 @@ export class MineScene {
       if (!b) b = this.makeBar(k);
       const p = cellXY(i), rem = 1 - pr.p, mine = i === M.myI;
       b.g.visible = true; b.i = i;
-      b.g.position.set(mx(p.cx), this.stoneHeight(i) + (this.badgeAt(i) ? 0.8 : 0.45), mz(p.cy));
+      b.g.position.set(mx(p.cx), this.stoneHeight(i) + (this.badgeAt(i) ? 1.0 : 0.45), mz(p.cy));
       b.g.quaternion.copy(camera.quaternion);
       b.g.scale.setScalar(mine ? 1.5 : 1.15);
       b.fill.scale.x = Math.max(0.001, rem); b.fill.position.x = -0.5 + rem / 2;
@@ -817,6 +843,84 @@ export class MineScene {
     }
     this.labels.update(this.anchors, camera, dt);
     void this.lastHere;
+  }
+  /** Price tags: the badge of a close (≤ 8 m) priced front stone swaps to its «level + price» texture; not on the aimed
+   *  stone (its sign shows the price), not at q0, not in the dark. Texture swap only on change; no allocations. */
+  private updatePrices(feet: THREE.Vector3, aimI: number): void {
+    const on = this.econOn && this.quality > 0 && !this.dark;
+    for (const b of this.badges) {
+      if (!b.visible) continue;
+      const u = b.userData, dx = b.position.x - feet.x, dz = b.position.z - feet.z;
+      const wide = on && !!u.priced && u.i !== aimI && dx * dx + dz * dz < 64;
+      if (wide) {
+        // a priced badge grows a little with camera distance (×1…×1.6 over 3.5–8.5 m) so the tag stays readable
+        const cx = b.position.x - this.lastCam.x, cy = b.position.y - this.lastCam.y, cz = b.position.z - this.lastCam.z;
+        const d = Math.sqrt(cx * cx + cy * cy + cz * cz), k = d < 3.5 ? 1 : d > 8.5 ? 1.6 : 1 + (d - 3.5) * 0.12;
+        b.scale.set(1.6 * k, 0.8 * k, 1); b.center.y = 1 - 0.5 / k;   // grows downwards: the top stays under the progress bar
+      }
+      if (wide === u.wide) continue;
+      u.wide = wide;
+      const m = b.material as THREE.SpriteMaterial;
+      m.map = wide ? u.priced : u.plain;
+      // the circle stays where it was: the tag extends to the right (canvas 2:1, circle in the left quarter)
+      // a priced badge draws over the nameplates (renderOrder 10–50) but under chat bubbles (60+); rock still hides it
+      if (wide) { b.center.x = 0.25; b.renderOrder = 55; } else { b.scale.set(0.8, 0.8, 1); b.center.set(0.5, 0.5); b.renderOrder = 5; }
+    }
+  }
+  /** Front stone nearest to the view ray within 12 m and a ~10° cone (the sign from afar, beyond the use reach); −1 none. */
+  private lookedAt(dir: THREE.Vector3): number {
+    let best = -1, bestS = 0.03;
+    for (const b of this.badges) {
+      if (!b.visible) continue;
+      const dx = b.position.x - this.lastCam.x, dy = b.userData.y0 - 0.9 - this.lastCam.y, dz = b.position.z - this.lastCam.z;
+      const d2 = dx * dx + dy * dy + dz * dz; if (d2 > 144 || d2 < 1) continue;
+      const along = dx * dir.x + dy * dir.y + dz * dir.z; if (along <= 0) continue;
+      const off = 1 - along * along / d2;            // sin² of the angle off the view ray
+      if (off < bestS) { bestS = off; best = b.userData.i; }
+    }
+    return best;
+  }
+  /** Sign over the aimed stone: billboard, constant-ish screen size (reads at 3–10 m), fades out from 10.5 to 12 m; 1 draw call. */
+  private updateEstimateSign(M: MineModel, now: number, aimI: number): void {
+    const sign = this.sign;
+    if (!this.econOn || !M.st || !M.F || aimI < 0 || M.dug[aimI] || M.dark) { if (sign) sign.visible = false; return; }
+    const cell = M.F.cells[aimI]; if (!cell) { if (sign) sign.visible = false; return; }
+    const p = cellXY(aimI), x = mx(p.cx), z = mz(p.cy), y = this.stoneHeight(aimI) + (this.badgeAt(aimI) ? 1.28 : 0.8);
+    const d = Math.hypot(x - this.lastCam.x, y - this.lastCam.y, z - this.lastCam.z);
+    const alpha = d < 10.5 ? 1 : 1 - (d - 10.5) / 1.5;
+    if (alpha <= 0.02) { if (sign) sign.visible = false; return; }
+    if (!this.sign) {
+      this.signCanvas = document.createElement('canvas'); this.signCanvas.width = SIGN_W; this.signCanvas.height = SIGN_H;
+      this.signTexture = new THREE.CanvasTexture(this.signCanvas); this.signTexture.colorSpace = THREE.SRGBColorSpace; this.signTexture.anisotropy = 4;
+      this.sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.signTexture, transparent: true, depthWrite: false, depthTest: false, fog: false, toneMapped: false }));
+      // bottom-anchored: the plate grows upwards from above the badge, so it stays above the crosshair and the «[E] …» prompt
+      this.sign.center.set(0.5, 0); this.sign.renderOrder = 105; this.dynamic.add(this.sign);   // over nameplates and bubbles (labels: 10–100)
+    }
+    const s = this.sign!;
+    // estimate at most every 2 s, or at once when the stone / snapshot / own stone changes
+    if (aimI !== this.signI || M.st.at !== this.signSnap || M.myI !== this.signMy || now - this.signAt > 2000 || this.signQ !== this.dugKey) {
+      this.signQ = this.dugKey;
+      this.signI = aimI; this.signSnap = M.st.at; this.signMy = M.myI; this.signAt = now;
+      const e = estimateStone(M.st, cell, now, M.myI);
+      const price = M.st.bp?.[cell.r || ''] ?? null;
+      this.signOk = !(e.minutes == null && e.share == null && price == null);
+      if (this.signOk) {
+        const tx = signText(e, M.myI === aimI);
+        const qk = this.queueOf.indexOf(aimI); if (qk >= 0) tx.main = `в очереди №${qk + 1} · ${tx.main}`;
+        if (tx.main !== this.signMain || tx.share !== this.signShare || tx.perHour !== this.signHour || aimI !== this.signDrawnI) {
+          this.signMain = tx.main; this.signShare = tx.share; this.signHour = tx.perHour; this.signDrawnI = aimI;
+          drawEstimateSign(this.signCanvas!, { main: tx.main, share: tx.share, perHour: tx.perHour, res: cell.r || 'stone', price });
+          this.signTexture!.needsUpdate = true;
+        }
+      }
+    }
+    if (!this.signOk) { s.visible = false; return; }
+    // world width ∝ distance (≈ constant screen size, ~20 % smaller at 10 m than at 3 m); clamped near and far
+    const dc = d < 2 ? 2 : d > 11 ? 11 : d, w = dc * (0.78 - 0.03 * dc);
+    s.scale.set(w, w * SIGN_H / SIGN_W, 1);
+    s.position.set(x, y, z);
+    (s.material as THREE.SpriteMaterial).opacity = alpha;
+    s.visible = true;
   }
   private badgeAt(i: number): boolean { for (const b of this.badges) if (b.visible && b.userData.i === i) return true; return false; }
   private makeBar(k: number) {
@@ -1002,6 +1106,7 @@ export class MineScene {
   static readonly YB = YB;
 
   dispose(): void {
+    if (typeof window !== 'undefined') window.removeEventListener('l3d:settings', this.onSettings);
     for (const a of this.actors.values()) { a.av.root.removeFromParent(); a.av.dispose(); }
     this.actors.clear();
     for (const a of this.npcs) { a.root.removeFromParent(); a.dispose(); }
@@ -1014,6 +1119,8 @@ export class MineScene {
     for (const m of [this.nugget.material, this.crystal.material, this.mStem.material, this.mCap.material, this.hl.material, this.ring.material, this.camCol.material, this.upLamp.material, this.parts.material] as THREE.Material[]) m.dispose();
     this.ring.geometry.dispose(); this.camCol.geometry.dispose(); this.upLamp.geometry.dispose(); this.parts.geometry.dispose();
     for (const b of this.badges) (b.material as THREE.Material).dispose();
+    if (this.sign) (this.sign.material as THREE.Material).dispose();
+    this.signTexture?.dispose();
     for (const b of this.bars) { b.mat.dispose(); for (const c of b.g.children) { const m = c as THREE.Mesh; m.geometry.dispose(); if (m.material !== b.mat) (m.material as THREE.Material).dispose(); } }
     for (const m of this.pickMats) m.dispose();
     this.fronts.dispose(); this.fronts.geometry.dispose(); (this.fronts.material as THREE.Material).dispose(); for (const l of this.hallLights) l.dispose();

@@ -12,6 +12,7 @@ import { buildBuilding, house, isUpper, BUILDING_DZ, solidFrontOf } from './buil
 import { buildTerrain, buildBackdrop } from './terrain';
 import { placeProps, type Placed } from './place';
 import { campOf, buildCampTerrain, buildCampProps } from './camp';
+import { campThemeOf } from './camp-themes';
 
 /** A building; on a layout without the lower street (camp, district towns) the lower-street models (storage barn,
  *  mine…) get a virtual retaining wall 3 m behind their front, so they keep their depth instead of collapsing to 0. */
@@ -45,12 +46,14 @@ export function buildStatic(k: Ctx, L: CityLayout, spec: GroundSpec, groundAt: (
   if (camp) {
     // start camp «Перепутье»: grass, trails, palisades, forest; buildings as at the fair; tents, fire and props
     k.b.tag = 'terrain';
-    buildCampTerrain(k, L, camp);
-    for (const b of L.buildings) { k.b.tag = b.id; buildOnFlat(k, b, spec); }
-    k.b.tag = 'props';
-    const placed = buildCampProps(k, camp);
-    k.b.tag = '';
-    return placed;
+    const T = campThemeOf(L.styleId), P0 = k.pal;   // a per-style camp tints the palette while the camp is built
+    if (T) k.pal = { ...P0, ...T.pal };
+    try {
+      buildCampTerrain(k, L, camp);
+      for (const b of L.buildings) { k.b.tag = b.id; buildOnFlat(k, b, spec); }
+      k.b.tag = 'props';
+      return buildCampProps(k, camp, L.styleId);
+    } finally { k.b.tag = ''; k.pal = P0; }
   }
   k.b.tag = 'terrain';
   buildTerrain(k, L, spec);

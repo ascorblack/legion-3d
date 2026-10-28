@@ -40,11 +40,24 @@ export default coreFeature({
     };
     const up = (e: MouseEvent) => { if (e.button === 2) vm.block(false); };
     const menu = (e: Event) => e.preventDefault();
+    // Back on the street from a room (E at the door, the site's «Выйти», Esc in scene mode): take the mouse back for
+    // the camera at once, as games do — the user's key / click that left the room is a fresh user activation, so the
+    // browser allows the lock (retried once after the door fade; a refused lock just leaves the first-click path).
+    let wasRoom: string | null = null;
+    const relock = () => {
+      if (ctx.state.menu || rooms.current || rooms.busy || rooms.stage || !input.gameplay || input.locked) return;
+      if (typeof document !== 'undefined' && (document.hidden || (document.hasFocus && !document.hasFocus()))) return;
+      input.lock();
+    };
+    const offRooms = rooms.onChange((cur) => {
+      if (wasRoom && !cur) { setTimeout(relock, 0); setTimeout(relock, 400); }
+      wasRoom = cur;
+    });
     el.addEventListener('mousedown', down);
     window.addEventListener('mouseup', up);
     el.addEventListener('contextmenu', menu);
     return () => {
-      offE(); offF();
+      offE(); offF(); offRooms();
       el.removeEventListener('mousedown', down);
       window.removeEventListener('mouseup', up); el.removeEventListener('contextmenu', menu);
     };

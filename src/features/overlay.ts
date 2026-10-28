@@ -40,10 +40,13 @@ export default coreFeature({
     };
     const timer = window.setInterval(tick, 250);
     const offK = ctx.registries.keys.register('overlay.close', {
-      code: 'Escape', label: 'Выйти из здания', when: 'always',
+      code: 'Escape', label: 'Выйти из здания (без интерьера)', when: 'always',
       run: () => {
         if (state.menu) return false;
-        if (rooms.current) { rooms.exit(); return true; }
+        // Esc leaves only scene-mode rooms (a panel over a fixed shot: no door to walk to). In walkable 3D rooms (the
+        // mine, 3D shops) Esc is the pause menu like on the street — a few Esc presses used to throw you out of the
+        // mine; you leave those through the door (E).
+        if (rooms.current) { if (!rooms.stage) return false; rooms.exit(); return true; }
         if (state.overlay === 'room') { site.closeOverlay(); return true; }
         return false;
       },

@@ -237,6 +237,7 @@ export class CombatSystem {
       dispatch('summon', f.x + fx * 1.6, f.y, f.z + fz * 1.6, 'combat.summon');
       const env = this.host.env();
       this.fx.ring(f.x + fx * 1.7, env.groundAt(f.x + fx * 1.7, f.z + fz * 1.7), f.z + fz * 1.7, 0.3, 2.2, 1.1, '#8dff9f', 1, 0.8);
+      this.zombies.setStyle(String(this.host.me.app()?.styleId || ''));   // follows a live style switch (l3d:style)
       for (const a of [-0.65, 0, 0.65]) {
         const d = a === 0 ? 1.9 : 1.6;
         const x = f.x - Math.sin(yaw + a) * d, z = f.z - Math.cos(yaw + a) * d;

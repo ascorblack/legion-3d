@@ -71,6 +71,8 @@ export class Zombies {
   }
 
   get count() { return this.list.length; }
+  /** Live style switch ('l3d:style'): the next zombies rise in the new style (the walking ones keep theirs until they crumble). */
+  setStyle(styleId: string) { if (styleId) this.styleId = styleId; }
 
   /** Raise one at (x, z) facing yaw. Oldest crumbles when more than `max` walk. */
   summon(x: number, y: number, z: number, yaw: number, fx: Fx, max = 3, talk = false) {

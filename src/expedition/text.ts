@@ -98,9 +98,9 @@ export class Label {
         c.font = `800 ${Math.round(h * 0.36)}px ${FONT}`;
         const tw = Math.min(w - 8, c.measureText(text).width + h * 0.6);
         rr(c, (w - tw) / 2, h * 0.06, tw, h * 0.56, h * 0.2);
-        c.fillStyle = 'rgba(24,16,44,.85)'; c.fill(); c.lineWidth = 4; c.strokeStyle = color || '#ffc94d'; c.stroke();
+        c.fillStyle = 'rgba(24,16,44,.85)'; c.fill(); c.lineWidth = Math.max(4, h * 0.022); c.strokeStyle = color || '#ffc94d'; c.stroke();
         c.fillStyle = color || '#ffe9a8'; c.fillText(text, w / 2, h * 0.35, w - 24);
-        if (sub) { c.font = `800 ${Math.round(h * 0.28)}px ${FONT}`; c.lineWidth = 6; c.strokeStyle = '#1a0e2a'; c.strokeText(sub, w / 2, h * 0.82, w - 20); c.fillStyle = '#ffffff'; c.fillText(sub, w / 2, h * 0.82, w - 20); }
+        if (sub) { c.font = `800 ${Math.round(h * 0.28)}px ${FONT}`; const sw = Math.min(w - 8, c.measureText(sub).width + h * 0.3); rr(c, (w - sw) / 2, h * 0.66, sw, h * 0.32, h * 0.12); c.fillStyle = 'rgba(24,16,44,.62)'; c.fill(); c.lineWidth = Math.max(6, h * 0.034); c.strokeStyle = '#1a0e2a'; c.strokeText(sub, w / 2, h * 0.82, w - 20); c.fillStyle = '#ffffff'; c.fillText(sub, w / 2, h * 0.82, w - 20); }
         break;
       }
     }

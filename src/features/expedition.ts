@@ -10,10 +10,16 @@
  * orbit; mouse look = the rig's yaw/pitch deltas, wheel = zoom). Also registers the room kind 'expedition'.
  * The quest HUD card (src/quest) shows «Смотреть в 3D [Q]»: it talks to us through window events
  * 'l3d:expedition' (detail {active, onAir}) and 'l3d:expedition-toggle'.
+ *
+ * Expedition-only game (ctx.state.expeditionOnly — the hero is in the party, the site's City is locked; see
+ * src/features/expedition-only.ts): there is no city to return to, so the view opens by itself as soon as a running
+ * view is known, stays on after the end (the last picture, the «Вернуться в город» card is shown over it) and Q does
+ * not close it.
  */
 import type { RoomScene } from '../contracts/ext';
 import { ExpeditionView } from '../expedition';
 import { coreFeature } from './types';
+import { emptyParty } from '../quest/model';
 
 export default coreFeature({
   id: 'expedition',
@@ -21,6 +27,7 @@ export default coreFeature({
   setup(ctx) {
     const W = window as any;
     const { store } = ctx;
+    const expOnly = !!ctx.state.expeditionOnly;
     const login = () => String(store.me?.login || (store.hero as any)?.login || '').toLowerCase();
     const view = new ExpeditionView({
       uiRoot: ctx.uiRoot,
@@ -29,26 +36,31 @@ export default coreFeature({
       quality: () => ctx.quality() as number,
       me: () => ({ login: login(), role: String((store.hero as any)?.role || 'recruit') }),
       hintBottom: 58,
+      // expedition-only game: Q does not leave (no city to go back to)
+      ...(ctx.state.expeditionOnly ? { hint: 'мышь — осмотреться · колесо — ближе/дальше · город закрыт до конца похода · <b>F8</b> — сайт' } : {}),
       appOf: (l) => (l === login() ? store.me?.app ?? null : store.walkers.get(l)?.app ?? null),
     });
     ctx.dev.expedition = view;
 
-    let active = false, prompted = false, wasOn = false;
+    let active = false, prompted = false, wasOn = false, wasLive = false;
     let saved: { mode: typeof ctx.state.mode; meVis: boolean; labels: boolean; fov: number } | null = null;
     let lastYaw = 0, lastPitch = 0;
-    const emit = () => { try { W.dispatchEvent(new CustomEvent('l3d:expedition', { detail: { active, onAir: view.onAir } })); } catch { /* */ } };
+    const emit = () => { try { W.dispatchEvent(new CustomEvent('l3d:expedition', { detail: { active, onAir: view.onAir, expOnly } })); } catch { /* */ } };
 
     const onQuest = () => {
       const v = store.quest;
       if (!v) return;
       view.push(v);
       const on = view.onAir;
-      if (on && !wasOn && !prompted && !active) { prompted = true; ctx.ui.toast('Поход идёт — смотреть в 3D [Q]'); }
-      if (!on) prompted = false;
+      if (expOnly) { if (on && !active) enter(); }
+      // the toast once per running expedition; not for the empty party (v.nb: nobody joined — nothing «идёт»)
+      const live = on && !emptyParty(v);
+      if (!expOnly && live && !wasLive && !prompted && !active) { prompted = true; ctx.ui.toast('Поход идёт — смотреть в 3D [Q]'); }
+      if (!live) prompted = false;
+      wasLive = live;
       if (on !== wasOn) { wasOn = on; emit(); }
     };
     const offQ = store.on('quest', onQuest);
-    onQuest();
 
     const enter = () => {
       if (active || !view.onAir) return;
@@ -82,7 +94,9 @@ export default coreFeature({
       }
       if (was) { emit(); if (toast) ctx.ui.toast('Поход окончен — ты снова в городе'); }
     };
-    const toggle = () => { if (active) leave(false); else if (view.onAir) enter(); else ctx.ui.toast('Сейчас поход не идёт'); };
+    const toggle = () => {
+      if (expOnly) { if (!active && view.onAir) enter(); else if (active) ctx.ui.toast('Город закрыт, пока ты в походе · F8 — классический сайт'); return; }
+      if (active) leave(false); else if (view.onAir) enter(); else ctx.ui.toast('Сейчас поход не идёт'); };
     const onToggle = () => toggle();
     W.addEventListener('l3d:expedition-toggle', onToggle);
 
@@ -96,9 +110,12 @@ export default coreFeature({
     const onWheel = (e: WheelEvent) => { if (active) view.scene?.zoom(Math.sign(e.deltaY)); };
     canvas.addEventListener('wheel', onWheel, { passive: true });
 
+    // expedition-only: the view opened during setup, before later features (compass, …) listened — say it once more
+    let announced = !expOnly;
     const offFrame = ctx.onFrame((dt, t) => {
+      if (!announced) { announced = true; emit(); }
       if (!active) return;
-      if (!view.onAir) { leave(true); return; }
+      if (!view.onAir && !expOnly) { leave(true); return; }
       // somebody else swapped the space (a room was entered): give up quietly
       if (ctx.rooms.current) { leave(false); return; }
       const sc = view.scene;
@@ -114,6 +131,8 @@ export default coreFeature({
       // the room kind for completeness (no building opens it): the same scene, fed from the store
       create: async () => { const sc = view.open(ctx.scene); return sc as unknown as RoomScene; },
     });
+
+    onQuest();   // after `enter` / `leave` exist (expedition-only: opens the view at once)
 
     return () => {
       leave(false);

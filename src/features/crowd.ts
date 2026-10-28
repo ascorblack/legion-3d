@@ -9,6 +9,11 @@ import { CrowdLod } from '../engine';
 import { toX, toZ } from '../world/coords';
 import { coreFeature } from './types';
 
+/** A walker whose body is this close to the camera (m, horizontal) is not drawn: players idling on the spawn point
+ *  stand exactly where the own hero appears, and their bodies would fill a first-person view with huge flat polygons. */
+export const CAM_CLEAR = 0.75;
+const _cam = new THREE.Vector3();
+
 export default coreFeature({
   id: 'crowd',
   order: 20,
@@ -17,7 +22,7 @@ export default coreFeature({
     // app: identity of the Appearance object last applied (cheap check first; JSON only when the object was replaced)
     const avs = new Map<string, { av: Avatar; key: string; app: unknown; lod: number; slot: number }>();
     const crowd = new CrowdLod(64);
-    let meKey = JSON.stringify(me.app), meApp: unknown = me.app;
+    let meKey = JSON.stringify(me.app), meApp: unknown = me.app, meTool = false;
     labels.set(me.login, { name: me.app.name, level: me.app.level, me: true });
 
     const sync = () => {
@@ -37,16 +42,25 @@ export default coreFeature({
           if (a.key !== key) { a.av.setAppearance(w.app); a.key = key; labels.set(w.login, { name: w.app.name, level: w.app.level }); }
         }
       }
-      if (store.me && store.me.app !== meApp) {
+      const tool = !!ctx.state.toolInHand;
+      if (store.me && (store.me.app !== meApp || tool !== meTool)) {
         meApp = store.me.app;
         const k = JSON.stringify(store.me.app);
-        if (k !== meKey) { meKey = k; meAv.setAppearance(store.me.app); vm.setAppearance(store.me.app); meAv.play('equip'); labels.set(me.login, { name: store.me.app.name, level: store.me.app.level, me: true }); }
+        // a room tool in the paws (mine pickaxe): the hero's own weapon and shield go away meanwhile (TP model)
+        if (tool !== meTool) {
+          meTool = tool;
+          const g = { ...(store.me.app.gear || {}) } as Record<string, unknown>;
+          if (tool) { delete g.w; delete g.wr; delete g.s; delete g.sr; }
+          meAv.setAppearance(tool ? { ...store.me.app, gear: g } as typeof store.me.app : store.me.app);
+          meKey = k;
+        } else if (k !== meKey) { meKey = k; meAv.setAppearance(store.me.app); vm.setAppearance(store.me.app); meAv.play('equip'); labels.set(me.login, { name: store.me.app.name, level: store.me.app.level, me: true }); }
       }
     };
     const offW = store.on('walkers', sync); sync();
 
     let hidden = false;
     const offF = ctx.onFrame((dt, t) => {
+      if (!!ctx.state.toolInHand !== meTool) sync();   // the mine pickaxe came out / went away: re-dress the own hero
       if (ctx.state.inRoom) {
         if (!hidden) { hidden = true; for (const [l, a] of avs) { a.av.root.visible = false; a.lod = -1; anchors.get(l)?.set(0, -999, 0); } }
         return;
@@ -62,9 +76,11 @@ export default coreFeature({
         a.slot = crowd.add(p.x, p.y, p.z, a.lod);
       }
       crowd.resolve();
+      engine.camera.getWorldPosition(_cam);
       for (const w of store.walkers.values()) {
         const a = avs.get(w.login); if (!a) continue;
-        const lod = crowd.lod(a.slot);
+        const q = a.av.root.position;
+        const lod = Math.hypot(q.x - _cam.x, q.z - _cam.z) < CAM_CLEAR && Math.abs(q.y + 0.8 - _cam.y) < 1.6 ? -1 : crowd.lod(a.slot);
         a.lod = lod;
         a.av.root.visible = lod >= 0;
         const anc = anchors.get(w.login)!;

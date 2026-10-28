@@ -10,6 +10,7 @@ import type { Hero } from '../src/contracts';
 import { createEngine } from '../src/engine';
 import { createAvatarKit, appearanceFrom, RECOMMENDED_NEAR } from '../src/avatar';
 import { FakeQuest, rebase } from '../src/quest/fake';
+import { mockById } from '../src/debug/questMocks';
 import type { Role, QuestPayload } from '../src/quest/model';
 import { ExpeditionView } from '../src/expedition';
 import meFx from '../test/fixtures/me.json';
@@ -50,6 +51,8 @@ const widen = (v: QuestPayload): QuestPayload => {
 /* ---- ?demo=… : a fixed synthetic view for the stages the FakeQuest does not visit (vignettes) ---- */
 const DEMO = Q.get('demo');
 const demo = (k: string): QuestPayload => {
+  const mock = mockById(k);
+  if (mock) return mock.build({ login: LOGIN, role: ROLE, now: now() });
   const T = now() + 30_000, base: QuestPayload = { on: true, dl: 0, at: now(), n: 12, party: 'in', ter: 'Пещера' };
   const tr = (type: string, extra: Record<string, unknown> = {}) => ({ ...base, k: 'trap', t: 'Ловушка', tr: { name: 'Ловушка', type, st: 'act', until: T, n: 4, word: 'прыгай', ...extra } });
   switch (k) {

@@ -5,7 +5,7 @@
  */
 import type { Store, Actions, QuestView } from '../contracts';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
-import { PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle } from './model';
+import { bossName, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
 
 const KIND_RU: Record<string, string> = { battle: 'Бой', trap: 'Ловушка', treasure: 'Сокровищница', lair: 'Логово', rest: 'Привал', shop: 'Лавка', event: 'Событие', map: 'Карта', travel: 'В пути', town: 'Город', gather: 'Сбор отряда', boss: 'Босс', dungeon: 'Данж', bossgen: 'Босс', puzzle: 'Головоломка' };
 const SIDE_RU: Record<string, string> = { L: 'левое крыло', R: 'правое крыло', F: 'дальнее крыло' };
@@ -18,12 +18,64 @@ export interface Card {
   icon: string; title: string; right: string;   // right: may contain {until:ms} marker → seconds
   until?: number; where?: string; hp?: number | null; urge?: { kind: 'say' | 'word' | 'silent' | 'ok' | 'info'; text: string };
   note?: string; opts?: { n: number; label: string; votes: number; my?: boolean }[]; voteId?: number; inParty: boolean;
+  /** join / leave the squad (site quest.js qaSquad / layTop) */
+  squad?: Squad | null;
+  /** the gather ended with nobody (site 28.10 `v.nb`): no «Поход идёт» wording */
+  empty?: boolean;
 }
 
-/** Pure: QuestView (+ own login/role) → what to show. Exported for tests. */
-export function cardOf(v: QuestView | null, me: { login: string; role: string }, baseCmd: (role: string) => string): Card | null {
+/* ------------------------------------------------------------------ join / leave the squad (site «Поход» tab, quest.js qaSquad ~l.881, layTop ~l.1390) */
+
+export type Squad = { kind: 'join'; label: string; note?: string } | { kind: 'leave'; label: string } | { kind: 'info'; text: string };
+/**
+ * What the site offers for joining / leaving now (quest.js qaSquad): only at the map stops (no battle in progress — or it ended —,
+ * no boss, dungeon room, lair, trap, event, puzzle, loot or shop counter); in → «Покинуть отряд» (not while marching: cm === false);
+ * q → in the queue; ghost → after the revival; else «Вступить в поход» (marching: «Встать в очередь в отряд»). `party` = the newest
+ * own state (the site shows its own party at once, not with the stream delay).
+ */
+export function squadOf(v: QuestView | null, party: unknown): Squad | null {
+  const q = v as any;
+  if (!q || !q.on || q.nb) return null;   // 28.10 (empty-party): the site shows only the «никто не присоединился» card
+  if ((q.b && q.b.st !== 'end') || q.bg || q.dgn || q.lair || q.tr || q.ev || q.pz || q.loot || (q.sh && q.sh.items && q.sh.items.length)) return null;
+  const p = party === 'in' || party === 'q' || party === 'ghost' ? party : 'out';
+  if (p === 'in') return q.cm === false ? null : { kind: 'leave', label: 'Покинуть отряд' };
+  if (p === 'ghost') return { kind: 'info', text: 'Твой герой — призрак: в поход — после воскрешения.' };
+  if (p === 'q') return { kind: 'info', text: 'Ты в очереди: вступишь, когда отряд остановится.' };
+  return q.cm === false ? { kind: 'join', label: 'Встать в очередь в отряд', note: 'отряд в пути — вступишь на остановке' } : { kind: 'join', label: 'Вступить в поход' };
+}
+/**
+ * The site's own join / leave button in its «Поход» tab: `[data-qa]` whose JSON has k:'join' / k:'leave' (qaBtn), or the header's
+ * `[data-qleave]` (layTop: needs a second press within 4 s on the site itself). Disabled ones (a request in flight) are skipped.
+ */
+export function siteSquadButton(doc: ParentNode, k: 'join' | 'leave'): { el: HTMLElement; twoPress: boolean } | null {
+  for (const b of Array.from(doc.querySelectorAll<HTMLElement>('[data-qa]'))) {
+    let o: any = null; try { o = JSON.parse(b.getAttribute('data-qa') || ''); } catch { /* */ }
+    if (o && o.k === k && !(b as HTMLButtonElement).disabled) return { el: b, twoPress: false };
+  }
+  if (k === 'leave') { const b = doc.querySelector<HTMLElement>('[data-qleave]'); if (b && !(b as HTMLButtonElement).disabled) return { el: b, twoPress: true }; }
+  return null;
+}
+/**
+ * Press the site's own button — the site sends its own request and shows its own result. 'clicked' | 'panel' (no button rendered:
+ * the site's «Поход» tab is opened instead, nothing is sent). Only ever called from the user's click (leave: after the second press).
+ */
+export function pressSiteSquad(doc: ParentNode, k: 'join' | 'leave', openPanel: () => void): 'clicked' | 'panel' {
+  const f = siteSquadButton(doc, k);
+  if (!f) { openPanel(); return 'panel'; }
+  f.el.click();
+  // layTop's «покинуть отряд?» arms on the first press and repaints: the user already confirmed twice here, so confirm the site's arm
+  if (f.twoPress) { const again = doc.querySelector<HTMLElement>('[data-qleave]'); if (again && !(again as HTMLButtonElement).disabled) again.click(); }
+  return 'clicked';
+}
+
+/** Pure: QuestView (+ own login/role) → what to show. Exported for tests. `fresh` = the newest view (the Prologue boss name:
+ *  quest.js bn() takes NEW first, then the delayed CUR). */
+export function cardOf(v: QuestView | null, me: { login: string; role: string }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
   if (!v || !v.on) return null;
   const q = v as any, inParty = q.party === 'in';
+  // 28.10 (empty-party, quest.js v.nb): the gather ended with nobody — the site shows only this, nothing else of the view
+  if (emptyParty(q)) return { icon: '⏳', title: EMPTY_PARTY.title, right: '', urge: { kind: 'info', text: EMPTY_PARTY.back }, note: EMPTY_PARTY.note, inParty: false, empty: true };
+  const BN = bossName(fresh as any, q);   // 28.10 (prologue-boss-name): the channel's Prologue boss, default «Закхуэль»
   if (q.b && !(q.b.gb && q.bg)) {
     const b = q.b, m = meIn(b, me), multi = !!(b.cr?.fr?.length > 1) || !!b.two;
     const cmd = (() => { const c = baseCmd(m.role) || 'удар'; return multi && m.side && c !== 'лечить' ? `${c} ${SIDE_CMD[m.side] || ''}`.trim() : c; })();
@@ -40,8 +92,14 @@ export function cardOf(v: QuestView | null, me: { login: string; role: string },
   }
   if (q.lair?.is) {
     const I = q.lair.is, my = I.at?.my || I.pick?.my || 0;
-    return { icon: '🏝', title: 'Закхуэль · острова', right: I.pick ? 'выбор острова' : I.doom ? 'какой остров уничтожить' : 'острова', until: I.pick?.until || I.doom?.until,
+    return { icon: '🏝', title: `${BN.n} · острова`, right: I.pick ? 'выбор острова' : I.doom ? 'какой остров уничтожить' : 'острова', until: I.pick?.until || I.doom?.until,
       urge: my ? { kind: 'ok', text: `ты на острове ${my}` } : I.pick ? { kind: 'say', text: '1–4' } : undefined, hp: q.lair.hp, inParty };
+  }
+  if (q.lair) {
+    const L = q.lair, words = L.spell?.words || L.mass?.words;
+    const urge: Card['urge'] = L.tele ? { kind: L.tele.ok ? 'ok' : 'word', text: L.tele.ok ? 'слово принято' : L.tele.word }
+      : words?.length ? { kind: 'word', text: words.join(' ') } : L.st === 'party' && L.hp > 0 ? { kind: L.acted ? 'ok' : 'say', text: L.acted ? 'ход принят' : baseCmd(me.role) || 'удар' } : { kind: 'info', text: L.st === 'end' ? 'бой окончен' : 'наблюдай за боем' };
+    return { icon: '👹', title: `Логово ${BN.g}`, right: 'фаза ' + (L.phase || 1) + ' · раунд ' + (L.round || 0), until: L.spell?.until, hp: L.hp, urge, inParty };
   }
   if (q.bg) {
     const g = q.bg, M = g.mech;
@@ -51,10 +109,10 @@ export function cardOf(v: QuestView | null, me: { login: string; role: string },
     return { icon: '👹', title: `${g.name} · фаза ${g.ph} из ${g.phs}`, right: M?.until ? '' : `босс ${Math.round((g.hp || 0) * 100)}%`, until: M?.until, where: g.in ? (g.my > 0 ? 'ты в бою' : 'твой герой пал') : 'ты не в этом бою', hp: g.in ? g.my : null, urge, note: M && M.name ? M.name : undefined, inParty };
   }
   if (q.tr) {
-    const T = q.tr, act = T.st === 'act';
+    const T = q.tr, act = T.st === 'act' || T.st === 'wait';
     const urge: Card['urge'] = T.res ? { kind: 'info', text: T.res.text || 'итог ловушки' } : act && T.gas ? (T.acted ? { kind: 'info', text: 'ты написал — вдохнул газ' } : { kind: 'silent', text: 'Не пиши в чат!' })
       : act && T.word ? (T.acted ? { kind: 'ok', text: 'слово принято' } : { kind: 'word', text: String(T.word) }) : act && T.how ? { kind: 'info', text: String(T.how) } : undefined;
-    return { icon: T.icon || '🪤', title: String(T.name || 'Ловушка'), right: '', until: act ? T.until : undefined, urge, inParty };
+    return { icon: T.icon || '🪤', title: String(T.name || (T.tre ? 'Сокровищница' : 'Ловушка')), right: '', until: act ? T.until : undefined, urge, note: T.rd2 ? (T.rd2.ph === 'vote' ? 'забрать / дальше · вторая дверь ×2, попытки общие' : `дверь ${T.rd2.door || 1} · попыток ${T.rd2.left || 0} из ${T.per || 3} · повторы рун разрешены`) : undefined, inParty };
   }
   if (q.pz) {   // 28.10 (map-puzzles, quest.js pzHtml): what to type now, the task, own answer, the result
     const P = q.pz as QuestPuzzle, M = puzzleMy(P), done = P.st === 'done';
@@ -62,16 +120,19 @@ export function cardOf(v: QuestView | null, me: { login: string; role: string },
       : P.st === 'show' ? { kind: 'info', text: P.kind === 'count' ? 'Зверьки бегут на стриме — считай!' : 'Смотри на стрим и запоминай!' }
       : M.ans ? { kind: 'ok', text: `твой ответ: ${puzzleAnsText(P, M.ans)}` }
       : P.kind === 'letter' && M.words ? { kind: 'ok', text: `твоих слов: ${M.words} — пиши ещё` }
-      : { kind: 'say', text: String(P.how || (puzzleTyped(String(P.kind)) ? 'ответ в чат' : (P.bt || []).map((b) => b[1]).join(' / ') || 'ответ в чат')) };
+      // typed answers: `how` is an instruction («Слово на «К»»), not a chat line — shown as is, without «»
+      : puzzleTyped(String(P.kind)) ? { kind: 'info', text: String(P.how || 'Ответ — в чат') }
+      : { kind: 'say', text: String((P.bt || []).map((b) => b[1]).join(' / ') || P.how || 'ответ в чат') };
     const mine = done && M.st === 'ok' ? `ты ответил верно${M.coins ? ` · +${M.coins}` : ''}` : done && M.st === 'bad' ? `твой ответ — мимо${M.hp ? ` · яд −${M.hp} ❤` : ''}` : '';
     const note = [puzzleTask(P), !done ? `ответили: ${+(P.an || 0)} · награда: ${P.prize === 'buff' ? 'враги следующего боя ослаблены' : `${+(P.coins || 0)} каждому верному`}` : mine].filter(Boolean).join(' · ');
     return { icon: P.icon || '🧩', title: `Головоломка · ${P.name}`, right: PUZZLE_ST[P.st] || '', until: done ? undefined : P.st === 'show' ? P.showUntil : P.until, urge, note: note || undefined,
       where: inParty ? undefined : 'отвечает только отряд', inParty };
   }
   if (q.ev) {
-    const E = q.ev, vote = E.look === 'traveler' && E.st === 'vote';
-    const urge: Card['urge'] = E.res && E.st === 'done' ? { kind: 'info', text: E.res.text } : vote ? (E.my ? { kind: 'ok', text: `твой выбор: ${E.my === 'rob' ? 'обобрать' : 'помочь'}` } : { kind: 'say', text: 'помочь / обобрать' }) : E.cmds?.[0] ? { kind: 'say', text: String(E.cmds[0][0]) } : undefined;
-    return { icon: E.icon || '✦', title: String(E.name || 'Событие'), right: '', until: vote ? E.until : undefined, urge, inParty };
+    const E = q.ev, I = eventInstructions(E, q.party), first = I.cmds[0];
+    const urge: Card['urge'] = first ? { kind: first.kind, text: first.text } : undefined;
+    return { icon: E.icon || '✦', title: String(E.name || 'Событие'), right: I.status, until: E.st === 'done' ? undefined : E.until, urge,
+      note: [I.text, ...I.cmds.slice(1).map(c => c.text + (c.note ? ' — ' + c.note : ''))].filter(Boolean).join(' · '), inParty };
   }
   const V = q.dgn?.vote && !q.dgn.vote.done && q.dgn.vote.mode !== 'ring' ? q.dgn.vote : q.vote && !q.vote.done ? q.vote : null;
   if (V) {
@@ -120,6 +181,7 @@ canvas.word{display:block;height:32px}
 .opt b{color:#ffc94d;min-width:18px}.opt em{margin-left:auto;font-style:normal;color:#cfc6ef;font-size:12px}
 .opt i{position:absolute;inset:0 auto 0 0;background:rgba(255,201,77,.14);z-index:-1}.opt.my{border-color:#4cc95a}
 .opt:hover{background:rgba(255,255,255,.12)}
+.note{font-size:12px;color:#e4dafb;line-height:1.45;margin:6px 0;white-space:pre-wrap}
 .f{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#a99fd0}
 .f button{all:unset;cursor:pointer;color:#ffe9a8;padding:2px 6px;border-radius:6px;border:1px solid rgba(255,201,77,.35)}
 .f button:hover{background:rgba(255,201,77,.15)}
@@ -128,6 +190,13 @@ canvas.word{display:block;height:32px}
 .v3d.on{background:rgba(255,255,255,.1);color:#ffe9a8;box-shadow:inset 0 0 0 1px rgba(255,201,77,.45);animation:none}
 .v3d kbd{font:800 12px 'Golos Text',sans-serif;padding:1px 6px;border-radius:5px;background:rgba(42,22,6,.18)}
 @keyframes glow{50%{box-shadow:0 0 0 2px rgba(58,36,16,.5),0 4px 22px rgba(255,201,77,.75)}}
+.sq{display:grid;gap:6px}
+.sqb{all:unset;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;border-radius:10px;cursor:pointer;font:800 14px 'Golos Text',sans-serif;
+  color:#2a1606;background:linear-gradient(180deg,#9fe39a,#4cc95a);box-shadow:0 0 0 2px rgba(20,60,20,.5)}
+.sqb.leave{color:#ffd0d8;background:rgba(232,69,92,.16);box-shadow:inset 0 0 0 1px rgba(232,69,92,.7)}
+.sqb.arm{color:#fff;background:linear-gradient(180deg,#ff7b8a,#e8455c);box-shadow:0 0 0 2px rgba(80,10,20,.6);animation:glow 1s ease-in-out infinite}
+.sqb[disabled]{opacity:.55;cursor:default;animation:none}
+.sqn{font-size:12px;color:#cfc6ef}.sqn.ok{color:#9fe39a}.sqn.wait{color:#ffe9a8}.sqn.bad{color:#ff9aa8}
 .lock{position:fixed;left:50%;top:14px;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:rgba(18,12,40,.9);border:1px solid rgba(255,201,77,.5);
   font:600 13px 'Golos Text',sans-serif;color:#ffe9a8;pointer-events:none}
 `;
@@ -139,8 +208,9 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
   sh.innerHTML = `<style>${CSS}</style><div class="q hide" role="status" aria-live="polite"><div class="h"><i></i><b></b><span></span></div><div class="b"></div></div><div class="lock" hidden>Вы в походе — следите за ним здесь</div>`;
   const el = sh.querySelector('.q') as HTMLElement, H = sh.querySelector('.h') as HTMLElement, B = sh.querySelector('.b') as HTMLElement, lock = sh.querySelector('.lock') as HTMLElement;
   // 3D expedition view (src/features/expedition.ts): «Смотреть в 3D [Q]» while the expedition runs
-  let v3d = false, v3dOn = false;
-  const onV3d = (e: Event) => { const d = (e as CustomEvent).detail || {}; v3d = !!d.active; v3dOn = !!d.onAir; key = ''; tick(); };
+  // v3dFixed: the expedition-only boot (detail.expOnly) — the 3D view is the whole page, there is nothing to leave to
+  let v3d = false, v3dOn = false, v3dFixed = false;
+  const onV3d = (e: Event) => { const d = (e as CustomEvent).detail || {}; v3d = !!d.active; v3dOn = !!d.onAir; v3dFixed = !!d.expOnly; key = ''; tick(); };
   window.addEventListener('l3d:expedition', onV3d);
   let min = false; try { min = localStorage.getItem('l3d.qmin') === '1'; } catch { /* */ }
   H.onclick = () => { min = !min; el.classList.toggle('min', min); try { localStorage.setItem('l3d.qmin', min ? '1' : '0'); } catch { /* */ } };
@@ -163,12 +233,46 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     ctx.scale(dpr, dpr); ctx.font = "800 22px 'Golos Text', sans-serif"; ctx.fillStyle = '#ffe9a8'; ctx.textBaseline = 'middle'; ctx.fillText(text, 4, 17);
     return c;
   };
+  // join / leave: the site's own button is pressed (never a request of ours); leave needs a second press within 4 s (as the site)
+  let arm = 0, armT = 0;
+  let pend: { k: 'join' | 'leave'; at: number } | null = null, done: { text: string; ok: boolean; at: number } | null = null;
+  const squadHtml = (sq: Squad | null): string => {
+    const line = pend ? `<div class="sqn wait" role="status">отправлено: ${pend.k === 'join' ? 'вступить в поход' : 'покинуть отряд'}…</div>`
+      : done ? `<div class="sqn ${done.ok ? 'ok' : 'bad'}" role="status">${esc(done.text)}</div>` : '';
+    if (!sq) return line ? `<div class="sq">${line}</div>` : '';
+    if (sq.kind === 'info') return `<div class="sq">${line}<div class="sqn">${esc(sq.text)}</div></div>`;
+    const armed = sq.kind === 'leave' && arm && Date.now() - arm < 4000;
+    const label = armed ? 'Нажми ещё раз, чтобы покинуть отряд' : sq.label;
+    return `<div class="sq">${line}<button type="button" class="sqb ${sq.kind}${armed ? ' arm' : ''}" data-sq="${sq.kind}"${pend ? ' disabled' : ''}>${esc(label)}</button>${sq.kind === 'join' && sq.note ? `<div class="sqn">${esc(sq.note)}</div>` : ''}</div>`;
+  };
+  const squadClick = (k: 'join' | 'leave') => {
+    if (pend) return;
+    if (k === 'leave' && !(arm && Date.now() - arm < 4000)) {
+      arm = Date.now(); clearTimeout(armT); armT = window.setTimeout(() => { arm = 0; key = ''; tick(); }, 4050); key = ''; tick(); return;
+    }
+    arm = 0; clearTimeout(armT);
+    const r = pressSiteSquad(document, k, () => host.actions.openSitePanel('quest'));
+    if (r === 'clicked') { pend = { k, at: Date.now() }; done = null; }
+    else host.toast('Открыл вкладку «Поход» сайта — нажми там «' + (k === 'join' ? 'Вступить в поход' : 'Покинуть отряд') + '»');
+    key = ''; tick();
+  };
+  /** the result of the press, from the next own view (party in / q / out), like the site's partyOf */
+  const squadState = (party: unknown) => {
+    const now = Date.now();
+    if (pend) {
+      const p = party === 'in' || party === 'q' || party === 'ghost' ? party : 'out';
+      if (pend.k === 'join' && (p === 'in' || p === 'q')) { done = { text: p === 'in' ? 'принято: ты в отряде' : 'принято: ты в очереди — вступишь на остановке', ok: true, at: now }; pend = null; }
+      else if (pend.k === 'leave' && p === 'out') { done = { text: 'принято: ты покинул отряд', ok: true, at: now }; pend = null; }
+      else if (now - pend.at > 30000) { done = { text: 'ответа нет — посмотри вкладку «Поход» сайта', ok: false, at: now }; pend = null; }
+    }
+    if (done && now - done.at > 8000) done = null;
+  };
   const render = (c: Card | null) => {
     el.classList.toggle('hide', !c);
     if (!c) return;
     (H.children[0] as HTMLElement).textContent = c.icon; (H.children[1] as HTMLElement).textContent = c.title;
     let h = '';
-    if (v3dOn || v3d) h += `<button type="button" class="v3d${v3d ? ' on' : ''}" data-v3d>${v3d ? 'Выйти из 3D-похода' : '🎥 Поход идёт — смотреть в 3D'} <kbd>Q</kbd></button>`;
+    if ((v3dOn || v3d) && !v3dFixed) h += `<button type="button" class="v3d${v3d ? ' on' : ''}" data-v3d>${v3d ? 'Выйти из 3D-похода' : c.empty ? '🎥 Сбор окончен — смотреть в 3D' : '🎥 Поход идёт — смотреть в 3D'} <kbd>Q</kbd></button>`;
     if (c.where) h += `<div class="chip ${c.inParty ? 'in' : ''}">${esc(c.where)}</div>`;
     if (c.hp != null && c.hp >= 0) h += `<div class="hp"><i style="width:${Math.max(2, Math.round(c.hp * 100))}%"></i></div>`;
     if (c.urge) {
@@ -179,6 +283,8 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
       const tot = c.opts.reduce((s, o) => s + o.votes, 0) || 1;
       h += `<div class="opts">${c.opts.map((o) => `<button type="button" class="opt${o.my ? ' my' : ''}" data-n="${o.n}"><i style="width:${Math.round(o.votes / tot * 100)}%"></i><b>${o.n}</b>${esc(o.label)}<em>${o.votes}</em></button>`).join('')}</div>`;
     }
+    if (c.note) h += `<div class="note">${esc(c.note)}</div>`;
+    h += squadHtml(c.squad || null);
     h += `<div class="f"><span>как на стриме · <b class="dl"></b> с <button data-adj="-1">−</button> <button data-adj="1">+</button></span><button data-full>Поход полностью ↗</button></div>`;
     B.innerHTML = h;
     if (c.urge?.kind === 'word') B.querySelector('.u .say')!.appendChild(wordCanvas(c.urge.text));
@@ -189,6 +295,8 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     });
     B.querySelectorAll<HTMLButtonElement>('[data-adj]').forEach((b) => b.onclick = () => { try { localStorage.setItem(ADJ_KEY, String(Math.max(-10, Math.min(30, adj() + +b.dataset.adj!)))); } catch { /* */ } });
     (B.querySelector('[data-full]') as HTMLButtonElement).onclick = () => host.actions.openSitePanel('quest');
+    const sb = B.querySelector('[data-sq]') as HTMLButtonElement | null;
+    if (sb) sb.onclick = () => squadClick(sb.dataset.sq as 'join' | 'leave');
     const vb = B.querySelector('[data-v3d]') as HTMLButtonElement | null;
     if (vb) vb.onclick = () => window.dispatchEvent(new CustomEvent('l3d:expedition-toggle'));
   };
@@ -196,8 +304,14 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     const dl = Math.max(0, ((buf[buf.length - 1]?.v as any)?.dl || 0) + adj()) * 1000, now = Date.now();
     while (buf.length && buf[0].at + dl <= now) { shown = buf.shift()!.v; }
     const me = { login: String(host.store.me?.login || ''), role: String(host.store.hero?.role || 'recruit') };
-    const c = cardOf(shown, me, baseCmd);
-    const k = JSON.stringify(c) + (v3d ? '|3d' : v3dOn ? '|on' : '');
+    const newest = host.store.quest;
+    const merged = shown && newest ? mergeOwn(shown as QuestPayload, newest as QuestPayload, now, adj(), buf.map(r => r.v as QuestPayload)) : shown;
+    // own party is not stream-delayed on the site either (quest.js partyOf): the chip, the «поход» hint and the button agree
+    const party = (newest as any)?.party ?? (merged as any)?.party;
+    const c = cardOf(merged && (merged as any).on ? ({ ...merged, party } as QuestView) : merged, me, baseCmd, newest);
+    squadState(party);
+    if (c) c.squad = squadOf(merged, party);
+    const k = JSON.stringify(c) + (v3d ? '|3d' : v3dOn ? '|on' : '') + (v3dFixed ? '|fixed' : '') + `|${pend ? pend.k : ''}|${done ? done.text : ''}|${arm ? 1 : 0}`;
     if (k !== key) { key = k; render(c); }
     const sp = H.children[2] as HTMLElement;
     if (c?.until) { const s = Math.max(0, Math.ceil((c.until + dl - now) / 1000)); sp.textContent = `${c.right ? c.right + ' · ' : ''}${s} с`; sp.classList.toggle('hot', s <= 5); }
@@ -206,5 +320,5 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     lock.hidden = v3d || !(shown && (shown as any).on && (shown as any).party === 'in');
   };
   const iv = window.setInterval(tick, 250); tick();
-  return { el: box, dispose() { clearInterval(iv); unsub(); window.removeEventListener('l3d:expedition', onV3d); box.remove(); } };
+  return { el: box, dispose() { clearInterval(iv); clearTimeout(armT); unsub(); window.removeEventListener('l3d:expedition', onV3d); box.remove(); } };
 };

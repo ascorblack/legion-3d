@@ -6,7 +6,8 @@
  */
 import * as THREE from 'three';
 import type { Appearance } from '../contracts';
-import { RARITY_COLOR, nickExtras } from './appearance';
+import { RARITY_COLOR, nickExtras, jhash } from './appearance';
+import { chTraits, chDims, chHatDims, chBodyColor, addHorns, addWings, addTail, addHoof, addBatEars, addGoatee, addWispFlames, addShell, addBodyMarks, addChertsHat, CH_INK, type ChDims } from './cherts';
 import { setDetail, Parts, T, mul, bodyDims, bodyShell, radiusAt, sectionXZ, col, sphere, cyl, cone, capsule, torus, star, slab, tube, INK, type BodyDims, type Skin } from './geom';
 import { addHat, addAccessories } from './hats';
 import { addWeapon, addShield, weaponHold, bladeSpan, BOW_STRING } from './gear';
@@ -38,6 +39,8 @@ export interface ModelData {
   headTop: number;                    // m, incl. hat
   faceKey: string;
   hasLegs: boolean; hasTail: boolean; hasCape: boolean;
+  /** Wings (cherts): skinned to the cape1 bone when there is no cape, so the avatar can flap them (scale.x). */
+  wings?: boolean;
   radius: number;
   refs: number;
   /** Swing trail (src/combat): the striking edge in MODEL space (bind pose) and the bone it hangs on; null = none. */
@@ -57,9 +60,21 @@ export function hatOf(app: Appearance): { id: string; rar?: string } {
   return { id: 'none' };
 }
 
+/**
+ * The face decal key of an appearance on a model: eyes, mouth, blush, iris, style, narrow, ghost. Per AVATAR, not per
+ * model — models are shared by geometry (mouth / blush are not in modelKey), so the face must come from the look itself.
+ */
+export function faceKeyOf(app: Appearance, d: BodyDims): string {
+  const l = app.look, ex = nickExtras(app.login, app.styleId);
+  return [l.eyes, l.mouth, l.blush ? 1 : 0, ex.iris, app.styleId, d.narrow ? 1 : 0, app.ghost ? 1 : 0].join('|');
+}
+
 export function modelKey(app: Appearance): string {
   const l = app.look, g = app.gear, ex = nickExtras(app.login, app.styleId), hat = hatOf(app);
-  return [app.styleId, l.shape, Math.round(ex.w01 * 4), ex.pat, l.color, l.color2, hat.id, hat.rar || '', (l.acc || []).slice().sort().join('+'),
+  // cherts: the imp's width (site floor(r·n) units) and its per-nick horns / tail / beard are part of the geometry
+  const chk = app.styleId === 'cherts' ? (() => { const t = chTraits(jhash(app.login)); return [Math.floor(ex.w01 * 120), t.horn, t.hornCol, t.tip, t.tshape, +t.belly, +t.goatee].join(','); })() : '';
+  // eyes shape geometry too (glasses frames round the eyes, the low mesh's eye dots: one for the cyclops)
+  return [app.styleId, l.shape, Math.round(ex.w01 * 4), chk, ex.pat, l.eyes || '', l.color, l.color2, hat.id, hat.rar || '', (l.acc || []).slice().sort().join('+'),
     l.accColor, l.capeColor, g.a || '', g.ar || '', g.am || '', g.w || '', g.wr || '', g.s || '', g.sr || '', g.t || '', g.tr || '', app.ghost ? 1 : 0].join('|');
 }
 
@@ -88,7 +103,9 @@ export function releaseModel(m: ModelData) {
 function buildModel(app: Appearance, key: string): ModelData {
   const l = app.look, g = app.gear, style = String(app.styleId || 'legion');
   const ex = nickExtras(app.login, app.styleId);
-  const d = bodyDims(String(l.shape), Math.round(ex.w01 * 4) / 4);
+  const ch = style === 'cherts', tr = ch ? chTraits(jhash(app.login)) : null;
+  const d: BodyDims = ch ? chDims(String(l.shape), ex.w01) : bodyDims(String(l.shape), Math.round(ex.w01 * 4) / 4);
+  const cd = ch ? (d as ChDims) : null;
   const cat = style === 'cats', monkey = style === 'monkeys' || style === 'ugabugi';
   const c1 = l.color || '#f2a65a', c2 = l.color2 || '#4aa3ff';
   const C1 = col(c1), C2 = col(c2);
@@ -115,8 +132,8 @@ function buildModel(app: Appearance, key: string): ModelData {
   const ghostShape = d.shape === 'ghost';
   p.add(bodyShell(d, {
     yA: d.y0, yB: d.top, segs: 32, rings: 24,
-    yWarp: ghostShape ? (th, y, t) => (t === 0 ? y - 0.035 * (0.5 + 0.5 * Math.cos(th * 4)) : y) : undefined,
-    color: (th, y, t, out) => {
+    yWarp: ghostShape ? (th, y, t) => (t === 0 ? y - (ch ? 0.05 * (0.5 + 0.5 * Math.cos(th * 6)) : 0.035 * (0.5 + 0.5 * Math.cos(th * 4))) : y) : undefined,
+    color: cd && tr ? chBodyColor(cd, tr, c1) : (th, y, t, out) => {
       out.copy(C1);
       const front = Math.cos(th);
       if ((pat === 2 || pat === 4) && front > 0.45 && y < d.armY - 0.02 && y > d.y0 + 0.04) out.lerp(light, 0.5);
@@ -146,6 +163,16 @@ function buildModel(app: Appearance, key: string): ModelData {
       p.add(sphere(0.052, 10, 6), '#ffe4c4', T(s * (r + 0.05), ey, -0.008, 0, 0, 0, [0.3, 1, 1]));
     }
   }
+  /* ---- cherts: horns, bat ears, the fire spirit's flame top, goat beard, the hatchling's shell ---- */
+  let hornTop = 0;
+  if (cd && tr) {
+    hornTop = addHorns(p, cd, tr, B.body);
+    if (cd.kind === 'bat') addBatEars(p, cd, c1, B.body);
+    if (cd.kind === 'wisp') addWispFlames(p, cd, c1, B.body);
+    if (tr.goatee) addGoatee(p, cd, c1, B.body);
+    if (cd.kind === 'hatch') addShell(p, cd, B.root);
+    addBodyMarks(p, cd, tr, c1, B.body);
+  }
 
   /* ---- armor ---- */
   const rk = RANK[g.ar || 'common'] || 0, rc = g.ar && g.ar !== 'common' ? RARITY_COLOR[g.ar] : null;
@@ -160,7 +187,7 @@ function buildModel(app: Appearance, key: string): ModelData {
 
   /* ---- hat & accessories ---- */
   const acc = (l.acc || []).map(String);
-  const hatH = addHat(p, hat.id, { d, c1, c2, rar: hat.rar, style });
+  const hatH = (cd && !hat.rar ? addChertsHat(p, hat.id, chHatDims(cd), c2) : null) ?? addHat(p, hat.id, { d: cd ? chHatDims(cd) : d, c1, c2, rar: hat.rar, style });
   addAccessories(p, acc, { d, accColor: l.accColor || c2, cyc: l.eyes === 'cyclops', eyes: String(l.eyes || 'dots'), shell: armorShell });
 
   /* ---- arms & paws ---- */
@@ -176,6 +203,7 @@ function buildModel(app: Appearance, key: string): ModelData {
     p.add(lim, sleeve || c1);
     p.add(sphere(0.05, 12, 8), c1, T(r.x + hand.x, r.y + hand.y, r.z + hand.z, 0, 0, 0, [1, 0.95, 1]));
     if (cat) for (const k of [-1, 1]) p.add(sphere(0.012, 5, 4), '#ff8fa3', T(r.x + hand.x + k * 0.016, r.y + hand.y - 0.03, r.z + hand.z - 0.035));
+    if (ch) for (const k of [-1, 0, 1]) p.add(cone(0.007, 0.022, 4), CH_INK, T(r.x + hand.x + k * 0.02, r.y + hand.y - 0.012, r.z + hand.z - 0.05, -1.2, 0, k * 0.3));   // claws
   }
   /* ---- weapon & shield ---- */
   let blade: ModelData['blade'] = null;
@@ -212,13 +240,14 @@ function buildModel(app: Appearance, key: string): ModelData {
   }
 
   /* ---- legs ---- */
-  const hasLegs = !ghostShape;
+  const hasLegs = !ghostShape && !(cd && cd.kind === 'hatch');
   if (hasLegs) {
     for (const s of [-1, 1]) {
       const bone = s < 0 ? B.legL : B.legR, r = rest[bone];
       p.bone = bone;
       p.add(cyl(0.048, 0.052, r.y - 0.02, 8), c1, T(r.x, (r.y + 0.02) / 2, r.z));
-      p.add(sphere(0.064, 12, 8), c1, T(r.x, 0.038, r.z - 0.028, 0, 0, 0, [1, 0.62, 1.38]));
+      if (ch) addHoof(p, r.x, r.z, bone);
+      else p.add(sphere(0.064, 12, 8), c1, T(r.x, 0.038, r.z - 0.028, 0, 0, 0, [1, 0.62, 1.38]));
       if (cat) for (const k of [-1, 0, 1]) p.add(sphere(0.012, 5, 4), '#ff8fa3', T(r.x + k * 0.022, 0.012, r.z - 0.09));
     }
   }
@@ -228,12 +257,22 @@ function buildModel(app: Appearance, key: string): ModelData {
   const vamp = acc.includes('vampcape') && !acc.includes('cape');
   const capeCol = acc.includes('cape') ? (l.capeColor || '#c0182b') : vamp ? '#1c1424' : acc.includes('pioneer') ? '#35507a' : null;
   const hasCape = !!capeCol;
-  const hasTail = cat || monkey;
+  const hasTail = cat || monkey || ch;
+  if (cd) {   // the imp's tail leaves the lower back (the hatchling's: just above its shell)
+    const ty = cd.kind === 'hatch' ? cd.y0 + cd.H * 0.4 : Math.max(d.y0 + 0.07, 0.15);
+    rest[B.tail1].set(0, ty, radiusAt(d, ty) * d.depth * 0.88 + (cd.kind === 'hatch' ? 0.03 : 0));
+  }
   const t0 = rest[B.tail1], t1 = rest[B.tail2];
   const tailBack = hasCape ? 0.07 : 0;   // with a cape the tail rises a little further back, clear of the cloth
 
   /* ---- tail ---- */
-  if (hasTail) {
+  if (cd && tr) {
+    const tb = addTail(p, cd, tr, c1, t0, tailBack, B.tail1, B.tail2);
+    t1.copy(tb.tail2);
+    // a soft joint where the tail leaves the body
+    const jz = radiusAt(d, t0.y) * d.depth;
+    p.add(sphere(0.034, 10, 7), c1, T(0, t0.y + 0.005, jz - 0.012, 0, 0, 0, [1, 1, 0.8]), B.body);
+  } else if (hasTail) {
     const tr = monkey ? 0.032 : 0.042, taper = 0.14;
     const zb = t0.z + tailBack;
     const pts: [number, number, number][] = monkey
@@ -341,6 +380,9 @@ function buildModel(app: Appearance, key: string): ModelData {
     }
   }
 
+  /* ---- cherts wings: behind the body and the arms; on the cape1 bone (flapped by the avatar) unless a cape uses it ---- */
+  if (cd) addWings(p, cd, c1, hasCape ? B.body : B.cape1);
+
   const geo = p.build(true);
   geo.computeBoundingSphere();
 
@@ -356,14 +398,18 @@ function buildModel(app: Appearance, key: string): ModelData {
   // eyes (two dark dots) and the tail keep the far silhouette readable
   { const ez = -radiusAt(d, d.eyeY) * d.depth * 0.97, exx = d.ex * 1.25;
     for (const s of l.eyes === 'cyclops' ? [0] : [-1, 1]) q.add(sphere(0.034, 5, 3), app.ghost ? '#1d2a4a' : INK, T(s * exx, d.eyeY, ez + 0.01, 0, 0, 0, [1, 1.15, 0.5])); }
-  if (hasTail) { const t0 = rest[B.tail1]; q.add(tube([[0, t0.y, t0.z - 0.03], [0.04, t0.y + 0.08, t0.z + 0.17], [0.07, t0.y + 0.32, t0.z + 0.17]], monkey ? 0.032 : 0.042, 4, 4), c1); }
+  if (cd && tr) {
+    addWings(q, cd, c1, 0, true);
+    for (const s of [-1, 1]) q.add(cone(0.04, 0.12, 5), tr.hornCol, T(s * Math.max(8, cd.hwU * 0.55) * 0.012, d.top - 0.03, 0, 0, 0, -s * 0.4));
+    addTail(q, cd, tr, c1, rest[B.tail1], 0, 0, 0, true);
+  } else if (hasTail) { const t0 = rest[B.tail1]; q.add(tube([[0, t0.y, t0.z - 0.03], [0.04, t0.y + 0.08, t0.z + 0.17], [0.07, t0.y + 0.32, t0.z + 0.17]], monkey ? 0.032 : 0.042, 4, 4), c1); }
   const low = q.build(false);
   low.computeBoundingSphere();
 
-  const faceKey = [l.eyes, l.mouth, l.blush ? 1 : 0, ex.iris, style, d.narrow ? 1 : 0, app.ghost ? 1 : 0].join('|');
+  const faceKey = faceKeyOf(app, d);   // of the first appearance built: avatars use faceKeyOf(their own app)
   return {
-    key, geo, mid: geo, low, rig: { rest, handL, handR }, dims: d, headTop: d.top + Math.max(0, hatH) + (cat && hatH < 0.12 ? 0.1 : 0),
-    faceKey, hasLegs, hasTail, hasCape, radius: Math.max(0.9, geo.boundingSphere!.radius + 0.4), refs: 0, blade, bow,
+    key, geo, mid: geo, low, rig: { rest, handL, handR }, dims: d, headTop: Math.max(d.top + Math.max(0, hatH) + (cat && hatH < 0.12 ? 0.1 : 0), hornTop),
+    faceKey, hasLegs, hasTail, hasCape, wings: ch, radius: Math.max(0.9, geo.boundingSphere!.radius + 0.4), refs: 0, blade, bow,
   };
 }
 

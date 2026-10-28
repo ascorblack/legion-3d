@@ -4,8 +4,8 @@
  * (arrows instanced; orbs are fx particles). update() never allocates.
  */
 import * as THREE from 'three';
-import { foeGeo, crownGeo, bossGeo, arrowGeo, hullGeo, FOE_TOP, FOE_FLY, FOE_R } from './art';
-import { FOE_ARTS, type FoeArt, type FoeState } from './adapter';
+import { foeGeo, crownGeo, bossGeo, arrowGeo, hullGeo, FOE_TOP, FOE_FLY, FOE_R, FOE_HEAD_Z } from './art';
+import { FOE_ARTS, hasLeadArt, type FoeArt, type FoeState } from './adapter';
 import type { ExpMats } from './mats';
 import type { Spot } from './layout';
 import type { Fx } from '../combat/fx';
@@ -24,25 +24,30 @@ export interface FoeActor {
 export class Foes {
   readonly root = new THREE.Group();
   readonly list: FoeActor[] = [];
-  private inst: THREE.InstancedMesh[] = [];
-  private outl: THREE.InstancedMesh[] = [];
+  /** Per art, created on first use (60 arts: only the ones a battle shows are built). */
+  private inst: (THREE.InstancedMesh | null)[] = new Array(FOE_ARTS.length).fill(null);
+  private outl: (THREE.InstancedMesh | null)[] = new Array(FOE_ARTS.length).fill(null);
   private crowns: THREE.InstancedMesh;
   private counts = new Int32Array(FOE_ARTS.length);
   private _m = new THREE.Matrix4(); private _q = new THREE.Quaternion(); private _e = new THREE.Euler(0, 0, 0, 'YXZ'); private _p = new THREE.Vector3(); private _s = new THREE.Vector3(); private _c = new THREE.Color();
   constructor(private mats: ExpMats) {
     this.root.name = 'exp-foes';
-    for (const art of FOE_ARTS) {
-      const g = foeGeo(art);
-      const im = new THREE.InstancedMesh(g, mats.tint, CAP);
-      im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3).fill(1), 3);
-      im.count = 0; im.visible = false; im.frustumCulled = false; im.name = 'exp-foe-' + art;
-      const ol = new THREE.InstancedMesh(hullGeo(g), mats.outline, CAP);
-      ol.instanceMatrix = im.instanceMatrix; ol.count = 0; ol.visible = false; ol.frustumCulled = false;
-      this.inst.push(im); this.outl.push(ol); this.root.add(im, ol);
-    }
     this.crowns = new THREE.InstancedMesh(crownGeo(), mats.tint, 8);
     this.crowns.count = 0; this.crowns.frustumCulled = false; this.crowns.visible = false;
     this.root.add(this.crowns);
+  }
+
+  private ensure(a: number): THREE.InstancedMesh {
+    let im = this.inst[a];
+    if (im) return im;
+    const art = FOE_ARTS[a], g = foeGeo(art);
+    im = new THREE.InstancedMesh(g, this.mats.tint, CAP);
+    im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3).fill(1), 3);
+    im.count = 0; im.visible = false; im.frustumCulled = false; im.name = 'exp-foe-' + art;
+    const ol = new THREE.InstancedMesh(hullGeo(g), this.mats.outline, CAP);
+    ol.instanceMatrix = im.instanceMatrix; ol.count = 0; ol.visible = false; ol.frustumCulled = false;
+    this.inst[a] = im; this.outl[a] = ol; this.root.add(im, ol);
+    return im;
   }
 
   /** Reconcile with the battle's foes (by index; the type may change between battles). `enter`: walk in from afar. */
@@ -63,6 +68,7 @@ export class Foes {
       A.f = f; A.hx = s.x; A.hz = s.z; A.hface = s.face; A.sc = f.lead ? 1.3 : 1;
       if (A.act === 'idle' || A.act === 'enter') { A.tx = s.x; A.tz = s.z; }
       A.k = used[a]++;
+      this.ensure(a);
       if (f.dead && !A.dead) { A.dead = true; A.deadT = 0; }
       if (!f.dead && A.dead) { A.dead = false; A.deadT = 0; }
       A.hp = f.hp;
@@ -119,7 +125,7 @@ export class Foes {
       }
       A.y = y;
       const im = this.inst[A.a];
-      if (A.k >= CAP) continue;
+      if (!im || A.k >= CAP) continue;
       this._e.set(pitch, A.face, roll, 'YXZ'); this._q.setFromEuler(this._e);
       this._p.set(A.x + ox, y, A.z + oz); this._s.set(A.sc, A.sc * sy, A.sc);
       this._m.compose(this._p, this._q, this._s);
@@ -128,21 +134,29 @@ export class Foes {
       if (A.act === 'windup') this._c.setRGB(d + 0.25, d * 0.75, d * 0.7); else this._c.setRGB(d + fl * 1.6, d + fl * 1.5, d + fl * 1.3);
       im.setColorAt(A.k, this._c);
       counts[A.a] = Math.max(counts[A.a], A.k + 1);
-      if (A.f.lead && !A.dead && crowns < 8) {
-        this._p.set(A.x + ox, y + FOE_TOP[FOE_ARTS[A.a]] * A.sc * sy - 0.02 + FOE_FLY[FOE_ARTS[A.a]] * 0, A.z + oz);
+      if (A.f.lead && !A.dead && crowns < 8 && !hasLeadArt(FOE_ARTS[A.a])) {
+        const hz = (FOE_HEAD_Z[FOE_ARTS[A.a]] ?? 0) * A.sc;
+        this._p.set(A.x + ox + Math.sin(A.face) * hz, y + FOE_TOP[FOE_ARTS[A.a]] * A.sc * sy - 0.02, A.z + oz + Math.cos(A.face) * hz);
         this._q.setFromEuler(this._e); this._s.set(A.sc, A.sc, A.sc);
         this._m.compose(this._p, this._q, this._s); this.crowns.setMatrixAt(crowns++, this._m);
       }
     }
     for (let a = 0; a < this.inst.length; a++) {
-      const im = this.inst[a], n = counts[a];
-      im.count = n; this.outl[a].count = n; im.visible = n > 0; this.outl[a].visible = n > 0;
+      const im = this.inst[a], ol = this.outl[a], n = counts[a];
+      if (!im || !ol) continue;
+      im.count = n; ol.count = n; im.visible = n > 0; ol.visible = n > 0;
       if (n) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
     }
     this.crowns.count = crowns; this.crowns.visible = crowns > 0;
     if (crowns) this.crowns.instanceMatrix.needsUpdate = true;
   }
 
+  /** Where a foe's hp bar goes: over its head (FOE_HEAD_Z along its facing, scaled), just above FOE_TOP. */
+  barPos(A: FoeActor, out: THREE.Vector3): THREE.Vector3 {
+    this.pos(A, out);
+    const hz = (FOE_HEAD_Z[FOE_ARTS[A.a]] ?? 0) * A.sc;
+    return out.set(out.x + Math.sin(A.face) * hz, A.y + this.top(A) + 0.32, out.z + Math.cos(A.face) * hz);
+  }
   /** Current world position of a foe (with its lunge). */
   pos(A: FoeActor, out: THREE.Vector3): THREE.Vector3 {
     const k = A.act === 'lunge' ? Math.sin(Math.PI * Math.min(1, A.actT / A.actLen)) * 0.85 : 0;
@@ -150,10 +164,10 @@ export class Foes {
   }
 
   dispose(): void {
-    for (const im of this.inst) im.dispose();
-    for (const ol of this.outl) ol.dispose();
+    for (const im of this.inst) im?.dispose();
+    for (const ol of this.outl) ol?.dispose();
     this.crowns.dispose();
-    this.inst = []; this.outl = []; this.list.length = 0;
+    this.inst.fill(null); this.outl.fill(null); this.list.length = 0;
     this.root.removeFromParent();
   }
 }

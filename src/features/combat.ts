@@ -19,7 +19,9 @@ import { roomCombatOf, roomEnv, NPC_LINES, NPC_LINE_GAP, type RoomCombat, type R
 import type { RagdollEnv } from '../combat/physics';
 import type { CombatAvatar } from '../combat/ragdoll';
 import { isTyping, type InputEx } from '../engine/input';
-import { fromX, fromZ } from '../world/coords';
+import { fromX, fromZ, toX, toZ } from '../world/coords';
+import { gridTop, renderHeightGrid, type HeightGrid } from '../flight/heightfield';
+import type { CityLayout } from '../contracts';
 import { registerSettingRow, settingValue } from '../ui/settings-ext';
 import { lsStr, lsSet } from '../core/settings';
 import type { World3DExt } from '../contracts/ext';
@@ -51,9 +53,31 @@ export default coreFeature({
         return !ctx.layout().free(px, py) || (typeof w.solidTop === 'function' && w.solidTop(px, py) === Infinity);
       },
     };
+    // Shots fly over the real 3D tops of the city (the same top-down height map flight uses): the walk grid says
+    // nothing about the air — over the canal, fences or the outcrop the old rule («outside the walkable area = a 5 m
+    // wall») stopped arrows in mid-air. The map is borrowed from flight when it has one, else built once per world on
+    // the first shot; without it (build failed) the old rule stays.
+    let shotGrid: HeightGrid | null = null, shotGridFor: unknown = null, shotGridFail = 0;
+    const heightGrid = (): HeightGrid | null => {
+      const fl = ctx.dev.flight as { grid?: () => HeightGrid | null } | undefined;
+      const g = fl?.grid?.(); if (g) return g;
+      const w = ctx.world();
+      if (shotGrid && shotGridFor === w) return shotGrid;
+      if (shotGridFail > 2) return null;
+      const L = ctx.store.layout as CityLayout | null; if (!L || !w) return null;
+      try {
+        shotGrid = renderHeightGrid(engine.renderer, w.root, toX(L.area.x0) - 1, toX(L.area.x1) + 1, -7.1, toZ(L.area.y1) + 1, 10);
+        shotGridFor = w; return shotGrid;
+      } catch (e) { shotGridFail++; shotGrid = null; console.warn('[l3d] combat: no shot height map', e); return null; }
+    };
     const streetShots: RagdollEnv = {
       groundAt: street.groundAt,
       blocked: (x, z, y) => {
+        const g = heightGrid();
+        if (g) {
+          const t = gridTop(g, x, z);
+          if (t > -Infinity) return y < t;   // inside the map: only real geometry stops a shot
+        }
         const px = fromX(x), py = fromZ(z), w = ctx.world() as unknown as Partial<World3DExt>;
         return typeof w.solidTop === 'function' && w.solidTop(px, py) === Infinity && y < ctx.world().groundAt(px, py) + 5;
       },
@@ -90,7 +114,7 @@ export default coreFeature({
       reducedMotion: reduced,
     };
     const sys = new CombatSystem(host);
-    ctx.dev.combat = sys;
+    ctx.dev.combat = sys; ctx.dev.shotEnv = streetShots;
 
     const why = (ignoreAim = false) => gate({
       enabled, locked: input.locked, gameplay: ctx.gameplay() && input.gameplay,

@@ -29,9 +29,17 @@ export interface GameState {
   classic: boolean;
   /** A 3D room is active (city world, crowd and labels are hidden). */
   inRoom: boolean;
+  /** A room tool is in the paws (the mine's pickaxe while digging): the own weapon / shield view-model is hidden. */
+  toolInHand?: boolean;
+  /** Expedition-only game (hero in an expedition party, the site's City locked): no city world, src/net/expedition-site.ts. */
+  expeditionOnly?: boolean;
 }
 
-export interface Game { classic: boolean; toClassic(): void; resume(): void; classicPanel(): void }
+export interface Game {
+  classic: boolean; toClassic(): void; resume(): void; classicPanel(): void;
+  /** Tear the whole game down (engine, UI, features, site session). Set by startGame. */
+  dispose?(): void;
+}
 
 export interface CoreContext extends GameContext {
   registries: Registries;

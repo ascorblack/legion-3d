@@ -41,7 +41,7 @@ function rng(seed: number) { let a = (seed >>> 0) || 1; return () => { a = (a + 
 
 /* ------------------------------------------------------------------ plan */
 
-type Phase = { st: 'intro' | 'party' | 'hit' | 'tele' | 'end'; from: number; to: number; round: number; after?: 'party' | 'tele' };
+type Phase = { st: 'intro' | 'party' | 'hit' | 'tele' | 'tele2' | 'end'; from: number; to: number; round: number; after?: 'party' | 'tele' };
 interface BattlePlan {
   id: string; title: string; ter: string; roll: number; fronts: Side[]; maxR: number;
   foes: { side: Side; type: string; lead: boolean; name: string }[];
@@ -99,7 +99,7 @@ export class FakeQuest {
     const fronts = frontsFor(roll), phases: Phase[] = []; let t = start;
     const ph = (st: Phase['st'], len: number, round: number, after?: Phase['after']) => { phases.push({ st, from: t, to: t + len, round, ...(after ? { after } : {}) }); t += len; };
     ph('intro', 3 * S, 1);
-    for (let r = 1; r <= maxR; r++) { ph('party', 10 * S, r); ph('hit', 3 * S, r, 'party'); if (r < maxR) { ph('tele', 6 * S, r); ph('hit', 2 * S, r, 'tele'); } }
+    for (let r = 1; r <= maxR; r++) { ph('party', 10 * S, r); ph('hit', 3 * S, r, 'party'); if (r < maxR) { ph('tele', 6 * S, r); ph('tele2', 2 * S, r, 'tele'); } }
     ph('end', 6 * S, maxR);
     const fs = foes.map(([type, name, lead], i) => ({ side: fronts[i % fronts.length], type, lead: !!lead, name }));
     // damage per party hit: random shares, the last hit finishes everybody
@@ -142,7 +142,7 @@ export class FakeQuest {
       case 'travel': return { ...base, k: 'travel', t: seg.t, ter: seg.ter };
       case 'rest': return { ...base, k: 'rest', t: 'Привал у костра', ter: 'Курган' };
       case 'treasure': return { ...base, k: 'treasure', t: 'Сокровищница', ter: 'Курган', tr: this.treasure(seg, lt, srv), ...(lt > 9 * S ? { late: [[srv(seg.from + 8 * S), 'код', 2]] as [number, string, number][] } : {}) };
-      case 'battle': return { ...base, k: 'battle', t: seg.b.title, ter: seg.b.ter, roll: { by: 'barsik', n: seg.b.roll }, cm: false, b: this.battleAt(seg.b, t, srv) };
+      case 'battle': return { ...base, k: 'battle', t: seg.b.title, ter: seg.b.ter, roll: { by: 'barsik', n: seg.b.roll, tier: seg.b.roll <= 7 ? 'bad' : seg.b.roll >= 16 ? 'good' : 'mid' }, cm: false, b: this.battleAt(seg.b, t, srv) };
       case 'bossgen': return { ...base, k: 'bossgen', t: 'Логово Гнилозуба', ter: 'Курган', dg: 'Опасно: при гибели теряется часть монет', cm: false, ...this.bossAt(seg.boss, t, srv) };
       case 'loot': return { ...base, k: 'map', t: 'Делёж добычи', loot: { name: 'Клык Гнилозуба', until: srv(seg.to), n: Math.min(9, Math.floor(lt / 900)), ...(!this.spectator && lt > 4 * S ? { my: true } : {}) } };
     }
@@ -157,10 +157,10 @@ export class FakeQuest {
 
   private treasure(seg: Seg, lt: number, srv: (n: number) => number) {
     const act = lt >= 3 * S && lt < 12 * S, res = lt >= 12 * S;
-    const best: [string, string, string][] = lt > 6 * S ? [['132', 'gyr', 'Ириска'], ['312', 'yyg', 'Зефир']] : [];
+    const best: [string, string, string][] = lt > 6 * S ? [['1321', 'gyrg', 'Ириска'], ['3121', 'yygg', 'Зефир']] : [];
     return {
-      name: 'Дверь с рунами', icon: '🔐', type: 'code', tre: true, len: 3, max: 6, st: res ? 'done' : act ? 'act' : 'intro',
-      intro: 'Руны на двери светятся — подбери код', how: 'Пиши «код» и три разные цифры 1–6',
+      name: 'Дверь с рунами', icon: '🔐', type: 'code', tre: true, len: 4, max: 6, per: 3, rd2: { door: 1, dbl: 0, ep: 0, left: this.spectator || lt <= 7 * S ? 3 : 2, my: '', ph: '' }, st: res ? (lt < 14 * S ? 'fire' : 'done') : act ? 'act' : 'intro',
+      intro: 'Руны на двери светятся — подбери код', how: 'Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»',
       ...(act ? { until: srv(seg.from + 12 * S), actedN: Math.floor((lt - 3 * S) / 1000), total: this.party.length, acted: !this.spectator && lt > 7 * S, best } : {}),
       ...(res ? { res: { win: true, text: 'Дверь открылась: сундук с монетами', sv: true, me: this.spectator ? {} : { gain: 120, xp: 15, st: 'ok' } } } : {}),
     };
@@ -175,7 +175,7 @@ export class FakeQuest {
   private battleAt(P: BattlePlan, t: number, srv: (n: number) => number): QuestBattle {
     const ph = P.phases.find((p) => t >= p.from && t < p.to) || P.phases[P.phases.length - 1];
     const hitsDone = P.phases.filter((p) => p.st === 'hit' && p.after === 'party' && p.from <= t).length;   // hit applies at its start
-    const teleHits = P.phases.filter((p) => p.st === 'hit' && p.after === 'tele' && p.from <= t).length;
+    const teleHits = P.phases.filter((p) => p.st === 'tele2' && p.after === 'tele' && p.from <= t).length;
     const foes: FoeEntry[] = P.foes.map((f, i) => {
       let hp = 1; for (let h = 0; h < hitsDone; h++) hp -= P.dmg[h][i];
       return [f.side, f.type, f.lead, Math.max(0, Math.round(hp * 1000) / 1000), f.name];
@@ -193,9 +193,9 @@ export class FakeQuest {
     if (ph.st === 'party' && !this.spectator && lt > 3 * S) { b.turn = this.role === 'archer' ? 'ranged' : this.role === 'mage' ? 'magic' : this.role === 'priest' ? 'heal' : 'melee'; b.tg = ['', (form[this.myIdx][2] || undefined) as Side | undefined]; }
     if (ph.st === 'tele') {
       const word = P.words[(ph.round - 1) % P.words.length];
-      b.tele = { word, text: `${P.foes[0].name} готовит бросок!`, got: Math.min(8, Math.floor(lt / 600)), need: 8, ...(!this.spectator && lt > 2.5 * S ? { ok: true } : {}) };
+      b.tele = { word, kind: 'shield', text: `${P.foes[0].name} готовит бросок!`, got: Math.min(8, Math.floor(lt / 600)), need: 8, ...(!this.spectator && lt > 2.5 * S ? { ok: true } : {}) };
     }
-    if (ph.st === 'hit' && !this.spectator) {
+    if ((ph.st === 'hit' || ph.st === 'tele2') && !this.spectator) {
       const foe = P.foes[(ph.round + 1) % P.foes.length];
       b.mine = ph.after === 'party'
         ? { k: 'party', r: ph.round, me: { n: 1, d: 11 + ph.round * 3, e: foe.name, k: this.role === 'archer' ? 'ranged' : this.role === 'mage' ? 'magic' : 'melee', ...(ph.round === 2 ? { c: true } : {}) } }
@@ -267,7 +267,7 @@ const TIME_KEYS = new Set(['until', 'end', 'at', 'now']);
 export function rebase<T>(v: T, dt: number): T {
   if (!dt) return v;
   const walk = (x: any, key?: string): any => {
-    if (Array.isArray(x)) return key === 'late' ? x.map((l) => [l[0] + dt, ...l.slice(1)]) : x.map((y) => walk(y));
+    if (Array.isArray(x)) return key === 'sq' ? x.map(p => [p[0], p[1] + dt]) : key === 'late' ? x.map((l) => [l[0] + dt, ...l.slice(1)]) : x.map((y) => walk(y));
     if (x && typeof x === 'object') { const o: any = {}; for (const k of Object.keys(x)) o[k] = TIME_KEYS.has(k) && typeof x[k] === 'number' ? x[k] + dt : walk(x[k], k); return o; }
     return x;
   };

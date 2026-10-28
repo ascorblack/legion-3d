@@ -20,10 +20,11 @@ import type { ItemModelFactory, Registry } from '../contracts/ext';
 import { Parts, T, sphere, cyl, cone, box, torus, star, slab, tube, capsule, bodyDims, bodyShell, radiusAt, setDetail, col, INK } from './geom';
 import { addWeapon, addShield } from './gear';
 import { addHat } from './hats';
-import { addArmor } from './armor';
+import { armorKind, RANK } from './armor';
 import { CATALOG, RARITY_COLOR } from './appearance';
 import { toonMat, outlineMat, glowMat, glowSolidMat } from './materials';
 import { ITEM_HATS, ITEM_CHARMS, ITEM_SLOTS, ITEM_FOODS, SUPPORTED_ITEM_MODEL_KEYS } from './supported';
+import { addChertsFood, addChertsPotion, addChertsScroll, chFoodKind } from './cherts-goods';
 
 export { SUPPORTED_ITEM_MODEL_KEYS };
 
@@ -33,6 +34,24 @@ interface Opts { rarity: string; slot: string; id?: string; ring?: boolean }
 const WOOD = '#8a5a2b', DWOOD = '#5a3a1c', GOLD = '#e8b923', PAPER = '#f3e2b8', GLASS = '#d8ecff';
 /** Display size (largest side, m) per family. */
 const SIZE: Record<string, number> = { weapon: 0.55, shield: 0.42, armor: 0.62, hat: 0.34, charm: 0.2, food: 0.18, potion: 0.2, scroll: 0.22, material: 0.18, relic: 0.24, gift: 0.24 };
+
+/* ------------------------------------------------------------------ art style of the goods */
+// Styles that draw their own goods (styles/<id>/goods.js) for the same item ids: food, potions and scrolls.
+const STYLED_GOODS = new Set(['cherts']);
+let styleSrc: (() => string) | null = null;
+/** The channel's art style the consumables are drawn in: look.style, else the registered source (the city layout's
+ *  styleId), else the site's MDDoodle.active. */
+export function itemStyle(look?: Record<string, unknown> | null): string {
+  const s = look && typeof look.style === 'string' ? look.style : '';
+  if (s) return s;
+  try { const v = styleSrc ? styleSrc() : ''; if (v) return String(v); } catch { /* no layout yet */ }
+  try { return String((globalThis as { MDDoodle?: { active?: string } }).MDDoodle?.active || ''); } catch { return ''; }
+}
+/** True when the current style has its own model for consumables of this slot (food / potion / scroll): the rooms
+ *  then take the registry's 'slot:<slot>' model instead of their local one. */
+export function styledGoods(slot: string, look?: Record<string, unknown> | null): boolean {
+  return (slot === 'food' || slot === 'potion' || slot === 'scroll') && STYLED_GOODS.has(itemStyle(look));
+}
 
 /* ------------------------------------------------------------------ cache + wrapping */
 
@@ -101,11 +120,6 @@ function weaponFactory(kind: string): ItemModelFactory {
     return wrap(key, cached(key + '|' + r, SIZE.weapon * (kind === 'dagger' || kind === 'kris' ? 0.7 : kind === 'grimoire' ? 0.55 : 1), (p) => {
       // bow: turn so its curve is seen from the front; everything else stands blade / head up
       addWeapon(p, kind, r, kind === 'bow' ? T(0, 0, 0, 0, Math.PI / 2, 0) : kind === 'grimoire' ? T(0, 0, 0, 0.12, 0, 0) : T(0, 0, 0));
-      if (kind === 'censer') {   // it hangs on its chain from a little wooden gallows
-        p.add(cyl(0.012, 0.012, 0.34, 6), DWOOD, T(-0.13, -0.15, 0));
-        p.add(cyl(0.01, 0.01, 0.14, 6), DWOOD, T(-0.065, 0.012, 0, 0, 0, Math.PI / 2));
-        p.add(cyl(0.06, 0.07, 0.025, 12), WOOD, T(-0.13, -0.32, 0));
-      }
     }), o, (_look || {}) as Look);
   };
 }
@@ -121,25 +135,99 @@ function shieldFactory(kind: string): ItemModelFactory {
   };
 }
 
-/** Armour on a little wooden cat mannequin on a stand: the same shell heroes wear. */
+/**
+ * Armour as the site draws it in shops and the inventory (doodle.js armor / classArmorIcon): the garment alone, front
+ * on, no stand and no body — a flattened torso shell with its own trims, pauldrons and decals. Colours by rarity like
+ * the site (lorica takes the rarity colour, leather / shroud / plate their rank palettes). The worn look stays the
+ * body shell of armor.ts.
+ */
+const ARMOR_RAR: Record<string, string> = { uncommon: '#4cc95a', rare: '#4aa3ff', epic: '#b06bff', legendary: '#ffb83d' };
+function garment(p: Parts, kind: string, rar: string): void {
+  const n = RANK[rar] ?? 0, rc = ARMOR_RAR[rar] || null, ZK = 0.6;
+  // profile (radius, height) bottom → top; site units / 100, the site's y grows down
+  const robeLike = kind === 'robe' || kind === 'shroud';
+  const prof: [number, number][] = robeLike ? [[0.42, 0], [0.4, 0.2], [0.35, 0.5], [0.28, 0.82], [0.22, 1.02]]
+    : [[0.26, kind === 'plate' ? 0.24 : 0.2], [0.31, 0.36], [0.345, 0.56], [0.345, 0.76], [0.32, 0.96]];
+  const y0 = prof[0][1], y1 = prof[prof.length - 1][1];
+  const rAt = (y: number) => { for (let i = 1; i < prof.length; i++) if (y <= prof[i][1]) { const [ra, ya] = prof[i - 1], [rb, yb] = prof[i]; return ra + (rb - ra) * (y - ya) / (yb - ya); } return prof[prof.length - 1][0]; };
+  // a point on the front of the shell (front = −Z in avatar convention; the site's x to the viewer's right = our −x), lifted by `off`
+  const fp = (x: number, y: number, off = 0.006): [number, number, number] => { const r = rAt(y); return [-x, y, -Math.sqrt(Math.max(0, 1 - (x / r) ** 2)) * r * ZK - off]; };
+  const ring = (y: number, t: number, c: string, k = 1.0) => p.add(torus(rAt(y) * k + 0.004, t, 4, 24), c, T(0, y, 0, Math.PI / 2, 0, 0, [1, ZK, 1]));
+  const line = (pts: [number, number][], t: number, c: string) => p.add(tube(pts.map(([x, y]) => fp(x, y)), t, 10, 4), c);
+  const body = (c: string) => {
+    p.add(new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 20), c, T(0, 0, 0, 0, 0, 0, [1, 1, ZK]));
+    p.add(new THREE.CircleGeometry(rAt(y1) * 0.98, 16), '#2a2230', T(0, y1 - 0.01, 0, -Math.PI / 2, 0, 0, [1, ZK, 1]));
+    p.add(new THREE.CircleGeometry(prof[0][0] * 0.98, 16), new THREE.Color(c).multiplyScalar(0.55), T(0, y0 + 0.002, 0, Math.PI / 2, 0, 0, [1, ZK, 1]));
+  };
+  const pauldrons = (c: string, rim: string | null, r = 0.17) => {
+    for (const s of [-1, 1]) {
+      p.add(new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), c, T(s * 0.3, y1 - 0.06, 0, 0, 0, -s * 0.45, [1.1, 0.55, 0.78]));
+      if (rim) p.add(torus(r, 0.02, 4, 18), rim, T(s * 0.3, y1 - 0.06, 0, Math.PI / 2, 0, -s * 0.45, [1.1, 0.78, 1]));
+    }
+  };
+  if (kind === 'robe') {
+    const G = '#ffc94d';
+    body('#5a2fa8');
+    line([[0, 0.86], [0, 0.5], [0, 0.04]], 0.014, G);
+    line([[-0.08, 1.0], [0, 0.86]], 0.014, G); line([[0.08, 1.0], [0, 0.86]], 0.014, G);
+    ring(0.05, 0.02, G);
+    p.add(sphere(0.026, 8, 6), G, T(...fp(-0.14, 0.52, 0.0))); p.add(sphere(0.022, 8, 6), G, T(...fp(0.14, 0.38, 0.0)));
+    return;
+  }
+  if (kind === 'shroud') {
+    const SH = ['#5f5a68', '#33403a', '#2a2a44', '#2b1a40', '#1e1024'][n], tr = rc || BONE;
+    body(SH);
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; p.add(cone(0.08, 0.1, 4), SH, T(Math.sin(a) * 0.4, -0.04, Math.cos(a) * 0.4 * ZK, Math.PI, 0, 0)); }
+    ring(y1 - 0.02, 0.022, tr, 0.95);
+    if (n) {
+      line([[0, 0.9], [0, 0.84 - (2 + Math.min(2, n)) * 0.09 + 0.1]], 0.016, BONE);
+      for (let i = 0; i < 2 + Math.min(2, n); i++) { const y = 0.84 - i * 0.09, w = 0.14 - i * 0.02; for (const s of [-1, 1]) line([[0, y], [s * w * 0.8, y + 0.02], [s * (w + 0.05), y - 0.05]], 0.013, BONE); }
+    } else for (const [a2, b2] of [[[-0.26, 0.8], [0.26, 0.5]], [[-0.3, 0.5], [0.3, 0.2]]] as [number, number][][]) line([a2, b2], 0.01, '#8d8798');
+    if (n >= 2) for (const s of [-1, 1]) for (const k of [0, 1]) p.add(cone(0.05, 0.2 - k * 0.04, 4), '#f2e8d0', T(s * (0.2 + k * 0.08), y1 + 0.06 - k * 0.02, -0.02, 0, 0, -s * (0.25 + k * 0.2)));
+    if (n >= 3) for (const [x, y] of [[-0.18, 0.4], [0.16, 0.24], [-0.06, 0.14]]) p.add(sphere(0.022, 6, 4), ['#9fe8ff', '#9fe8ff', '#9fe8ff', '#c08aff', '#ffd76a'][n], T(...fp(x, y, 0.0)));
+    return;
+  }
+  if (kind === 'leather') {
+    const LT = ['#7a5436', '#5a3f2c', '#3a2c26', '#2a2230', '#221a26'][n], DK = '#1e140e', BK = rc || '#c9a24a';
+    body(LT);
+    line([[-0.26, 0.92], [-0.02, 0.58], [0.22, 0.24]], 0.03, DK);
+    ring(0.46, 0.028, DK);
+    p.add(torus(0.05, 0.012, 4, 12), BK, T(...fp(0, 0.46, 0.03), 0, 0, 0, [1.2, 1, 1]));
+    for (const y of [0.76, 0.32]) for (let i = 0; i < 8; i++) p.add(box(0.024, 0.008, 0.008), '#b08a5e', T(...fp(-0.21 + i * 0.06, y)));
+    p.add(box(0.11, 0.1, 0.04), '#5a3d28', T(...fp(-0.185, 0.35, 0.01)));
+    if (n >= 2) {
+      p.add(new THREE.SphereGeometry(0.31, 16, 5, 0, Math.PI * 2, 0, Math.PI * 0.42), DK, T(0, y1 - 0.08, 0, 0, 0, 0, [1.05, 0.72, ZK * 1.08]));
+      p.add(box(0.03, 0.24, 0.02), '#c9d0d6', T(...fp(0.18, 0.48, 0.02))); p.add(box(0.1, 0.03, 0.025), BK, T(...fp(0.18, 0.56, 0.03)));
+    }
+    return;
+  }
+  if (kind === 'plate') {
+    const M = ['#c4cad3', '#dde3eb', '#eaeef4', '#f4f6fa', '#fff8ea'][n], GD = n ? '#e8b923' : '#b89a52';
+    body(M);
+    p.add(box(0.18, 0.26, 0.05), '#f4efe2', T(0, 0.12, -0.08));
+    for (const s of [-1, 1]) p.add(box(0.025, 0.26, 0.055), rc || GD, T(s * 0.09, 0.12, -0.08));
+    ring(y1 - 0.02, 0.024, GD, 0.97); ring(0.3, 0.04, GD);
+    if (n >= 1) {
+      p.add(cyl(0.06, 0.06, 0.02, 14), GD, T(...fp(0, 0.66, 0.01), Math.PI / 2, 0, 0));
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; p.add(cone(0.02, 0.05, 4), GD, T(...fp(Math.cos(a) * 0.09, 0.66 + Math.sin(a) * 0.09, 0.012), 0, 0, a - Math.PI / 2, [1, 1, 0.4])); }
+    }
+    else { line([[0, 0.78], [0, 0.54]], 0.02, GD); line([[-0.09, 0.68], [0.09, 0.68]], 0.02, GD); }
+    pauldrons(M, GD, 0.2);
+    return;
+  }
+  // lorica: segmented cuirass in the rarity colour, ink bands, pauldrons, a red collar
+  const m = rar === 'common' || !rc ? '#a9b1b6' : rc, ink = new THREE.Color(m).multiplyScalar(0.62).getStyle();
+  body(m);
+  for (let i = 0; i < 4; i++) ring(0.72 - i * 0.14, 0.009, ink);
+  ring(y0 + 0.01, 0.016, '#767688');
+  pauldrons(m, null);
+  ring(y1 - 0.01, 0.024, '#a3122a', 0.45);
+}
 function armorFactory(kind: string): ItemModelFactory {
   return (look, o) => {
     const r = o.rarity || 'common', L = (look || {}) as Look, am = String(L.gear || L.am || (kind === 'lorica' ? 'heavy' : ''));
-    const key = 'armor:' + kind;
-    return wrap(key, cached(`${key}|${r}|${am}`, SIZE.armor, (p) => {
-      const d = bodyDims('bean', 0.5);
-      const mann = col('#d9b48a'), neckY = d.mouthY - 0.105;
-      // stand: base + pole up into the body
-      p.add(cyl(0.16, 0.19, 0.05, 16), WOOD, T(0, -0.25, 0));
-      p.add(cyl(0.022, 0.022, 0.3, 8), DWOOD, T(0, -0.1, 0));
-      p.add(bodyShell(d, { yA: d.y0, yB: d.top, segs: 18, rings: 12, color: (_t, _y, _tt, out) => { out.copy(mann); } }));
-      p.add(new THREE.CircleGeometry(radiusAt(d, d.y0 + 0.004), 14), mann, T(0, d.y0 + 0.001, 0, Math.PI / 2, 0, 0, [1, d.depth, 1]));
-      // wooden cat ears (it is a cat-legion shop)
-      for (const s of [-1, 1]) p.add(cone(0.08, 0.16, 4), mann, T(s * radiusAt(d, d.top - 0.05) * 0.66, d.top + 0.02, 0, 0, Math.PI / 4, s * -0.3, [1, 1, 0.5]));
-      // stitched button eyes, so the front reads as the front
-      for (const s of [-1, 1]) p.add(cyl(0.022, 0.022, 0.012, 10), '#5a3a1c', T(s * 0.11, d.eyeY, -radiusAt(d, d.eyeY) * d.depth * Math.sqrt(1 - (0.11 / radiusAt(d, d.eyeY)) ** 2) - 0.002, Math.PI / 2, 0, 0));
-      addArmor(p, d, kind, r, am, { yB: neckY, sx: radiusAt(d, d.armY) * 0.97, segs: 20, rings: 10 });
-    }), o, L);
+    const key = 'armor:' + kind, k = armorKind(kind, am);
+    return wrap(key, cached(`${key}|${r}|${k}`, SIZE.armor, (p) => garment(p, k === 'light' ? 'leather' : k, r)), o, L);
   };
 }
 
@@ -168,17 +256,26 @@ function charmFactory(id: string): ItemModelFactory {
   return (look, o) => {
     const r = o.rarity || 'common', key = 'charm:' + id;
     return wrap(key, cached(key + '|' + r, SIZE.charm, (p) => {
-      // cord loop on top, pendant hanging below; the rarity ring of the site's icon as a thin hoop
-      const pts: [number, number, number][] = [];
-      for (let i = 0; i <= 10; i++) { const a = Math.PI * (0.2 + 0.6 * (i / 10)); pts.push([Math.cos(a) * 0.055, 0.03 + Math.sin(a) * 0.07, 0]); }
-      p.add(tube(pts, 0.005, 14, 5), '#c9a35a');
+      // the site's charm icon (doodle.js charmArt): a V of gold beads over the medallion, the rarity hoop with a pale
+      // disc of the same colour behind the pendant
+      for (let i = 0; i <= 8; i++) { const t = i / 8, x = (1 - t) * (1 - t) * -0.05 + t * t * 0.05, y = (1 - t) * (1 - t) * 0.106 + 2 * (1 - t) * t * 0.025 + t * t * 0.106; p.add(sphere(0.0055, 6, 4), '#c9a35a', T(x, y, 0, 0, 0, 0, [1, 1.3, 1])); }
       const rc = r !== 'common' ? RARITY_COLOR[r] : null;
-      if (rc) p.add(torus(0.062, 0.005, 4, 24), rc, T(0, 0, 0.014));
+      if (rc) {
+        p.add(torus(0.062, 0.0075, 5, 28), rc, T(0, 0, 0));
+        p.add(cyl(0.06, 0.06, 0.006, 24), new THREE.Color(rc).lerp(new THREE.Color('#ffffff'), 0.72), T(0, 0, 0.008, Math.PI / 2, 0, 0));
+      }
       pendant(p, id);
     }), o, (look || {}) as Look);
   };
 }
 
+/** Rounded rectangle outline (centred) for slab(). */
+function rrect(w: number, h: number, r: number): [number, number][] {
+  const out: [number, number][] = [], hw = w / 2 - r, hh = h / 2 - r;
+  for (const [cx, cy, a0] of [[hw, hh, 0], [-hw, hh, Math.PI / 2], [-hw, -hh, Math.PI], [hw, -hh, Math.PI * 1.5]] as const)
+    for (let i = 0; i <= 3; i++) { const a = a0 + (i / 3) * (Math.PI / 2); out.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+  return out;
+}
 function pendant(p: Parts, id: string) {
   switch (id) {
     case 'lockpick':
@@ -201,25 +298,46 @@ function pendant(p: Parts, id: string) {
       p.add(cyl(0.011, 0.011, 0.07, 6), BONE, T(0, 0, 0));
       for (const y of [-0.035, 0.035]) for (const x of [-0.011, 0.011]) p.add(sphere(0.014, 8, 6), BONE, T(x, y, 0));
       break;
-    case 'souljar':
-      p.add(cyl(0.032, 0.032, 0.07, 12), '#cfefff', T(0, -0.01, 0));
-      p.add(cyl(0.022, 0.022, 0.018, 10), '#8a5a2b', T(0, 0.033, 0));
-      p.add(sphere(0.016, 8, 6), '#7fe8ff', T(0, -0.008, 0));
+    case 'souljar': {
+      // rounded glass jar with a cork and a cyan soul with a little tail (front = −Z, the site's +x = our −x)
+      const U = 0.0072;
+      p.add(slab(rrect(11 * U, 12 * U, 3.4 * U), 0.03), INK, T(0, -0.5 * U, 0.002));
+      p.add(slab(rrect(10 * U, 11 * U, 3 * U), 0.034), '#cfefff', T(0, -0.5 * U, 0));
+      p.add(slab(rrect(6.6 * U, 3.6 * U, 1 * U), 0.03), '#8a5a2b', T(0, 6.5 * U, 0));
+      p.add(sphere(2.8 * U, 10, 8), '#7fe8ff', T(0, -1 * U, -0.012, 0, 0, 0, [1, 1, 0.6]));
+      p.add(tube([[-2 * U, -2 * U, -0.016], [-4.4 * U, -3.6 * U, -0.017], [-3.2 * U, -6 * U, -0.017]], 0.7 * U, 6, 4), '#7fe8ff');
       break;
-    case 'phylactery':
-      p.add(box(0.07, 0.065, 0.03), '#3a2450', T(0, 0, 0));
-      p.add(box(0.074, 0.008, 0.034), '#d9b45a', T(0, 0.004, 0));
-      p.add(sphere(0.016, 8, 6), '#b06bff', T(0, -0.006, -0.016));
+    }
+    case 'phylactery': {
+      // a dark-violet reliquary box framed in gold, a gold band, a violet gem in an ink ring
+      const U = 0.0072;
+      p.add(slab(rrect(12.8 * U, 11.6 * U, 2 * U), 0.03), '#d9b45a', T(0, 0, 0.002));
+      p.add(slab(rrect(10 * U, 8.8 * U, 1 * U), 0.034), '#3a2450', T(0, 0, 0));
+      p.add(box(11 * U, 1 * U, 0.036), '#d9b45a', T(0, 1 * U, 0));
+      p.add(cyl(3.3 * U, 3.3 * U, 0.04, 14), INK, T(0, -1.5 * U, 0, Math.PI / 2, 0, 0));
+      p.add(sphere(2.6 * U, 10, 8), '#b06bff', T(0, -1.5 * U, -0.017, 0, 0, 0, [1, 1, 0.5]));
       break;
+    }
     case 'ladanka':
       p.add(slab([[-0.032, 0.035], [0.032, 0.035], [0.032, 0.005], [0, -0.045], [-0.032, 0.005]], 0.014), '#efe4c8');
       p.add(box(0.008, 0.05, 0.004), '#d9a441', T(0, 0.004, -0.009));
       p.add(box(0.036, 0.008, 0.004), '#d9a441', T(0, 0.012, -0.009));
       break;
-    case 'sun': case 'dawn': {
-      const n = id === 'sun' ? 8 : 16;
-      p.add(sphere(0.026, 12, 8), id === 'sun' ? '#ffcf4d' : '#ffffff', T(0, 0, 0, 0, 0, 0, [1, 1, 0.5]));
-      for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, l = i % 2 || id === 'sun' ? 0.022 : 0.032; p.add(cone(0.009, l, 4), '#ffcf4d', T(Math.cos(a) * (0.026 + l / 2), Math.sin(a) * (0.026 + l / 2), 0, 0, 0, a - Math.PI / 2, [1, 1, 0.5])); }
+    case 'sun': {
+      // sunMark: a yellow disc in an ink ring and 8 rounded rays
+      const U = 0.0072;
+      p.add(cyl(5.2 * U, 5.2 * U, 0.02, 20), INK, T(0, 0, 0, Math.PI / 2, 0, 0));
+      p.add(cyl(4.2 * U, 4.2 * U, 0.026, 20), '#ffcf4d', T(0, 0, 0, Math.PI / 2, 0, 0));
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; p.add(capsule(1.1 * U, 2.6 * U, 3, 6), '#ffcf4d', T(Math.cos(a) * 7.3 * U, Math.sin(a) * 7.3 * U, 0, 0, 0, a - Math.PI / 2)); }
+      break;
+    }
+    case 'dawn': {
+      // a 16-point star (long and short points) with an ink edge and a white core
+      const U = 0.0072, star16 = (k: number): [number, number][] => Array.from({ length: 16 }, (_, i) => { const a = (i * Math.PI) / 8 + Math.PI / 2, r = (i % 2 ? 3.4 : 7.6) * k * U; return [Math.cos(a) * r, Math.sin(a) * r] as [number, number]; });
+      p.add(slab(star16(1.16), 0.02), INK, T(0, 0, 0.003));
+      p.add(slab(star16(1), 0.026), '#ffcf4d', T(0, 0, 0));
+      p.add(cyl(3.2 * U, 3.2 * U, 0.03, 14), INK, T(0, 0, 0, Math.PI / 2, 0, 0));
+      p.add(cyl(2.6 * U, 2.6 * U, 0.034, 14), '#ffffff', T(0, 0, 0, Math.PI / 2, 0, 0));
       break;
     }
     default: {   // aura amulet: faceted gem in the aura colours (+ a halo ring for 'halo')
@@ -238,9 +356,9 @@ function pendant(p: Parts, id: string) {
 // 'bread' = «Миска сметаны»…), so the NAME decides first and the id is only a fallback; specific words before general ones.
 const FOOD_HINTS: [RegExp, string][] = [
   [/pie|пирог/i, 'pie'], [/корм|kibble/i, 'kibble'], [/сметан|cream/i, 'cream'], [/мят|catnip|трав|herb/i, 'herb'],
-  [/milk|молок/i, 'milk'], [/stew|уха|уху|суп|рагу|bowl|миск|каш/i, 'bowl'],
-  [/fish|рыб|кильк|лосос|salmon|sprat|карас/i, 'fish'], [/apple|яблок/i, 'apple'], [/pear|груш/i, 'pear'],
-  [/ham|roast|meat|мяс|окорок|ветчин|жарк|колбас|sausage/i, 'meat'], [/cheese|сыр/i, 'cheese'],
+  [/блюдц|saucer/i, 'saucer'], [/milk|молок/i, 'milk'], [/корюш|smelt/i, 'smelt'], [/лосос|сёмг|семг|salmon/i, 'salmon'], [/колбас|sausage/i, 'sausage'], [/stew|уха|уху|суп|рагу|bowl|миск|каш/i, 'bowl'],
+  [/fish|рыб|кильк|sprat|карас/i, 'fish'], [/apple|яблок/i, 'apple'], [/pear|груш/i, 'pear'],
+  [/ham|roast|meat|мяс|окорок|ветчин|жарк/i, 'meat'], [/cheese|сыр/i, 'cheese'],
   [/bread|хлеб|батон/i, 'bread'], [/pretzel|крендел/i, 'pretzel'], [/kvass|квас|mug|кружк|beer|пиво|сидр/i, 'mug'],
   [/tea|чай|cup|чаш/i, 'cup'], [/cake|торт|пирожн|honey|мёд|мед/i, 'cake'],
 ];
@@ -252,14 +370,33 @@ export function foodKind(id = '', name = ''): string {
 
 function addFood(p: Parts, kind: string) {
   const plate = () => p.add(cyl(0.13, 0.11, 0.018, 18), '#f2ead8', T(0, 0.009, 0));
-  const fish = (x: number, y: number, z: number, k: number, c: string, ry = 0) => {
+  // a cats-goods fish: body in the back colour, a pale belly stripe, a gill line, an ink eye, a forked tail
+  const fish = (x: number, y: number, z: number, k: number, c: string, ry = 0, belly = '#e8f1fa') => {
+    const cx = Math.cos(ry), sz = Math.sin(ry);
     p.add(sphere(0.1 * k, 12, 8), c, T(x, y, z, 0, ry, 0, [1, 0.5, 0.36]));
-    p.add(cone(0.05 * k, 0.07 * k, 4), c, T(x + Math.cos(ry) * 0.12 * k, y, z - Math.sin(ry) * 0.12 * k, 0, ry, -Math.PI / 2, [1, 1, 0.3]));
-    p.add(sphere(0.013 * k, 6, 4), INK, T(x - Math.cos(ry) * 0.065 * k, y + 0.014 * k, z + Math.sin(ry) * 0.065 * k - 0.03 * k));
-    p.add(cone(0.03 * k, 0.04 * k, 3), new THREE.Color(c).multiplyScalar(0.8), T(x, y + 0.05 * k, z, 0, ry, 0, [1, 1, 0.3]));
+    p.add(sphere(0.085 * k, 10, 6), belly, T(x, y - 0.018 * k, z, 0, ry, 0, [0.95, 0.3, 0.38]));
+    p.add(slab([[0, 0], [0.07 * k, 0.05 * k], [0.06 * k, 0], [0.07 * k, -0.05 * k]], 0.012 * k), c, T(x + cx * 0.085 * k, y, z - sz * 0.085 * k, 0, ry, 0));
+    p.add(sphere(0.013 * k, 6, 4), INK, T(x - cx * 0.06 * k, y + 0.014 * k, z + sz * 0.06 * k - 0.032 * k));
+    p.add(torus(0.035 * k, 0.004 * k, 3, 8, Math.PI), INK, T(x - cx * 0.03 * k, y, z + sz * 0.03 * k - 0.033 * k, 0, ry, -Math.PI / 2, [0.6, 1, 1]));
+  };
+  const bowl = (c: string, rim = '#ffffff') => {
+    p.add(new THREE.SphereGeometry(0.12, 16, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), c, T(0, 0.075, 0, 0, 0, 0, [1, 0.62, 1]));
+    p.add(torus(0.115, 0.012, 4, 20), rim, T(0, 0.075, 0, Math.PI / 2));
   };
   switch (kind) {
-    case 'fish': plate(); fish(0, 0.05, 0, 1, '#8fb6c8', 0.2); fish(0.02, 0.085, 0.02, 0.8, '#9fc6d8', -0.3); break;
+    case 'fish': fish(0, 0.045, 0, 1, '#9fb7cf', 0.25); break;
+    case 'smelt': fish(0, 0.045, 0, 1.05, '#9cc7a8', 0.25, '#e9f6ec'); break;
+    case 'salmon': fish(0, 0.06, 0, 1.4, '#f08a66', 0.25, '#ffd2bf'); break;
+    case 'saucer':   // «Блюдце молока»
+      p.add(cyl(0.14, 0.1, 0.035, 20), '#ffd9a8', T(0, 0.0175, 0));
+      p.add(sphere(0.1, 16, 6), '#fffaf0', T(0, 0.034, 0, 0, 0, 0, [1, 0.12, 1]));
+      p.add(sphere(0.01, 6, 4), '#ffffff', T(-0.03, 0.046, -0.02));
+      break;
+    case 'sausage':  // «Копчёная колбаска»: tied at both ends, fat spots
+      p.add(capsule(0.045, 0.16, 4, 12), '#b5523a', T(0, 0.05, 0, 0, 0, Math.PI / 2));
+      for (const sx of [-1, 1]) for (const a of [-0.5, 0.5]) p.add(cyl(0.004, 0.004, 0.035, 4), INK, T(sx * 0.14, 0.05 + a * 0.02, 0, 0, 0, sx * (Math.PI / 2 + a)));
+      for (const [x, y] of [[-0.03, 0.08], [0.04, 0.07], [0.08, 0.085]]) p.add(sphere(0.01, 6, 4), '#f2c3a8', T(x, y, -0.035, 0, 0, 0, [1, 1, 0.5]));
+      break;
     case 'apple': case 'pear': {
       const c = kind === 'pear' ? '#9fe39a' : '#e8455c';
       p.add(sphere(0.07, 14, 10), c, T(0, 0.07, 0, 0, 0, 0, kind === 'pear' ? [0.85, 1.15, 0.85] : [1, 0.92, 1]));
@@ -276,11 +413,13 @@ function addFood(p: Parts, kind: string) {
     case 'cheese':
       p.add(slab([[0, 0], [0.22, 0], [0, 0.13]], 0.12), '#ffd34d', T(-0.08, 0, 0.06, -Math.PI / 2, 0, 0));
       for (const [x, z] of [[-0.03, 0.02], [0.03, -0.01], [-0.05, -0.03]]) p.add(sphere(0.016, 6, 4), '#e8b923', T(x, 0.06, z));
+      for (const [x, y, r] of [[-0.05, 0.03, 0.016], [0.04, 0.025, 0.012], [-0.01, 0.065, 0.011]]) p.add(sphere(r, 6, 4), '#e8b923', T(x, y, -0.06, 0, 0, 0, [1, 1, 0.4]));
       break;
-    case 'pie':
-      p.add(cyl(0.12, 0.1, 0.05, 18), '#d9993f', T(0, 0.025, 0));
-      p.add(sphere(0.115, 18, 6), '#e8455c', T(0, 0.05, 0, 0, 0, 0, [1, 0.28, 1]));
-      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI; p.add(box(0.22, 0.012, 0.014), '#e8b070', T(0, 0.075, 0, 0, a, 0)); }
+    case 'pie':      // «Рыбный пирог»: golden pie, a fish tail sticking out
+      p.add(cyl(0.12, 0.13, 0.05, 18), '#d9993f', T(0, 0.025, 0));
+      p.add(sphere(0.12, 18, 6), '#e8a23a', T(0, 0.05, 0, 0, 0, 0, [1, 0.38, 1]));
+      for (const x of [-0.05, 0, 0.05]) p.add(box(0.03, 0.008, 0.008), '#8a5a2b', T(x, 0.094, -0.02, 0, 0, 0.7));
+      p.add(slab([[0, 0], [0.07, 0.05], [0.06, 0], [0.07, -0.05]], 0.012), '#9fb7cf', T(0.11, 0.07, 0, 0, 0, 0.5));
       break;
     case 'pretzel':
       p.add(torus(0.05, 0.018, 6, 18), '#b5762f', T(-0.035, 0.07, 0, 0, 0, 0, [1, 1, 0.8]));
@@ -293,16 +432,21 @@ function addFood(p: Parts, kind: string) {
       p.add(torus(0.04, 0.012, 6, 12, Math.PI), '#c58a45', T(0.065, 0.075, 0, 0, 0, -Math.PI / 2));
       for (const y of [0.03, 0.12]) p.add(torus(0.066, 0.006, 4, 16), '#6a4421', T(0, y, 0, Math.PI / 2));
       break;
-    case 'cup': case 'milk':
-      p.add(cyl(0.065, 0.045, 0.1, 14), kind === 'milk' ? '#f2ead8' : '#9fe39a', T(0, 0.05, 0));
-      p.add(cyl(0.06, 0.06, 0.008, 14), kind === 'milk' ? '#fff8ee' : '#c58a45', T(0, 0.095, 0));
-      p.add(torus(0.03, 0.009, 5, 12, Math.PI), kind === 'milk' ? '#f2ead8' : '#9fe39a', T(0.06, 0.05, 0, 0, 0, -Math.PI / 2));
+    case 'cup': case 'milk': {   // «Тёплое молоко с мёдом»: a milk mug, honey dripping from the rim, steam
+      const milk = kind === 'milk';
+      p.add(cyl(0.065, 0.055, 0.12, 14), milk ? '#fffaf0' : '#9fe39a', T(0, 0.06, 0));
+      p.add(cyl(0.062, 0.062, 0.008, 14), milk ? '#ffc94d' : '#c58a45', T(0, 0.117, 0));
+      if (milk) for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.3; p.add(sphere(0.016, 6, 4), '#ffc94d', T(Math.cos(a) * 0.062, 0.105, Math.sin(a) * 0.062, 0, 0, 0, [0.8, 1.4, 0.8])); }
+      p.add(torus(0.035, 0.01, 5, 12, Math.PI), milk ? '#fffaf0' : '#9fe39a', T(0.065, 0.065, 0, 0, 0, -Math.PI / 2));
+      if (milk) for (const x of [-0.02, 0.02]) p.add(tube([[x, 0.13, 0], [x - 0.012, 0.16, 0], [x, 0.19, 0]], 0.005, 6, 4), '#ffffff');
       break;
-    case 'bowl':
-      p.add(new THREE.SphereGeometry(0.11, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), '#a0703a', T(0, 0.1, 0, 0, 0, 0, [1, 0.8, 1]));
-      p.add(cyl(0.1, 0.1, 0.01, 16), '#e8455c', T(0, 0.085, 0));
-      fish(0, 0.1, 0, 0.35, '#ff9a6a');
-      p.add(cyl(0.05, 0.05, 0.015, 12), '#8a5a2b', T(0, 0.0075, 0));
+    }
+    case 'bowl':     // «Бойцовая уха»: a dark pot of orange broth, a fish tail, bits of carrot and herbs, steam
+      p.add(new THREE.SphereGeometry(0.12, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), '#6d5a45', T(0, 0.11, 0, 0, 0, 0, [1, 0.9, 1]));
+      p.add(cyl(0.115, 0.115, 0.012, 16), '#ffb27a', T(0, 0.105, 0));
+      p.add(slab([[0, 0], [0.04, 0.06], [0.055, 0]], 0.012), '#9fb7cf', T(0.02, 0.11, 0, 0, 0.4, 0));
+      p.add(sphere(0.014, 6, 4), '#ff6a3d', T(-0.05, 0.112, -0.02)); p.add(sphere(0.01, 6, 4), '#6fbf4a', T(-0.015, 0.112, 0.03));
+      for (const x of [-0.05, -0.02]) p.add(tube([[x, 0.12, -0.02], [x - 0.012, 0.15, -0.02], [x, 0.18, -0.02]], 0.005, 6, 4), '#ffffff');
       break;
     case 'cake':
       p.add(cyl(0.1, 0.1, 0.09, 16), '#ffd38a', T(0, 0.045, 0));
@@ -310,21 +454,21 @@ function addFood(p: Parts, kind: string) {
       for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; p.add(sphere(0.016, 6, 4), '#ff9fb2', T(Math.cos(a) * 0.1, 0.075, Math.sin(a) * 0.1)); }
       p.add(sphere(0.022, 8, 6), '#e8455c', T(0, 0.115, 0));
       break;
-    case 'kibble':   // «Хрустящий корм»: a pink cat bowl of kibble
-      p.add(cyl(0.11, 0.08, 0.065, 18), '#ff8fa3', T(0, 0.0325, 0));
-      p.add(cyl(0.095, 0.095, 0.01, 18), '#8a5a2b', T(0, 0.062, 0));
-      for (let i = 0; i < 14; i++) { const a = i * 2.39, r = 0.075 * Math.sqrt((i + 0.5) / 14); p.add(sphere(0.02, 6, 4), i % 3 ? '#c07a44' : '#a0603a', T(Math.cos(a) * r, 0.072, Math.sin(a) * r)); }
+    case 'kibble':   // «Хрустящий корм»: a blue cat bowl of fish-shaped kibble
+      bowl('#7cc8ff');
+      p.add(cyl(0.105, 0.105, 0.01, 18), '#8a5a2b', T(0, 0.07, 0));
+      for (let i = 0; i < 12; i++) { const a = i * 2.39, r = 0.08 * Math.sqrt((i + 0.5) / 12); p.add(sphere(0.02, 6, 4), i % 2 ? '#b5762f' : '#8a5a2b', T(Math.cos(a) * r, 0.08, Math.sin(a) * r, 0, a, 0, [1.4, 0.8, 0.8])); }
       break;
-    case 'cream':    // «Миска сметаны»: a blue bowl heaped with sour cream
-      p.add(cyl(0.11, 0.075, 0.065, 18), '#7fb0e8', T(0, 0.0325, 0));
-      for (const y of [0.012, 0.05]) p.add(torus(0.1 - y * 0.4, 0.006, 4, 18), '#ffffff', T(0, y, 0, Math.PI / 2));
-      p.add(sphere(0.095, 16, 8), '#fff8ee', T(0, 0.064, 0, 0, 0, 0, [1, 0.42, 1]));
-      p.add(cone(0.025, 0.04, 8), '#fffdf6', T(0, 0.1, 0));
+    case 'cream':    // «Миска сметаны»: a pink bowl heaped with sour cream, a curl on top
+      bowl('#ff8fa3');
+      p.add(sphere(0.1, 16, 8), '#fffaf0', T(0, 0.075, 0, 0, 0, 0, [1, 0.55, 1]));
+      p.add(cone(0.025, 0.045, 8), '#fffaf0', T(0.01, 0.14, 0, 0, 0, -0.3));
       break;
-    case 'herb':     // «Пучок кошачьей мяты»: a tied bunch of mint
-      for (let i = 0; i < 7; i++) { const a = i * 0.9; p.add(cone(0.035, 0.17, 6), i % 2 ? '#6ac46a' : '#82d67a', T(Math.cos(a) * 0.028, 0.13, Math.sin(a) * 0.028, Math.sin(a) * 0.32, 0, Math.cos(a) * 0.32)); }
-      p.add(cyl(0.022, 0.018, 0.1, 6), '#4a8a3a', T(0, 0.05, 0));
-      p.add(torus(0.026, 0.009, 4, 12), '#ff8fa3', T(0, 0.06, 0, Math.PI / 2));
+    case 'herb':     // «Пучок кошачьей мяты»: a forked stem with oval leaves, tied with a pink ribbon
+      p.add(cyl(0.008, 0.008, 0.14, 5), '#5a8a3a', T(0, 0.07, 0));
+      for (const s of [-1, 1]) p.add(cyl(0.007, 0.007, 0.1, 5), '#5a8a3a', T(s * 0.03, 0.1, 0, 0, 0, -s * 0.6));
+      for (const [x, y, a] of [[-0.07, 0.15, -0.5], [0, 0.18, 0], [0.07, 0.15, 0.5], [-0.04, 0.1, -0.7], [0.045, 0.1, 0.7]]) p.add(sphere(0.035, 8, 6), '#8fd16a', T(x, y, 0, 0, 0, -a, [0.65, 1, 0.3]));
+      p.add(torus(0.016, 0.008, 4, 10), '#ff8fa3', T(0, 0.02, 0, Math.PI / 2));
       break;
     case 'bread': default:
       p.add(capsule(0.05, 0.14, 4, 12), '#d9993f', T(0, 0.05, 0, 0, 0, Math.PI / 2, [1, 1, 0.85]));
@@ -338,6 +482,10 @@ function foodFactory(fixed?: string): ItemModelFactory {
     const L = (look || {}) as Look, name = String(L.name || '');
     const kind = (name && hint(name)) || fixed || foodKind(o.id || '', name);
     const key = fixed ? 'food:' + (o.id || fixed) : 'slot:food';
+    if (itemStyle(L) === 'cherts') {   // the hell kitchen (styles/cherts/goods.js): same ids, own dishes
+      const ck = chFoodKind(o.id || '', name, kind);
+      return wrap(key, cached('food|' + ck, SIZE.food, (p) => addChertsFood(p, ck)), o, L);
+    }
     return wrap(key, cached('food|' + kind, SIZE.food, (p) => addFood(p, kind)), o, L);
   };
 }
@@ -356,6 +504,10 @@ export function potionColor(effect: unknown, id = ''): { liquid: string; big: bo
 
 const potionFactory: ItemModelFactory = (look, o) => {
   const L = (look || {}) as Look, { liquid, big } = potionColor(L.effect, o.id || '');
+  if (itemStyle(L) === 'cherts') {   // «зелье жара»: ember-red (mana: blue), a horned cork, a flame inside
+    const id = String(o.id || '') + String(L.name || ''), chBig = big || /hp|big|больш/i.test(id), chLiq = /mana|ман/i.test(id) || liquid === '#4a8cff' ? '#4ab0ff' : '#ff4a1a';
+    return wrap('slot:potion', cached(`potion|ch|${chLiq}|${chBig}`, SIZE.potion * (chBig ? 1.15 : 1), (p) => addChertsPotion(p, chBig, chLiq)), o, L);
+  }
   return wrap('slot:potion', cached(`potion|${liquid}|${big}`, SIZE.potion * (big ? 1.15 : 1), (p) => {
     const pts: [number, number][] = big ? [[0, 0], [0.07, 0], [0.085, 0.03], [0.085, 0.1], [0.06, 0.15], [0.025, 0.17], [0.025, 0.22], [0.032, 0.225], [0, 0.225]]
       : [[0, 0], [0.05, 0], [0.065, 0.02], [0.07, 0.06], [0.06, 0.1], [0.022, 0.125], [0.022, 0.165], [0.028, 0.17], [0, 0.17]];
@@ -372,6 +524,7 @@ const potionFactory: ItemModelFactory = (look, o) => {
 const scrollFactory: ItemModelFactory = (look, o) => {
   const L = (look || {}) as Look, e = (L.effect || {}) as Record<string, unknown>;
   const revive = !!e.revive || /revive|воскр|resur/i.test(o.id || '');
+  if (itemStyle(L) === 'cherts') return wrap('slot:scroll', cached('scroll|ch', SIZE.scroll, addChertsScroll), o, L);   // charred parchment
   return wrap('slot:scroll', cached('scroll|' + revive, SIZE.scroll, (p) => {
     // a half-unrolled scroll leaning on its rolled end
     p.add(box(0.18, 0.13, 0.004), PAPER, T(0, 0.085, 0, -0.25, 0, 0));
@@ -426,6 +579,7 @@ function addMaterial(p: Parts, kind: string) {
     p.add(cyl(0.085, 0.085, 0.022, 20), '#d9a441', T(0, 0.09, 0, Math.PI / 2 - 0.2, 0, 0));
     p.add(torus(0.07, 0.008, 4, 22), '#a8742a', T(0, 0.09, -0.012, -0.2, 0, 0));
     p.add(star(0.035, 0.008), '#fff3c4', T(0, 0.09, -0.014, -0.2, 0, 0));
+    for (const sx of [-1, 1]) p.add(slab([[0, 0], [0.025, 0], [0.04, -0.07], [0.02, -0.055], [0.005, -0.075]], 0.006), '#8b5cf6', T(sx * 0.02 - 0.012, 0.04, 0.01, 0, 0, sx * 0.25));   // the site's ribbon tails
     p.add(box(0.05, 0.02, 0.06), DWOOD, T(0, 0.01, 0.02));
     return;
   }
@@ -490,16 +644,21 @@ export function itemModelFactories(): Map<string, ItemModelFactory> {
   // id → model as the site names these goods now (doodle.js ITEMS): apple «Килька», pretzel «Хрустящий корм», bread «Миска сметаны»,
   // ham «Копчёная колбаска», roast «Целый лосось», honey_cake «Пучок кошачьей мяты», sage_tea «Тёплое молоко с мёдом», spicy_stew «Бойцовая уха».
   // A good's name (look.name) still overrides this, so a later rename only needs the name hints above.
-  const FIXED: Record<string, string> = { apple: 'fish', pear: 'pear', bread: 'cream', pretzel: 'kibble', cheese: 'cheese', pie: 'pie', ham: 'meat', roast: 'fish',
-    kvass: 'mug', honey_cake: 'herb', sage_tea: 'milk', spicy_stew: 'bowl', fish: 'fish' };
+  // pear «Корюшка», kvass «Блюдце молока», ham «Копчёная колбаска», roast «Целый лосось» (doodle.js cats goods).
+  const FIXED: Record<string, string> = { apple: 'fish', pear: 'smelt', bread: 'cream', pretzel: 'kibble', cheese: 'cheese', pie: 'pie', ham: 'sausage', roast: 'salmon',
+    kvass: 'saucer', honey_cake: 'herb', sage_tea: 'milk', spicy_stew: 'bowl', fish: 'fish' };
   for (const k of ITEM_FOODS) m.set('food:' + k, foodFactory(FIXED[k] || 'bread'));
   m.set('*', giftFactory);
   return m;
 }
 
-/** Register all item models (keys = SUPPORTED_ITEM_MODEL_KEYS). Returns an unregister function. */
-export function registerItemModels(reg: Registry<ItemModelFactory>): Unsub {
+/**
+ * Register all item models (keys = SUPPORTED_ITEM_MODEL_KEYS). `style` = where the channel's art style comes from
+ * (the game passes the city layout's styleId): consumables are drawn per style. Returns an unregister function.
+ */
+export function registerItemModels(reg: Registry<ItemModelFactory>, style?: () => string): Unsub {
   const offs: Unsub[] = [];
+  if (style) { styleSrc = style; offs.push(() => { if (styleSrc === style) styleSrc = null; }); }
   for (const [k, f] of itemModelFactories()) offs.push(reg.register(k, f));
   return () => { for (const off of offs) off(); };
 }

@@ -40,6 +40,6 @@ describe('hw_* foes and the Pumpkin Golem', () => {
   });
   it('a battle with the golem leader', () => {
     const s = adapt({ on: true, k: 'battle', b: { id: 'b', st: 'party', round: 1, form: [], foes: [['R', 'hw_pumpkin', 1, 9, 'Тыквенный голем'], ['R', 'hw_pumpkinlet', 0, 3, 'Тыквёнок'], ['R', 'hw_crow', 0, 2, 'Ворон']], cr: { fr: ['R'] } } } as never, ctx());
-    expect(s.battle!.foes.map((f) => f.art)).toEqual(['golem', 'pumpkin', 'bat']);
+    expect(s.battle!.foes.map((f) => f.art)).toEqual(['golem', 'pumpkinlet', 'crow']);
   });
 });

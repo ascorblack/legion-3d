@@ -53,6 +53,29 @@ export function stylePart(name: string): any {
 }
 export function coinStyle(): CoinStyle | null { return stylePart('coins'); }
 
+/** The channel style the site draws in now (MDDoodle.active), or ''. */
+export function activeStyle(): string {
+  try { const a = W().MDDoodle?.active; return typeof a === 'string' && /^[\w-]{1,30}$/.test(a) ? a : ''; } catch { return ''; }
+}
+/** HUD badge rules of a style: cat ears (cats), horns (cherts), plain (every other style); '' = unknown (keep the ears). */
+export const badgeRules = (style: string): '' | 'cats' | 'cherts' | 'legion' => (!style ? '' : style === 'cats' || style === 'cherts' ? style : 'legion');
+/**
+ * The hero's class title in the style the site draws in now: the style's own name (MDDoodle.names[style].roles, site
+ * doodle.js addNames), else the hero's `roleName` unless it is another loaded style's title (stale after a live style
+ * switch: «Кот-колдун» in «Чертики»), else the plain class name.
+ */
+export function roleTitle(H: Pick<Hero, 'role' | 'roleName'>, names: any = (() => { try { return W().MDDoodle?.names; } catch { return null; } })(), style = activeStyle()): string {
+  const role = String(H.role || ''), rn = String(H.roleName || '');
+  try {
+    const own = names?.[style]?.roles?.[role];
+    if (typeof own === 'string' && own.trim()) return own.trim();
+    if (rn && names && typeof names === 'object') {
+      for (const k of Object.keys(names)) if (k !== style && names[k]?.roles?.[role] === rn) return CLASS_NAME[role] || rn;
+    }
+  } catch { /* hostile getter */ }
+  return rn || CLASS_NAME[role] || '';
+}
+
 /** Style stat label without the leading emoji: «Царапки»; fallback «Физ. урон». */
 export function stLabel(k: string): string {
   const h = stylePart('hero'); const l = h && h.stats && h.stats[k] && h.stats[k].label;

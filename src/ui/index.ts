@@ -20,6 +20,7 @@ import { loadSettings, SETTINGS_KEYS, type UiSettings } from './settings';
 import { TabRegistry } from './tabs';
 import { MapSource } from './map';
 import type { GameContext, MenuTabDef } from '../contracts/ext';
+import { activeStyle, badgeRules } from './data';
 
 export { moneyText, moneyParts, plural } from './money';
 export { SETTINGS_KEYS, SETTINGS_DEFAULTS } from './settings';
@@ -41,10 +42,24 @@ export interface GameUi extends Ui {
   prompt(text: string | null): void;
   /** GameContext passed to feature tabs' render(el, ctx). */
   setGameContext(ctx: GameContext): void;
+  /** Re-read the site's skin (html[data-skin] + its CSS variables) after a live style change (src/features/restyle.ts);
+   *  re-renders the open menu. Returns the skin id now adopted ('' = none). */
+  reskin(): string;
 }
 
+/** Every custom property adoptSkin may set (cleared before a re-adopt: a light skin after a dark one keeps our palette). */
+const SKIN_PROPS = ['--l3d-bg', '--l3d-panel', '--l3d-panel-2', '--l3d-ink', '--l3d-mute', '--l3d-accent', '--l3d-gold', '--l3d-up', '--l3d-dn', '--l3d-hd', '--l3d-tx',
+  '--rc-common', '--rc-uncommon', '--rc-rare', '--rc-epic', '--rc-legendary'];
+
 /** Map the site's skin variables onto ours (only for dark skins; light skins keep our den palette). */
-function adoptSkin(ui: HTMLElement) {
+function adoptSkin(ui: HTMLElement): string {
+  for (const p of SKIN_PROPS) ui.style.removeProperty(p);
+  let skin = '';
+  try { skin = String(document.documentElement.dataset.skin || ''); } catch { /* no document */ }
+  // the site's skin id (site-ui.js STYLE_SKIN: forge, den, rage, garden, club, inferno, cave) — for skin-specific CSS of ours
+  if (skin) ui.dataset.skin = skin; else delete ui.dataset.skin;
+  // the level medal's ears follow the channel style (cats: cat ears, cherts: horns, others: none)
+  const br = badgeRules(activeStyle()); if (br) ui.dataset.badge = br; else delete ui.dataset.badge;
   try {
     const cs = getComputedStyle(document.documentElement);
     const v = (n: string) => cs.getPropertyValue(n).trim();
@@ -59,6 +74,7 @@ function adoptSkin(ui: HTMLElement) {
     if (hd) ui.style.setProperty('--l3d-hd', hd);
     if (tx) ui.style.setProperty('--l3d-tx', tx);
   } catch { /* no document styles */ }
+  return skin;
 }
 
 /** Mount the game UI. Returns GameUi (contract Ui + settings, addTab/removeTab, prompt, setGameContext). */
@@ -264,6 +280,7 @@ export const mountUi = (root: HTMLElement, host: UiHost): GameUi => {
     removeTab: (id) => { menus.tabRemoved(id); return tabs.remove(id); },
     prompt: (text) => hud.setPrompt(text),
     setGameContext: (g) => { gameCtx = g; },
+    reskin: () => { const s = adoptSkin(ui); hud.setHero(host.store.hero); if (opened) menus.render(); return s; },
     update(dt: number) { hud.update(dt); chat.update(dt); if (opened) menus.tick(dt); },
     dispose() {
       menus.dispose();

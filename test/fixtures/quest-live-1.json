@@ -1,0 +1,7303 @@
+[
+  {
+    "t": 1793196715667,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196714400,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "party",
+        "until": 1793196730040,
+        "round": 2,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            1,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.143,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 1,
+          "k": "tele",
+          "at": 1793196707439,
+          "tk": "shield",
+          "ok": 1,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 16
+            }
+          }
+        ]
+      },
+      "now": 1793196715610
+    }
+  },
+  {
+    "t": 1793196720690,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196720651,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "hit",
+        "until": 1793196730040,
+        "round": 2,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.625,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 1,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 2,
+          "k": "party",
+          "at": 1793196720369,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 15
+            }
+          }
+        ]
+      },
+      "now": 1793196720652
+    }
+  },
+  {
+    "t": 1793196727046,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196725736,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196729970,
+        "round": 2,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.625,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 1,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "ЩИТ",
+          "kind": "shield",
+          "text": "⬅ Слева: 🗡 Удар в спину — по лекарям!",
+          "need": 2,
+          "got": 1,
+          "ok": false
+        },
+        "mine": {
+          "r": 2,
+          "k": "party",
+          "at": 1793196720369,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 15
+            }
+          }
+        ]
+      },
+      "now": 1793196727004
+    }
+  },
+  {
+    "t": 1793196728015,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196727973,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196729970,
+        "round": 2,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.625,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 1,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "ЩИТ",
+          "kind": "shield",
+          "text": "⬅ Слева: 🗡 Удар в спину — по лекарям!",
+          "need": 2,
+          "got": 2,
+          "ok": false
+        },
+        "mine": {
+          "r": 2,
+          "k": "party",
+          "at": 1793196720369,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 15
+            }
+          }
+        ]
+      },
+      "now": 1793196727975
+    }
+  },
+  {
+    "t": 1793196729450,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196729405,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele2",
+        "until": 1793196729970,
+        "round": 2,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.625,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 1,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 2,
+          "k": "tele",
+          "at": 1793196729123,
+          "tk": "shield",
+          "ok": 1,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 14
+            }
+          }
+        ]
+      },
+      "now": 1793196729406
+    }
+  },
+  {
+    "t": 1793196736487,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196735316,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "party",
+        "until": 1793196751724,
+        "round": 3,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.625,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 1,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 2,
+          "k": "tele",
+          "at": 1793196729123,
+          "tk": "shield",
+          "ok": 1,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 14
+            }
+          }
+        ]
+      },
+      "now": 1793196736446
+    }
+  },
+  {
+    "t": 1793196742935,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196742896,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "hit",
+        "until": 1793196751724,
+        "round": 3,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.313,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.429,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 2,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 3,
+          "k": "party",
+          "at": 1793196742613,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 20
+            }
+          }
+        ]
+      },
+      "now": 1793196742899
+    }
+  },
+  {
+    "t": 1793196745534,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196745496,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196752215,
+        "round": 3,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.313,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.429,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 2,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "ПРИГНИСЬ",
+          "kind": "duck",
+          "text": "⬅ Слева: Летят метательные ножи!",
+          "need": 2,
+          "got": 0,
+          "ok": false
+        },
+        "mine": {
+          "r": 3,
+          "k": "party",
+          "at": 1793196742613,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 20
+            }
+          }
+        ]
+      },
+      "now": 1793196745498
+    }
+  },
+  {
+    "t": 1793196749998,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196749959,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196752215,
+        "round": 3,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.313,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.429,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 2,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "ПРИГНИСЬ",
+          "kind": "duck",
+          "text": "⬅ Слева: Летят метательные ножи!",
+          "need": 2,
+          "got": 1,
+          "ok": false
+        },
+        "mine": {
+          "r": 3,
+          "k": "party",
+          "at": 1793196742613,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 20
+            }
+          }
+        ]
+      },
+      "now": 1793196749961
+    }
+  },
+  {
+    "t": 1793196750798,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196750760,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196752215,
+        "round": 3,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.313,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.429,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 2,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "ПРИГНИСЬ",
+          "kind": "duck",
+          "text": "⬅ Слева: Летят метательные ножи!",
+          "need": 2,
+          "got": 2,
+          "ok": false
+        },
+        "mine": {
+          "r": 3,
+          "k": "party",
+          "at": 1793196742613,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player4",
+            "player8",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 20
+            }
+          }
+        ]
+      },
+      "now": 1793196750762
+    }
+  },
+  {
+    "t": 1793196752232,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196752194,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele2",
+        "until": 1793196752215,
+        "round": 3,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.313,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.429,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 2,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 3,
+          "k": "tele",
+          "at": 1793196751910,
+          "tk": "duck",
+          "ok": 1,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 19
+            }
+          }
+        ]
+      },
+      "now": 1793196752196
+    }
+  },
+  {
+    "t": 1793196754830,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196754793,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "party",
+        "until": 1793196774512,
+        "round": 4,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.313,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0.429,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 2,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 3,
+          "k": "tele",
+          "at": 1793196751910,
+          "tk": "duck",
+          "ok": 1,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 19
+            }
+          }
+        ]
+      },
+      "now": 1793196754794
+    }
+  },
+  {
+    "t": 1793196764434,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196764395,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "hit",
+        "until": 1793196774512,
+        "round": 4,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.063,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 3,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 4,
+          "k": "party",
+          "at": 1793196764112,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 16
+            }
+          }
+        ]
+      },
+      "now": 1793196764397
+    }
+  },
+  {
+    "t": 1793196767031,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196766993,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196773713,
+        "round": 4,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.063,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 3,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "СТОЙ",
+          "kind": "shield",
+          "text": "⬅ Слева: Ножи наголо!",
+          "need": 2,
+          "got": 0,
+          "ok": false
+        },
+        "mine": {
+          "r": 4,
+          "k": "party",
+          "at": 1793196764112,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 16
+            }
+          }
+        ]
+      },
+      "now": 1793196766995
+    }
+  },
+  {
+    "t": 1793196771217,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196771175,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196773713,
+        "round": 4,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.063,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 3,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "СТОЙ",
+          "kind": "shield",
+          "text": "⬅ Слева: Ножи наголо!",
+          "need": 2,
+          "got": 2,
+          "ok": false
+        },
+        "mine": {
+          "r": 4,
+          "k": "party",
+          "at": 1793196764112,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 16
+            }
+          }
+        ]
+      },
+      "now": 1793196771178
+    }
+  },
+  {
+    "t": 1793196772160,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196772122,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196773713,
+        "round": 4,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.063,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 3,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "СТОЙ",
+          "kind": "shield",
+          "text": "⬅ Слева: Ножи наголо!",
+          "need": 2,
+          "got": 3,
+          "ok": false
+        },
+        "mine": {
+          "r": 4,
+          "k": "party",
+          "at": 1793196764112,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 16
+            }
+          }
+        ]
+      },
+      "now": 1793196772123
+    }
+  },
+  {
+    "t": 1793196772644,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196772607,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele2",
+        "until": 1793196773713,
+        "round": 4,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.063,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 3,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 4,
+          "k": "tele",
+          "at": 1793196772324,
+          "tk": "shield",
+          "ok": 1,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 12
+            }
+          }
+        ]
+      },
+      "now": 1793196772608
+    }
+  },
+  {
+    "t": 1793196775332,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196775208,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "party",
+        "until": 1793196794925,
+        "round": 5,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0.063,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.714,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 3,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 4,
+          "k": "tele",
+          "at": 1793196772324,
+          "tk": "shield",
+          "ok": 1,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 12
+            }
+          }
+        ]
+      },
+      "now": 1793196775210
+    }
+  },
+  {
+    "t": 1793196787095,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196785316,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196792035,
+        "round": 5,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.571,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "СТОЙ",
+          "kind": "shield",
+          "text": "⬅ Слева: 🗡 Удар в спину — по лекарям!",
+          "need": 2,
+          "got": 0,
+          "ok": false
+        },
+        "mine": {
+          "r": 5,
+          "k": "party",
+          "at": 1793196782434,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 5
+            }
+          }
+        ]
+      },
+      "now": 1793196787047
+    }
+  },
+  {
+    "t": 1793196788424,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196788385,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "tele",
+        "until": 1793196792035,
+        "round": 5,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.571,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": {
+          "word": "СТОЙ",
+          "kind": "shield",
+          "text": "⬅ Слева: 🗡 Удар в спину — по лекарям!",
+          "need": 2,
+          "got": 1,
+          "ok": false
+        },
+        "mine": {
+          "r": 5,
+          "k": "party",
+          "at": 1793196782434,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player3",
+            "player3",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 5
+            }
+          }
+        ]
+      },
+      "now": 1793196788386
+    }
+  },
+  {
+    "t": 1793196794804,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196793515,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "party",
+        "until": 1793196813354,
+        "round": 6,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            1,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.571,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 5,
+          "k": "tele",
+          "at": 1793196790753,
+          "tk": "shield",
+          "ok": 1,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player3",
+            "player3",
+            0.75
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 5
+            }
+          }
+        ]
+      },
+      "now": 1793196794765
+    }
+  },
+  {
+    "t": 1793196802606,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196802567,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "hit",
+        "until": 1793196813354,
+        "round": 6,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.571,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 6,
+          "k": "party",
+          "at": 1793196802285,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": null,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player3",
+            "player3",
+            0.75
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ]
+        ]
+      },
+      "pb": {
+        "k": [
+          "flee"
+        ],
+        "b": [
+          {
+            "l": "🏃 Бежать",
+            "t": "бежать",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "flee"
+            }
+          },
+          {
+            "l": "💰 Откупиться",
+            "t": "откуп",
+            "c": "warn",
+            "g": "esc",
+            "x": {
+              "k": "pay",
+              "pct": 5
+            }
+          }
+        ]
+      },
+      "now": 1793196802569
+    }
+  },
+  {
+    "t": 1793196805233,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196805193,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "end",
+        "until": 1793196813354,
+        "round": 6,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.571,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 6,
+          "k": "party",
+          "at": 1793196802285,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": {
+          "how": "away",
+          "xp": 8,
+          "coins": 0
+        },
+        "drop": 1793196924886,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player3",
+            "player3",
+            0.75
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ]
+        ]
+      },
+      "now": 1793196805197
+    }
+  },
+  {
+    "t": 1793196814491,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196814451,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "end",
+        "until": 1793196813354,
+        "round": 6,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.571,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 6,
+          "k": "party",
+          "at": 1793196802285,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": {
+          "how": "away",
+          "xp": 8,
+          "coins": 0
+        },
+        "drop": 1793196924886,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player3",
+            "player3",
+            0.75
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ]
+        ]
+      },
+      "now": 1793196814454
+    }
+  },
+  {
+    "t": 1793196820566,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196820525,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "end",
+        "until": 1793196813354,
+        "round": 6,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.571,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 6,
+          "k": "party",
+          "at": 1793196802285,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": {
+          "how": "away",
+          "xp": 8,
+          "coins": 0
+        },
+        "drop": 1793196924886,
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player3",
+            "player3",
+            0.75
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ]
+        ]
+      },
+      "now": 1793196820529
+    }
+  },
+  {
+    "t": 1793196820735,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Мельница",
+      "ter": "Мельница",
+      "dl": 4,
+      "at": 1793196820695,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 7,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196679491,
+        "title": "Разбойники",
+        "st": "end",
+        "until": 1793196813354,
+        "round": 6,
+        "maxR": 6,
+        "two": false,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "bandit",
+            1,
+            0,
+            "Атаман"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0.571,
+            "Разбойник"
+          ],
+          [
+            "R",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ],
+          [
+            "L",
+            "bandit",
+            0,
+            0,
+            "Разбойник"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player5",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 5,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": {
+          "r": 6,
+          "k": "party",
+          "at": 1793196802285,
+          "tk": "",
+          "ok": 0,
+          "me": null
+        },
+        "res": {
+          "how": "away",
+          "xp": 8,
+          "coins": 0
+        },
+        "low": [
+          [
+            "player4",
+            "player8",
+            0.65
+          ],
+          [
+            "player3",
+            "player3",
+            0.75
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ]
+        ]
+      },
+      "now": 1793196820698
+    }
+  },
+  {
+    "t": 1793196836673,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196836636,
+      "n": 5,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "vote": {
+        "id": 1793196836354,
+        "end": 1793196866354,
+        "done": false,
+        "win": 0,
+        "title": "Куда идём?",
+        "opts": [
+          [
+            1,
+            "Пещера",
+            "",
+            0,
+            0
+          ],
+          [
+            2,
+            "Овраг",
+            "",
+            0,
+            1
+          ]
+        ],
+        "my": 0
+      },
+      "now": 1793196836637
+    }
+  },
+  {
+    "t": 1793196837294,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196837258,
+      "n": 5,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "vote": {
+        "id": 1793196836354,
+        "end": 1793196866354,
+        "done": true,
+        "win": 0,
+        "title": "Куда идём?",
+        "opts": [
+          [
+            1,
+            "Пещера",
+            "",
+            0,
+            0
+          ],
+          [
+            2,
+            "Овраг",
+            "",
+            0,
+            1
+          ]
+        ],
+        "my": 0
+      },
+      "now": 1793196837259
+    }
+  },
+  {
+    "t": 1793196841296,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196841259,
+      "n": 5,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196841261
+    }
+  },
+  {
+    "t": 1793196847158,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196841259,
+      "n": 5,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196847122
+    }
+  },
+  {
+    "t": 1793196854120,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196853636,
+      "n": 4,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196854080
+    }
+  },
+  {
+    "t": 1793196858746,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196858708,
+      "n": 5,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196858710
+    }
+  },
+  {
+    "t": 1793196859775,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196859738,
+      "n": 4,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196859740
+    }
+  },
+  {
+    "t": 1793196862363,
+    "data": {
+      "on": true,
+      "k": "rest",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793196862327,
+      "n": 4,
+      "roll": {
+        "by": "player1",
+        "n": 4,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196862328
+    }
+  },
+  {
+    "t": 1793196862959,
+    "data": {
+      "on": true,
+      "k": "rest",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793196862923,
+      "n": 5,
+      "roll": {
+        "by": "player1",
+        "n": 4,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196862924
+    }
+  },
+  {
+    "t": 1793196866584,
+    "data": {
+      "on": true,
+      "k": "rest",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793196866548,
+      "n": 6,
+      "roll": {
+        "by": "player1",
+        "n": 4,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196866550
+    }
+  },
+  {
+    "t": 1793196867435,
+    "data": {
+      "on": true,
+      "k": "rest",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793196867399,
+      "n": 7,
+      "roll": {
+        "by": "player1",
+        "n": 4,
+        "tier": "bad"
+      },
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196867400
+    }
+  },
+  {
+    "t": 1793196893065,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196893029,
+      "n": 7,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "vote": {
+        "id": 1793196892746,
+        "end": 1793196922746,
+        "done": false,
+        "win": 0,
+        "title": "Куда идём?",
+        "opts": [
+          [
+            1,
+            "Врата башни",
+            "",
+            0,
+            0
+          ],
+          [
+            2,
+            "Мельница",
+            "",
+            0,
+            1
+          ]
+        ],
+        "my": 0
+      },
+      "now": 1793196893030
+    }
+  },
+  {
+    "t": 1793196893384,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196893349,
+      "n": 7,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "vote": {
+        "id": 1793196892746,
+        "end": 1793196922746,
+        "done": true,
+        "win": 0,
+        "title": "Куда идём?",
+        "opts": [
+          [
+            1,
+            "Врата башни",
+            "",
+            0,
+            0
+          ],
+          [
+            2,
+            "Мельница",
+            "",
+            0,
+            1
+          ]
+        ],
+        "my": 0
+      },
+      "now": 1793196893350
+    }
+  },
+  {
+    "t": 1793196897514,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196897477,
+      "n": 7,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196897478
+    }
+  },
+  {
+    "t": 1793196907079,
+    "data": {
+      "on": true,
+      "k": "battle",
+      "t": "Врата башни",
+      "ter": "Врата башни",
+      "dl": 4,
+      "at": 1793196905913,
+      "n": 7,
+      "roll": {
+        "by": "player9",
+        "n": 16,
+        "tier": "good"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "b": {
+        "id": 1793196905820,
+        "title": "Тёмные стражи",
+        "st": "intro",
+        "until": 1793196910820,
+        "round": 0,
+        "maxR": 6,
+        "two": true,
+        "ambush": false,
+        "cr": {
+          "cam": 1,
+          "cap": 200,
+          "fr": [
+            "L",
+            "R"
+          ],
+          "chaos": false
+        },
+        "foes": [
+          [
+            "R",
+            "mantisGuard",
+            1,
+            1,
+            "Капитан стражи"
+          ],
+          [
+            "L",
+            "mothGuard",
+            0,
+            1,
+            "Мотылёк-страж"
+          ],
+          [
+            "R",
+            "emberGuard",
+            0,
+            1,
+            "Огнекрыл"
+          ],
+          [
+            "L",
+            "mantisGuard",
+            0,
+            1,
+            "Богомол-страж"
+          ],
+          [
+            "R",
+            "mothGuard",
+            0,
+            1,
+            "Мотылёк-страж"
+          ],
+          [
+            "L",
+            "emberGuard",
+            0,
+            1,
+            "Огнекрыл"
+          ]
+        ],
+        "more": 0,
+        "press": {
+          "L": 0,
+          "R": 0,
+          "F": 0
+        },
+        "form": [
+          [
+            "player5",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player10",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player11",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player3",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player4",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ],
+          [
+            "player6",
+            "recruit",
+            "L",
+            0,
+            0,
+            2
+          ],
+          [
+            "player2",
+            "recruit",
+            "R",
+            0,
+            0,
+            2
+          ]
+        ],
+        "me": -1,
+        "fighters": 7,
+        "hp": null,
+        "turn": null,
+        "sk": [],
+        "tele": null,
+        "mine": null,
+        "res": null,
+        "low": [
+          [
+            "player3",
+            "player3",
+            0.75
+          ],
+          [
+            "player5",
+            "player9",
+            0.8
+          ],
+          [
+            "player4",
+            "player8",
+            0.85
+          ],
+          [
+            "player6",
+            "player7",
+            1
+          ],
+          [
+            "player2",
+            "player1",
+            1
+          ],
+          [
+            "player11",
+            "player12",
+            1
+          ],
+          [
+            "player10",
+            "player13",
+            1
+          ]
+        ]
+      },
+      "now": 1793196907043
+    }
+  },
+  {
+    "t": 1793196915809,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196911064,
+      "n": 7,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196915771
+    }
+  },
+  {
+    "t": 1793196924779,
+    "data": {
+      "on": true,
+      "k": "lair",
+      "t": "Чёрная башня",
+      "ter": "Чёрная башня",
+      "dl": 4,
+      "at": 1793196924741,
+      "n": 7,
+      "roll": {
+        "by": "player13",
+        "n": 19,
+        "tier": "good"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "lair": {
+        "phase": 1,
+        "st": "intro",
+        "round": 0,
+        "hp": null,
+        "acted": false
+      },
+      "pb": {
+        "k": [
+          "lairVote"
+        ],
+        "b": [
+          {
+            "l": "🏳 Отступаем всем отрядом",
+            "t": "отступаем",
+            "c": "warn",
+            "g": "esc"
+          }
+        ]
+      },
+      "now": 1793196924743
+    }
+  },
+  {
+    "t": 1793196929951,
+    "data": {
+      "on": true,
+      "k": "lair",
+      "t": "Чёрная башня",
+      "ter": "Чёрная башня",
+      "dl": 4,
+      "at": 1793196929914,
+      "n": 7,
+      "roll": {
+        "by": "player13",
+        "n": 19,
+        "tier": "good"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "lair": {
+        "phase": 1,
+        "st": "party",
+        "round": 1,
+        "hp": null,
+        "acted": false
+      },
+      "pb": {
+        "k": [
+          "lairAct",
+          "lairVote"
+        ],
+        "b": [
+          {
+            "l": "⚔ удар",
+            "t": "удар",
+            "c": "main",
+            "g": "act",
+            "x": {
+              "k": "cls",
+              "role": "legionary,rogue,"
+            }
+          },
+          {
+            "l": "⚔ выстрел",
+            "t": "выстрел",
+            "c": "main",
+            "g": "act",
+            "x": {
+              "k": "cls",
+              "role": "archer"
+            }
+          },
+          {
+            "l": "⚔ магия",
+            "t": "магия",
+            "c": "main",
+            "g": "act",
+            "x": {
+              "k": "cls",
+              "role": "mage,necromancer"
+            }
+          },
+          {
+            "l": "⚔ лечить",
+            "t": "лечить",
+            "c": "main",
+            "g": "act",
+            "x": {
+              "k": "cls",
+              "role": "priest"
+            }
+          },
+          {
+            "l": "🏳 Отступаем всем отрядом",
+            "t": "отступаем",
+            "c": "warn",
+            "g": "esc"
+          }
+        ]
+      },
+      "now": 1793196929915
+    }
+  },
+  {
+    "t": 1793196938032,
+    "data": {
+      "on": true,
+      "k": "lair",
+      "t": "Чёрная башня",
+      "ter": "Чёрная башня",
+      "dl": 4,
+      "at": 1793196937995,
+      "n": 7,
+      "roll": {
+        "by": "player13",
+        "n": 19,
+        "tier": "good"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "lair": {
+        "phase": 1,
+        "st": "party",
+        "round": 1,
+        "hp": null,
+        "acted": false,
+        "rt": 1
+      },
+      "pb": {
+        "k": [
+          "lairAct",
+          "lairVote"
+        ],
+        "b": [
+          {
+            "l": "⚔ удар",
+            "t": "удар",
+            "c": "main",
+            "g": "act",
+            "x": {
+              "k": "cls",
+              "role": "legionary,rogue,"
+            }
+          },
+          {
+            "l": "⚔ выстрел",
+            "t": "выстрел",
+            "c": "main",
+            "g": "act",
+            "x": {
+              "k": "cls",
+              "role": "archer"
+            }
+          },
+          {
+            "l": "⚔ магия",
+            "t": "магия",
+            "c": "main",
+            "g": "act",
+            "x": {
+              "k": "cls",
+              "role": "mage,necromancer"
+            }
+          },
+          {
+            "l": "⚔ лечить",
+            "t": "лечить",
+            "c": "main",
+            "g": "act",
+            "x": {
+              "k": "cls",
+              "role": "priest"
+            }
+          },
+          {
+            "l": "1 · отступаем",
+            "t": "1",
+            "c": "warn",
+            "g": "esc"
+          },
+          {
+            "l": "2 · остаёмся",
+            "t": "2",
+            "c": "main",
+            "g": "esc"
+          }
+        ]
+      },
+      "now": 1793196937996
+    }
+  },
+  {
+    "t": 1793196953082,
+    "data": {
+      "on": true,
+      "k": "lair",
+      "t": "Чёрная башня",
+      "ter": "Чёрная башня",
+      "dl": 4,
+      "at": 1793196953045,
+      "n": 7,
+      "roll": {
+        "by": "player13",
+        "n": 19,
+        "tier": "good"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "lair": {
+        "phase": 1,
+        "st": "hits",
+        "round": 1,
+        "hp": null,
+        "acted": false,
+        "rt": 1
+      },
+      "pb": {
+        "k": [
+          "lairVote"
+        ],
+        "b": [
+          {
+            "l": "1 · отступаем",
+            "t": "1",
+            "c": "warn",
+            "g": "esc"
+          },
+          {
+            "l": "2 · остаёмся",
+            "t": "2",
+            "c": "main",
+            "g": "esc"
+          }
+        ]
+      },
+      "now": 1793196953046
+    }
+  },
+  {
+    "t": 1793196955283,
+    "data": {
+      "on": true,
+      "k": "lair",
+      "t": "Чёрная башня",
+      "ter": "Чёрная башня",
+      "dl": 4,
+      "at": 1793196955246,
+      "n": 7,
+      "roll": {
+        "by": "player13",
+        "n": 19,
+        "tier": "good"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "lair": {
+        "phase": 1,
+        "st": "boss",
+        "round": 1,
+        "hp": null,
+        "acted": false,
+        "rt": 1
+      },
+      "pb": {
+        "k": [
+          "lairVote"
+        ],
+        "b": [
+          {
+            "l": "1 · отступаем",
+            "t": "1",
+            "c": "warn",
+            "g": "esc"
+          },
+          {
+            "l": "2 · остаёмся",
+            "t": "2",
+            "c": "main",
+            "g": "esc"
+          }
+        ]
+      },
+      "now": 1793196955248
+    }
+  },
+  {
+    "t": 1793196959148,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196959112,
+      "n": 7,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196959114
+    }
+  },
+  {
+    "t": 1793196967221,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196959112,
+      "n": 7,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196967185
+    }
+  },
+  {
+    "t": 1793196967729,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196967693,
+      "n": 8,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196967694
+    }
+  },
+  {
+    "t": 1793196974142,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196967693,
+      "n": 8,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196974106
+    }
+  },
+  {
+    "t": 1793196984607,
+    "data": {
+      "on": true,
+      "k": "travel",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196984571,
+      "n": 8,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196984572
+    }
+  },
+  {
+    "t": 1793196985907,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793196985871,
+      "n": 8,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793196985872
+    }
+  },
+  {
+    "t": 1793196996412,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793196996375,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "intro",
+        "until": 0,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 0,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 0,
+        "res": null
+      },
+      "now": 1793196996376
+    }
+  },
+  {
+    "t": 1793197001414,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197001377,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "act",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 0,
+        "res": null
+      },
+      "now": 1793197001378
+    }
+  },
+  {
+    "t": 1793197006896,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197006857,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "act",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 1,
+        "res": null
+      },
+      "now": 1793197006859
+    }
+  },
+  {
+    "t": 1793197007427,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197007388,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "act",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ],
+          [
+            "1623",
+            "rygr",
+            "player8"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 2,
+        "res": null
+      },
+      "now": 1793197007391
+    }
+  },
+  {
+    "t": 1793197010900,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197010859,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "act",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player12"
+          ],
+          [
+            "1623",
+            "rygr",
+            "player8"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 4,
+        "res": null
+      },
+      "now": 1793197010864
+    }
+  },
+  {
+    "t": 1793197017110,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197017068,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "act",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "3224",
+            "rggg",
+            "player1"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player12"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 5,
+        "res": null
+      },
+      "now": 1793197017070
+    }
+  },
+  {
+    "t": 1793197018660,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197018623,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "act",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "3224",
+            "rggg",
+            "player1"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player12"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 6,
+        "res": null
+      },
+      "now": 1793197018624
+    }
+  },
+  {
+    "t": 1793197020239,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197020199,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "act",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "6224",
+            "gggg",
+            "player3"
+          ],
+          [
+            "3224",
+            "rggg",
+            "player1"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 7,
+        "res": null
+      },
+      "now": 1793197020201
+    }
+  },
+  {
+    "t": 1793197021710,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197021658,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "fire",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "6224",
+            "gggg",
+            "player3"
+          ],
+          [
+            "3224",
+            "rggg",
+            "player1"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 7,
+        "res": {
+          "win": true,
+          "text": "player3 подобрал код 6 2 2 4 — руны вспыхнули, дверь со скрежетом поехала в сторону!",
+          "okN": 7,
+          "me": {
+            "dmg": 0,
+            "gain": 0,
+            "xp": 0
+          },
+          "sv": 1
+        }
+      },
+      "now": 1793197021674
+    }
+  },
+  {
+    "t": 1793197027285,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197025137,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "done",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "6224",
+            "gggg",
+            "player3"
+          ],
+          [
+            "3224",
+            "rggg",
+            "player1"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 7,
+        "res": {
+          "win": true,
+          "text": "player3 подобрал код 6 2 2 4 — руны вспыхнули, дверь со скрежетом поехала в сторону!",
+          "okN": 7,
+          "me": {
+            "dmg": 0,
+            "gain": 0,
+            "xp": 0
+          },
+          "sv": 1
+        }
+      },
+      "now": 1793197027248
+    }
+  },
+  {
+    "t": 1793197036577,
+    "data": {
+      "on": true,
+      "k": "treasure",
+      "t": "Пещера",
+      "ter": "Пещера",
+      "dl": 4,
+      "at": 1793197025137,
+      "n": 8,
+      "roll": {
+        "by": "player1",
+        "n": 8,
+        "tier": "mid"
+      },
+      "party": null,
+      "late": [],
+      "cm": false,
+      "tr": {
+        "name": "Дверь с рунами",
+        "icon": "🔐",
+        "type": "code",
+        "st": "done",
+        "until": 1793197081091,
+        "intro": "Дверь заперта рунами. Руны могут повторяться! Дверь подсветит каждую руну - 🟢 на своём месте, 🟡 есть в коде, но не там, 🔴 лишняя. До трёх попыток на человека за всю сокровищницу, всего - сколько ус",
+        "how": "Код из 4 рун (цифры 1–6, руны могут повторяться): «код 1 2 3 4»",
+        "word": "",
+        "total": 8,
+        "gas": false,
+        "tre": 1,
+        "n": 0,
+        "len": 4,
+        "max": 6,
+        "per": 3,
+        "best": [
+          [
+            "6224",
+            "gggg",
+            "player3"
+          ],
+          [
+            "3224",
+            "rggg",
+            "player1"
+          ],
+          [
+            "1234",
+            "rgrg",
+            "player7"
+          ]
+        ],
+        "rd2": {
+          "door": 1,
+          "dbl": 0,
+          "ep": 0,
+          "ang": {
+            "at": 1793197022815.868,
+            "ev": 26.5,
+            "fl": 0
+          },
+          "ph": "",
+          "vote": null,
+          "left": 3,
+          "my": ""
+        },
+        "acted": false,
+        "actedN": 7,
+        "res": {
+          "win": true,
+          "text": "player3 подобрал код 6 2 2 4 — руны вспыхнули, дверь со скрежетом поехала в сторону!",
+          "okN": 7,
+          "me": {
+            "dmg": 0,
+            "gain": 0,
+            "xp": 0
+          },
+          "sv": 1
+        }
+      },
+      "now": 1793197036541
+    }
+  },
+  {
+    "t": 1793197052772,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793197052736,
+      "n": 8,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "vote": {
+        "id": 1793197052454,
+        "end": 1793197082454,
+        "done": false,
+        "win": 0,
+        "title": "Куда идём?",
+        "opts": [
+          [
+            1,
+            "Заброшенная деревня",
+            "",
+            0,
+            0
+          ],
+          [
+            2,
+            "Врата башни",
+            "",
+            0,
+            1
+          ]
+        ],
+        "my": 0
+      },
+      "now": 1793197052738
+    }
+  },
+  {
+    "t": 1793197055591,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793197055555,
+      "n": 8,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "vote": {
+        "id": 1793197052454,
+        "end": 1793197082454,
+        "done": true,
+        "win": 0,
+        "title": "Куда идём?",
+        "opts": [
+          [
+            1,
+            "Заброшенная деревня",
+            "",
+            0,
+            0
+          ],
+          [
+            2,
+            "Врата башни",
+            "",
+            0,
+            1
+          ]
+        ],
+        "my": 0
+      },
+      "now": 1793197055556
+    }
+  },
+  {
+    "t": 1793197059591,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793197059555,
+      "n": 8,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793197059557
+    }
+  },
+  {
+    "t": 1793197070343,
+    "data": {
+      "on": true,
+      "k": "map",
+      "t": "",
+      "ter": "",
+      "dl": 4,
+      "at": 1793197070306,
+      "n": 7,
+      "roll": null,
+      "party": null,
+      "late": [],
+      "cm": true,
+      "now": 1793197070308
+    }
+  },
+  {
+    "t": 1793197079061,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197079026
+    }
+  },
+  {
+    "t": 1793197087043,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197087004
+    }
+  },
+  {
+    "t": 1793197097020,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197096984
+    }
+  },
+  {
+    "t": 1793197147135,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197147097
+    }
+  },
+  {
+    "t": 1793197157518,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197157482
+    }
+  },
+  {
+    "t": 1793197207096,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197207061
+    }
+  },
+  {
+    "t": 1793197216049,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197216014
+    }
+  },
+  {
+    "t": 1793197266806,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197266771
+    }
+  },
+  {
+    "t": 1793197274311,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197274276
+    }
+  },
+  {
+    "t": 1793197327424,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197327389
+    }
+  },
+  {
+    "t": 1793197333704,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197333669
+    }
+  },
+  {
+    "t": 1793197387144,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197387099
+    }
+  },
+  {
+    "t": 1793197396201,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197396164
+    }
+  },
+  {
+    "t": 1793197447097,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197447062
+    }
+  },
+  {
+    "t": 1793197456632,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197456594
+    }
+  },
+  {
+    "t": 1793197507002,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197506963
+    }
+  },
+  {
+    "t": 1793197517164,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197517125
+    }
+  },
+  {
+    "t": 1793197567168,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197567133
+    }
+  },
+  {
+    "t": 1793197577702,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197577662
+    }
+  },
+  {
+    "t": 1793197626939,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197626904
+    }
+  },
+  {
+    "t": 1793197634013,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197633977
+    }
+  },
+  {
+    "t": 1793197686971,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197686935
+    }
+  },
+  {
+    "t": 1793197694470,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197694432
+    }
+  },
+  {
+    "t": 1793197747511,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197747473
+    }
+  },
+  {
+    "t": 1793197753865,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197753829
+    }
+  },
+  {
+    "t": 1793197807096,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197807059
+    }
+  },
+  {
+    "t": 1793197816362,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197816322
+    }
+  },
+  {
+    "t": 1793197867065,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197867024
+    }
+  },
+  {
+    "t": 1793197873778,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197873738
+    }
+  },
+  {
+    "t": 1793197927380,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197927338
+    }
+  },
+  {
+    "t": 1793197935252,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197935213
+    }
+  },
+  {
+    "t": 1793197987320,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197987280
+    }
+  },
+  {
+    "t": 1793197993637,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793197993597
+    }
+  },
+  {
+    "t": 1793198046920,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198046874
+    }
+  },
+  {
+    "t": 1793198056050,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198056010
+    }
+  },
+  {
+    "t": 1793198107063,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198107022
+    }
+  },
+  {
+    "t": 1793198114537,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198114497
+    }
+  },
+  {
+    "t": 1793198166904,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198166864
+    }
+  },
+  {
+    "t": 1793198173834,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198173792
+    }
+  },
+  {
+    "t": 1793198227000,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198226955
+    }
+  },
+  {
+    "t": 1793198234242,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198234200
+    }
+  },
+  {
+    "t": 1793198286904,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198286862
+    }
+  },
+  {
+    "t": 1793198293654,
+    "data": {
+      "on": false,
+      "dl": 4,
+      "late": [],
+      "now": 1793198293609
+    }
+  }
+]

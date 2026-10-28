@@ -21,20 +21,71 @@ export interface FakeOpts {
   login: string; enter: MinePayload; hero: FakeHero; bus: FakeBus;
   /** Seconds a stone takes to dig (fast for demos). */
   digSec?: number; bots?: boolean; log?: (p: string, b: unknown) => void;
+  /** Demo states of the site's newer HUD parts (default: read from the page query when there is one, see demoFromQuery). */
+  demo?: FakeDemo;
+}
+/** econ: the stones keep a measured dig rate and diggers (the captured `bl` re-based to now, synthesized for front stones without one), so the estimate sign has real numbers;
+ *  (new front stones get one too when a stone breaks); news: «Пока тебя не было» summary; qc: shared weekly quest (prog / ready = done for me and not taken / nomin = done but own share too small / cl = taken); limit: daily cap (low = 40 min left, full = used up). */
+export interface FakeDemo { econ?: boolean; news?: boolean; qc?: 'prog' | 'ready' | 'nomin' | 'cl'; limit?: 'low' | 'full'; /** me.fx.q: the stone queue (site testers' flag). */ fxq?: boolean; /** a made-up last week in st.hist («Итоги шахты»). */ hist?: boolean }
+/** ?econ=1 &news=1 &qc=prog|ready|nomin|cl &limit=low|full of the dev page (dev/mine.ts). */
+export function demoFromQuery(search: string): FakeDemo {
+  const q = new URLSearchParams(search), d: FakeDemo = {};
+  if (q.get('econ') === '1') d.econ = true;
+  if (q.get('news') === '1') d.news = true;
+  if (q.get('fxq') === '1') d.fxq = true;
+  if (q.get('hist') === '1') d.hist = true;
+  const qc = q.get('qc'); if (qc === 'prog' || qc === 'ready' || qc === 'nomin' || qc === 'cl') d.qc = qc;
+  const lim = q.get('limit'); if (lim === 'low' || lim === 'full') d.limit = lim;
+  return d;
+}
+/** Applies a demo to a «me» record (pure; used by FakeMine and tests). */
+export function applyDemo(me: MineMe, d: FakeDemo, now = Date.now()): void {
+  if (d.fxq) me.fx = { ...(me.fx || {}), q: 1 };
+  if (d.news) me.news = { b: 7, f: 1, c: 14, cx: 14.4, r: { iron: 3, coal: 1 }, p: { iron: 42, limestone: 30 }, at: now - 3 * 3600e3 };
+  if (d.qc) {
+    const min = 30, g = 6000, nomin = d.qc === 'nomin';
+    me.q = me.q || { d: [], w: [] };
+    me.q.c = { id: 'c0', t: 'Вместе выкопайте камней: 6000', p: d.qc === 'prog' ? 4210 : g, g, c: 150, min, me: nomin ? 12 : d.qc === 'prog' ? 38 : 44, n: 212, ok: nomin ? 0 : 1, done: d.qc === 'prog' ? 0 : 1, cl: d.qc === 'cl' ? 1 : 0 };
+    // the daily and weekly quests of the captured account are all taken: only q.c can light the claim button
+    for (const x of [...me.q.d, ...me.q.w]) { x.done = 1; x.cl = 1; }
+  }
+  if (d.limit && me.cap > 0) me.day = d.limit === 'full' ? me.cap : Math.max(0, me.cap - 40);
+}
+
+/**
+ * Econ demo (pure; FakeMine and tests): re-bases the snapshot to `now` and gives every front stone a measured dig
+ * state [left, total work, rate/min, diggers]: captured ones keep their rate and diggers (at least 35 % of the work
+ * left), the others get a plausible deterministic one (3–15 diggers, 15–55 min). Diggers' logins are made up.
+ */
+export function applyEconDemo(st: MineView, now = Date.now(), initial = true): void {
+  st.at = now;
+  const bl = (st.bl = st.bl || {}), dg = (st.dg = st.dg || {});
+  for (const i of st.front || []) {
+    const c = st.fl?.c[i]; if (!c || !(c[1] > 0)) continue;
+    const b = bl[i];
+    if (b) { if (initial) b[0] = Math.max(b[0], b[1] * 0.35); continue; }
+    const h = (i * 2654435761) >>> 0, n = 3 + (h % 13), min = 15 + ((h >>> 8) % 41), w = 0.3 * c[1] * c[1];
+    bl[i] = [w * (0.5 + ((h >>> 16) % 40) / 100), w, w / min * (0.6 + ((h >>> 4) % 30) / 100), n] as Bl;
+    dg[i] = Array.from({ length: Math.min(4, n) }, (_, k) => `miner${(i * 7 + k) % 97 + 1}`);
+  }
 }
 
 /** Fake game server. api(path, body) answers like the real one (shapes as in docs/MINE.md). */
 export class FakeMine {
   st: MineView; me: MineMe; calls: { p: string; b: unknown }[] = [];
-  private o: FakeOpts; private timers: any[] = []; private resN = 0; private bots: { l: string; x: number; y: number; tx: number; ty: number }[] = [];
+  private econ = false; private o: FakeOpts; private timers: any[] = []; private resN = 0; private bots: { l: string; x: number; y: number; tx: number; ty: number }[] = [];
   constructor(o: FakeOpts) {
     this.o = o;
     this.st = JSON.parse(JSON.stringify(o.enter.st));
     this.me = JSON.parse(JSON.stringify(o.enter.me));
     this.me.fx = { m2: 1, b: 1, pk: 1, sh: 1, ...(this.me.fx || {}) };
     this.me.day = 0;   // a fresh day: the captured account had used its daily cap
+    const demo = o.demo ?? (typeof location !== 'undefined' ? demoFromQuery(location.search) : {});
+    applyDemo(this.me, demo);
     o.hero.mn = { ...(o.hero.mn || {}), [o.enter.c || 'home']: this.me };
     this.st.front = frontOf(this.dugA(), this.st.fl!.c.map((c) => c[0]));
+    if (demo.econ) { this.econ = true; applyEconDemo(this.st); }
+    if (demo.hist && !(this.st.hist && this.st.hist.length)) this.st.hist = [{ floor: 31, players: 520, top: (this.st.top || []).slice(0, 5).map(([l, u]) => ({ l, u: Math.round(u * 1.2) })) }];
     if (o.bots !== false) this.startBots();
     // the server finishes stones: tick every 500 ms
     this.timers.push(setInterval(() => this.tick(), 500));
@@ -60,9 +111,16 @@ export class FakeMine {
         if (lk) r.lk = Object.fromEntries(decodeURIComponent(lk[1]).split(',').map((l, k) => [l, { n: l, lv: 3 + (k % 5), lk: { color: ['#f2c14e', '#b9a2ff', '#7fd35f', '#ff8fa3', '#8ac8e8'][k % 5] }, g: { h: 'miner' } }]));
         return r;
       }
-      case '/api/mine/go': case '/api/mine/ping': case '/api/mine/leave': case '/api/mineSeen': return { ok: true };
+      case '/api/mine/go': case '/api/mine/ping': case '/api/mine/leave': return { ok: true };
+      case '/api/mineSeen': delete this.me.news; return { ok: true };
       case '/api/mineDig': {
         const i = +b.i; if (!(this.st.front || []).includes(i)) return { ok: false, error: 'К этому камню пока не подойти' };
+        // queue (site queueRock): the same stone with q → only the queue changes
+        if (Array.isArray(b.q)) {
+          if (!this.me.fx || !this.me.fx.q || this.me.i !== i) return { ok: false, error: 'Очередь недоступна' };
+          this.me.qq = b.q.map(Number).filter((x: number) => x !== i).slice(-2); return { ok: true };
+        }
+        this.me.qq = [];
         this.rebase(); this.unDig(L);
         const dg = (this.st.dg = this.st.dg || {}), bl = (this.st.bl = this.st.bl || {});
         dg[i] = [L, ...(dg[i] || []).filter((x) => x !== L)].slice(0, 4);
@@ -72,7 +130,7 @@ export class FakeMine {
         bl[i] = (old ? [leftNow, old[1], old[2] * (1 + 1 / Math.max(1, old[3])), old[3] + 1] : [w, w, w / (sec / 60), 1]) as Bl;
         this.me.i = i; this.push(); return { ok: true };
       }
-      case '/api/mineStop': this.unDig(L); this.me.i = -1; this.push(); return { ok: true };
+      case '/api/mineStop': this.unDig(L); this.me.i = -1; this.me.qq = []; this.push(); return { ok: true };
       case '/api/mineBuy': {
         const id = 'r' + ++this.resN, lines: [string, number][] = b.lines || [];
         this.timers.push(setTimeout(() => {
@@ -84,13 +142,27 @@ export class FakeMine {
       }
       case '/api/mineSell': this.me.bag = { c: 0, r: {}, p: {} }; return { ok: true };
       case '/api/mineLamp': this.timers.push(setTimeout(() => { this.o.hero.items.push({ uid: 'ihelm' + this.resN++, id: 'miner_helmet', name: 'Каска шахтёра', slot: 'helmet', on: false, wearable: true }); this.heroSnap(); }, 600)); return { ok: true };
-      case '/api/mineClaim': { for (const x of [...(this.me.q?.d || []), ...(this.me.q?.w || [])]) if (x.done) x.cl = 1; return { ok: true }; }
+      case '/api/mineClaim': { for (const x of [...(this.me.q?.d || []), ...(this.me.q?.w || [])]) if (x.done) x.cl = 1; const qc = this.me.q?.c; if (qc && qc.done && qc.ok) qc.cl = 1; return { ok: true }; }
       case '/api/minePick': { const id = 'r' + ++this.resN; this.timers.push(setTimeout(() => { if (this.me.pkx) this.me.pkx.lv = b.to; this.heroSnap([{ id, ok: true, x: { op: 'minePick', to: b.to } }]); }, 700)); return { ok: true, id }; }
       case '/api/mineOreBag': { const id = 'r' + ++this.resN; this.timers.push(setTimeout(() => { if (this.me.pkx) this.me.pkx.ob = { cap: this.me.pkx.obC, used: 0 }; this.heroSnap([{ id, ok: true, x: { op: 'mineOreBag' } }]); }, 700)); return { ok: true, id }; }
       case '/api/mine/chat/say': this.o.bus.emit('sse:mine', { chatRoom: 'mine', chat: [{ id: 'c' + Date.now(), l: L, n: L, t: b.text, at: Date.now() }] }); return { ok: true };
       case '/api/equip': { const it = this.o.hero.items.find((x) => x.uid === b.uid); if (it) { for (const o of this.o.hero.items) if (o.slot === it.slot) o.on = false; it.on = true; } this.heroSnap(); return { ok: true }; }
     }
     return { ok: false, error: 'fake: ' + path };
+  }
+  private nextQueued = false;
+  private takeQueued(): void {
+    const L = this.o.login, q = (this.me.qq || []).slice();
+    while (q.length) {
+      const i = q.shift()!;
+      if (this.st.dug[i] === '1' || !(this.st.front || []).includes(i)) continue;
+      const dg = (this.st.dg = this.st.dg || {}), bl = (this.st.bl = this.st.bl || {}), sec = this.o.digSec ?? 8, w = sec * 10, old = bl[i];
+      dg[i] = [L, ...(dg[i] || []).filter((x) => x !== L)].slice(0, 4);
+      bl[i] = (old ? [Math.max(1, old[0]), old[1], old[2] * (1 + 1 / Math.max(1, old[3])), old[3] + 1] : [w, w, w / (sec / 60), 1]) as Bl;
+      this.me.i = i; break;
+    }
+    this.me.qq = q;
+    this.heroSnap();
   }
   private unDig(L: string): void {
     for (const [k, ls] of Object.entries(this.st.dg || {})) {
@@ -112,13 +184,20 @@ export class FakeMine {
       if (ls.includes(this.o.login)) {
         const q = got[this.o.login]; const it = this.o.hero.items.find((x) => x.qty && x.res === r);
         if (it) it.q += q; else this.o.hero.items.push({ uid: 'ore_' + r, id: 'ore_' + r, name: r, slot: 'material', mat: 'ore', qty: true, q, res: r });
+        const qc = this.me.q?.c; if (qc && !qc.done) { qc.p++; qc.me++; qc.ok = qc.me >= qc.min ? 1 : 0; if (qc.p >= qc.g) qc.done = 1; }
         this.me.i = -1; this.me.bag = { ...(this.me.bag || { c: 0, r: {} }), cx: +((this.me.bag?.cx || 0) + 0.4).toFixed(2) };
+        this.nextQueued = true;
         this.heroSnap();
       }
       this.st.log = [{ t: `${ls[0] || 'кто-то'} выкопал камень ${cell[1]} ур.`, at: now }, ...(this.st.log || [])].slice(0, 12);
       ch = true;
     }
-    if (ch) { this.st.front = frontOf(this.dugA(), this.st.fl!.c.map((c) => c[0])); this.push(); }
+    if (ch) {
+      this.st.front = frontOf(this.dugA(), this.st.fl!.c.map((c) => c[0])); if (this.econ) { this.rebase(); applyEconDemo(this.st, this.st.at, false); }
+      // the game takes the next queued stone by itself (site: «герой возьмёт их сам»)
+      if (this.nextQueued) { this.nextQueued = false; this.takeQueued(); }
+      this.push();
+    }
   }
   private presenceA() { return this.bots.map((b) => ({ l: b.l, n: b.l, lv: 4, lk: { color: '#b9a2ff' }, g: { h: 'miner' }, x: b.x, y: b.y, tx: b.tx, ty: b.ty, dt: 0 })); }
   private startBots(): void {

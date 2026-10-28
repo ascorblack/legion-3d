@@ -24,6 +24,11 @@ export function addHat(p: Parts, id: string, k: HatCtx): number {
   const rk = RANK[k.rar || 'common'] || 0, rc = k.rar && k.rar !== 'common' ? RARITY_COLOR[k.rar] : null;
   const dz = d.depth;
   const brimOval = (r: number) => [1, 1, dz] as [number, number, number];
+  // the site draws hats on a head of half-width hw = 22 units: u converts its units to metres on this head
+  const u = hr / 22;
+  // a point on the front of an ellipsoid (rx, ry, rz) centred at (0, cy, 0); front = −Z, the site's +x = our −x
+  const onFront = (x: number, y: number, rx: number, ry: number, rz: number, cy: number, lift = 0.004): [number, number, number] =>
+    [-x, cy + y, -Math.sqrt(Math.max(0, 1 - (x / rx) ** 2 - (y / ry) ** 2)) * rz - lift];
   switch (id) {
     case 'none': return 0;
     case 'tuft':
@@ -67,11 +72,16 @@ export function addHat(p: Parts, id: string, k: HatCtx): number {
       }
       return 0.26;
     }
-    case 'cat': case 'batears':
+    case 'batears':
+      // hwHats batears: two long dark-violet bat ears splayed out past the head with a ragged inner edge and a pink stripe
       for (const s of [-1, 1]) {
-        p.add(cone(0.065, 0.15, 4), id === 'batears' ? '#3a2f44' : k.c1, T(s * hr * 0.62, hy + 0.05, 0, 0, Math.PI / 4, s * -0.3, [1, 1, 0.45]));
-        if (id === 'batears') p.add(cone(0.065, 0.15, 4), '#3a2f44', T(s * hr * 0.62, hy + 0.05, 0, 0, Math.PI / 4, s * -0.3, [1.25, 0.7, 0.3]));
+        const x0 = hr * 0.35, x1 = hr + 12 * u, pts: [number, number][] = [[x0, -6 * u], [x1, 26 * u], [x1 - 4 * u, 14 * u], [x1 - 10 * u, 13 * u], [x1 - 12 * u, 4 * u], [hr * 0.8, -2 * u]];
+        p.add(slab(pts.map(([x, y]) => [s * x, y] as [number, number]), 0.035), '#3a2e4a', T(0, hy, -0.01, 0, s * 0.25, 0));
+        p.add(tube([[s * (x0 + 3 * u), hy - 2 * u, -0.03], [s * (x1 - 3 * u), hy + 18 * u, -0.03 - s * s * 0.01]], 1.5 * u, 4, 4), '#ff8fa3');
       }
+      return 0.3;
+    case 'cat':
+      for (const s of [-1, 1]) p.add(cone(0.065, 0.15, 4), k.c1, T(s * hr * 0.62, hy + 0.05, 0, 0, Math.PI / 4, s * -0.3, [1, 1, 0.45]));
       return 0.14;
     case 'bunny':
       for (const s of [-1, 1]) {
@@ -122,14 +132,27 @@ export function addHat(p: Parts, id: string, k: HatCtx): number {
       p.add(cyl(hr * 0.68, hr * 0.68, 0.12, 16), '#ffffff', T(0, hy + 0.06, 0));
       p.add(sphere(hr * 0.85, 14, 8), '#ffffff', T(0, hy + 0.17, 0, 0, 0, 0, [1, 0.7, 1]));
       return 0.25;
-    case 'pumpkin':
-      p.add(sphere(hr * 0.95, 16, 10), '#ff8a1f', T(0, hy + 0.05, 0, 0, 0, 0, [1.1, 0.75, dz * 1.1]));
-      p.add(cyl(0.015, 0.02, 0.05, 6), '#3f8f3a', T(0, hy + 0.15, 0));
-      return 0.17;
-    case 'skull':
-      p.add(new THREE.SphereGeometry(hr * 1.06, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), BONE, T(0, hy - 0.06, 0, 0, 0, 0, [1, 1, dz * 1.06]));
-      for (const s of [-1, 1]) p.add(sphere(0.03, 8, 6), INK, T(s * 0.05, hy + 0.05, -hr * dz * 0.95));
-      return 0.12;
+    case 'pumpkin': {
+      // hwHats pumpkin: a wide flat jack-o'-lantern (rx = hw + 7, ry = 15) with rust ribs, yellow triangle eyes and a
+      // jagged grin, a curled green stem with a leaf
+      const rx = 29 * u, ry = 15 * u, rz = 29 * u * dz, cy = hy + 6 * u;
+      p.add(sphere(1, 18, 10), '#ff7a1a', T(0, cy, 0, 0, 0, 0, [rx, ry, rz]));
+      for (const x of [-0.45, 0, 0.45]) p.add(tube([-0.85, -0.45, 0, 0.45, 0.85].map((y) => onFront(x * rx * (1 - Math.abs(y) * 0.25), y * ry, rx, ry, rz, cy, 0.0)), 1.3 * u, 8, 4), '#c4520e');
+      for (const sx of [-7, 7]) p.add(slab([[-5 * u, -3.5 * u], [5 * u, -3.5 * u], [0, 3.5 * u]], 0.01), '#ffd34d', T(...onFront(sx * u, 2 * u, rx, ry, rz, cy)));
+      p.add(slab([[-11 * u, 0], [-8 * u, -3 * u], [-5 * u, -1 * u], [-2 * u, -4 * u], [1 * u, -1 * u], [4 * u, -4 * u], [7 * u, -1 * u], [11 * u, 0], [0, -6 * u]], 0.01), '#ffd34d', T(...onFront(0, -4 * u, rx, ry, rz, cy, 0.002)));
+      p.add(tube([[2 * u, cy + ry - 2 * u, 0], [1 * u, cy + ry + 6 * u, 0], [-5 * u, cy + ry + 10 * u, 0]], 2.5 * u, 6, 5), '#4e7a2e');
+      p.add(sphere(5 * u, 8, 5), '#6fae3a', T(-9 * u, cy + ry + 9 * u, 0, 0, 0, 0.4, [1.4, 0.5, 0.5]));
+      return ry * 2 + 10 * u;
+    }
+    case 'skull': {
+      // hwHats skull: a tall bone cap rising 24 units over the head with big round ink sockets, a triangle nose and a crack
+      const rx = hr + 5 * u, ry = 30 * u, rz = (hr + 5 * u) * dz, cy = hy - 6 * u;
+      p.add(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.56), '#efe6d2', T(0, cy, 0, 0, 0, 0, [rx, ry, rz]));
+      for (const sx of [-8, 8]) p.add(sphere(5.8 * u, 12, 8), INK, T(...onFront(sx * u, 7 * u, rx, ry, rz, cy, 0), 0, 0, 0, [1, 1.1, 0.4]));
+      p.add(slab([[-2.2 * u, 0], [2.2 * u, 0], [0, 4.4 * u]], 0.01), INK, T(...onFront(0, -1.5 * u, rx, ry, rz, cy, 0.0)));
+      p.add(tube([onFront(-13 * u, 17 * u, rx, ry, rz, cy, 0.002), onFront(-10 * u, 14 * u, rx, ry, rz, cy, 0.002), onFront(-11 * u, 10 * u, rx, ry, rz, cy, 0.002)], 1 * u, 4, 4), '#bdb2a0');
+      return 24 * u;
+    }
     case 'scarehat':
       p.add(cyl(hr * 1.6, hr * 1.6, 0.02, 12), '#b9945a', T(0, hy, 0, 0, 0, 0.08, brimOval(1)));
       p.add(cone(hr * 0.8, 0.22, 10), '#c9a46a', T(0, hy + 0.1, 0, 0, 0, 0.08));
@@ -144,30 +167,63 @@ export function addHat(p: Parts, id: string, k: HatCtx): number {
     }
     case 'rhood': case 'rmask': case 'nhood': case 'reaper': {
       const col = id === 'nhood' ? ['#3b3644', '#2a2633', '#221c33', '#1d1230', '#140a1c'][rk] : id === 'reaper' ? '#1e1a26' : ['#5a4e44', '#3e3530', '#2e2a2c', '#241f2c', '#1d1824'][rk];
-      // a shell over the back/top of the head, open in the face area
-      const g = new THREE.SphereGeometry(1, 20, 12, Math.PI * 0.22, Math.PI * 1.56, 0, Math.PI * 0.62);
-      p.add(g, col, T(0, d.eyeY - 0.02, 0, 0, Math.PI, 0, [radiusAt(d, d.eyeY) * 1.12, (d.top - d.eyeY) + 0.08, radiusAt(d, d.eyeY) * dz * 1.12]));
-      p.add(cone(0.06, 0.14, 8), col, T(0, d.top + 0.04, 0.04, -0.5));
-      p.add(torus(radiusAt(d, d.eyeY) * 0.98, 0.012, 4, 20, Math.PI * 0.9), rc || (id === 'nhood' ? BONE : '#8a7460'), T(0, d.eyeY - 0.01, -0.01, 0, 0, Math.PI * 0.05));
-      if (id === 'nhood' && rk >= 1) { p.add(sphere(0.04, 8, 6), BONE, T(0, d.top + 0.02, -radiusAt(d, d.top - 0.05) * dz - 0.02)); }
+      // classHat hood: a shell over the back/top of the head that frames the whole face (opening ≈ 150°), rising over
+      // the head (rhood: a curled tip to the side; nhood: a tall pointed gothic arch with a skull mark), a light rim
+      const er = radiusAt(d, d.eyeY), tall = id === 'nhood' ? 34 * u : 22 * u;
+      // SphereGeometry: z = sin(phi)·sin(theta) — keep phi around +π/2 (the back), the face (phi = 1.5π) open
+      const g = new THREE.SphereGeometry(1, 20, 12, Math.PI * 0.5 - Math.PI * 0.6, Math.PI * 1.2, 0, Math.PI * 0.64);
+      const sy = (d.top - d.eyeY) + tall * 0.55, cy = d.eyeY - 0.02;
+      p.add(g, col, T(0, cy, 0, 0, 0, 0, [er * 1.16, sy, er * dz * 1.16]));
+      const rimR = er * 1.12;
+      p.add(torus(1, 0.012 / rimR, 4, 22, Math.PI * 1.1), rc || (id === 'nhood' ? BONE : '#8a7460'), T(0, cy, -er * dz * 0.36, 0, 0, -Math.PI * 0.05, [rimR, sy * 0.96, 1]));
+      if (id === 'nhood') p.add(cone(er * 0.42, tall * 0.7, 10), col, T(0, cy + sy * 0.92, 0.01, 0, 0, 0, [1, 1, dz]));
+      else p.add(tube([[0, cy + sy * 0.96, 0.0], [-6 * u, cy + sy + 4 * u, 0.0], [-14 * u, cy + sy + 2 * u, 0.0], [-16 * u, cy + sy - 5 * u, 0.0]], 3 * u, 8, 6, 0.4), col);
+      if (id === 'nhood' && rk >= 1) {
+        const zf = -radiusAt(d, d.top - 0.04) * dz * 1.2 - 0.01;
+        p.add(sphere(5.2 * u, 10, 8), BONE, T(0, d.top + 2 * u, zf, 0, 0, 0, [1, 1, 0.5]));
+        p.add(box(5 * u, 3 * u, 3 * u), BONE, T(0, d.top - 3 * u, zf));
+        for (const sx of [-2, 2]) p.add(sphere(1.5 * u, 6, 4), rk >= 3 ? '#9fe8ff' : INK, T(sx * u, d.top + 2 * u, zf - 2.4 * u));
+      }
       if (id === 'rmask') p.add(new THREE.SphereGeometry(radiusAt(d, d.mouthY) * 1.04, 16, 6, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.2), ['#6a2a2a', '#7a2a2a', '#1c1a22', '#d8d2c6', '#2a1f38'][rk], T(0, d.mouthY + 0.07, 0, 0, 0, 0, [1, 1, dz]));
       return 0.12;
     }
     case 'ncrown': {
-      const r = Math.min(hr * 0.85, 0.16);
-      p.add(cyl(r, r, 0.04, 14, true), BONE, T(0, hy + 0.02, 0));
-      for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; p.add(cone(0.022, 0.08 + (i % 2) * 0.04, 5), BONE, T(Math.sin(a) * r, hy + 0.07, -Math.cos(a) * r)); }
-      p.add(sphere(0.035, 8, 6), BONE, T(0, hy + 0.03, -r - 0.01));
-      return 0.14;
+      // classHat ncrown: a bone band round the head with five bone spikes across the front (the middle short, the
+      // next pair tallest), a rarity stripe and a skull mark in the middle
+      const r = hr * 1.02, by = hy - 2 * u;
+      p.add(cyl(r, r, 9 * u, 18, true), BONE, T(0, by, 0, 0, 0, 0, [1, 1, dz]));
+      p.add(cyl(r * 0.98, r * 0.98, 9 * u, 18, true), '#5a5048', T(0, by, 0, 0, 0, 0, [1, 1, dz]));
+      if (rc) p.add(torus(r + 0.003, 1.2 * u, 3, 22), rc, T(0, by - 1 * u, 0, Math.PI / 2, 0, 0, [1, dz, 1]));
+      for (const i of [-2, -1, 0, 1, 2]) { const a = i * 0.42, h = ((i === 0 ? 8 : Math.abs(i) === 1 ? 15 : 11) + rk * 1.5) * u + 5 * u;
+        p.add(cone(4.5 * u, h, 4), BONE, T(-Math.sin(a) * r, by + 4 * u + h / 2, -Math.cos(a) * r * dz, 0, Math.PI / 4, 0, [1, 1, 0.5])); }
+      const zf = -r * dz - 0.014;
+      p.add(sphere(7 * u, 10, 8), BONE, T(0, by + 1 * u, zf, 0, 0, 0, [1, 1, 0.45]));
+      p.add(box(6 * u, 3.4 * u, 3 * u), BONE, T(0, by - 5 * u, zf));
+      for (const sx of [-2.4, 2.4]) p.add(sphere(1.8 * u, 6, 4), rk >= 3 ? '#9fe8ff' : INK, T(sx * u, by + 1.5 * u, zf - 2.6 * u));
+      return 24 * u;
     }
     case 'phelm': case 'pwing': {
       const steel = PLATE[rk], gd = rk ? '#e8b923' : '#b89a52';
-      p.add(new THREE.SphereGeometry(hr * 1.12, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), steel, T(0, hy - 0.08, 0, 0, 0, 0, [1, 1.1, dz * 1.12]));
-      p.add(torus(hr * 1.1, 0.014, 4, 22), gd, T(0, hy - 0.04, 0, Math.PI / 2, 0, 0, [1, dz, 1]));
-      p.add(box(0.025, 0.12, 0.02), gd, T(0, hy + 0.04, -hr * dz * 1.05, 0.25));
-      p.add(box(0.08, 0.025, 0.02), gd, T(0, hy + 0.06, -hr * dz * 1.03, 0.25));
-      if (id === 'pwing') for (const s of [-1, 1]) p.add(slab([[0, 0], [0.12, 0.08], [0.18, 0.2], [0.08, 0.14], [0.02, 0.1]], 0.02), '#ffffff', T(s * hr * 1.05, hy - 0.02, 0.02, 0, s > 0 ? 0 : Math.PI, 0));
-      return 0.15;
+      // classHat phelm / pwing: a white dome helm down over the sides of the head (cheek guards), a gold brow band,
+      // a gold cross (phelm) or a gold sun (pwing) on the front; pwing: two white feather wings, a halo from epic up
+      const rx = hr + 5.5 * u, ry = 26 * u, rz = rx * dz, cy = hy - 7 * u;
+      p.add(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), steel, T(0, cy, 0, 0, 0, 0, [rx, ry, rz]));
+      p.add(new THREE.SphereGeometry(1, 20, 4, Math.PI * 0.62, Math.PI * 0.76, Math.PI * 0.62, Math.PI * 0.14), steel, T(0, cy, 0, 0, Math.PI, 0, [rx, ry, rz]));
+      p.add(torus(1, 1.3 / rx * u, 4, 24, Math.PI), gd, T(0, cy + 9 * u, 0, Math.PI / 2, 0, Math.PI, [rx * 0.985, rz * 0.985, 1]));
+      if (id === 'phelm') {
+        p.add(tube([onFront(0, 25 * u, rx, ry, rz, cy, 1.5 * u), onFront(0, 17 * u, rx, ry, rz, cy, 1.5 * u), onFront(0, 8 * u, rx, ry, rz, cy, 1.5 * u)], 2 * u, 6, 4), gd);
+        p.add(tube([onFront(-7 * u, 18 * u, rx, ry, rz, cy, 1.5 * u), onFront(0, 18.6 * u, rx, ry, rz, cy, 1.5 * u), onFront(7 * u, 18 * u, rx, ry, rz, cy, 1.5 * u)], 2 * u, 6, 4), gd);
+      } else {
+        const c = onFront(0, 18 * u, rx, ry, rz, cy, 2 * u);
+        p.add(cyl(4.5 * u, 4.5 * u, 0.008, 14), gd, T(c[0], c[1], c[2], Math.PI / 2 - 0.5, 0, 0));
+        for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; p.add(box(1.6 * u, 3 * u, 0.006), gd, T(c[0] + Math.cos(a) * 7.2 * u, c[1] + Math.sin(a) * 7.2 * u * 0.88, c[2] + 0.004, -0.5, 0, a - Math.PI / 2)); }
+        for (const s of [-1, 1]) {
+          const w: [number, number][] = [[0, 0], [4, 9], [14, 20], [26, 30], [22, 18], [32, 22], [26, 10], [34, 8], [22, 0], [10, -4]];
+          p.add(slab(w.map(([x, y]) => [s * x * u, y * u] as [number, number]), 0.035, 0.004), '#ffffff', T(s * (rx - 2 * u), cy + 8 * u, 0.02, 0, s * 0.35, 0));
+        }
+        if (rk >= 3) p.add(torus(15 * u, 1.8 * u, 4, 20), '#ffe27a', T(0, cy + ry + 9 * u, 0, Math.PI / 2, 0, 0, [1, 0.5, 1]));
+      }
+      return ry - 7 * u;
     }
     case 'cap': default: {
       p.add(new THREE.SphereGeometry(hr * 1.06, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), k.c2, T(0, hy - 0.04, 0, 0, 0, 0, [1, 0.8, dz * 1.06]));

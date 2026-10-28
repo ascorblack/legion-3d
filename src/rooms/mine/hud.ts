@@ -12,7 +12,11 @@
  */
 import { moneyCompact } from '../../ui/money';
 import type { MineClient } from './net';
-import { TX, BIO_RU, stars, mmss, leftTxt, resName, qty, resList, blockTitle, stoneProgress, type Quest, type ChatLine } from './state';
+import {
+  TX, BIO_RU, stars, mmss, leftTxt, resName, qty, resList, blockTitle, stoneProgress, canClaimOf, markQcClaimed, qcStatus, qcReady, dayLimit, weekResetTxt, spanTxt, NewsGate,
+  type Quest, type QuestC, type MineNews, type ChatLine, type MineView,
+} from './state';
+import { layerOf, layerSpan } from './layers';
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const COIN: Record<string, string> = { g: '#f2c14e', s: '#c8ccd8', b: '#c07a44' };
@@ -96,6 +100,28 @@ const CSS = `
 .l3m-list li.done{box-shadow:0 0 0 1.5px var(--up)}.l3m-list li.cl{opacity:.55}.l3m-list li.no b{color:var(--dn)}.l3m-list li.ok b{color:var(--up)}
 .l3m-tabs{display:flex;gap:6px;margin:8px 0}.l3m-tabs button[aria-selected="true"]{background:var(--gold);color:#2a1d18!important}
 .l3m-offer{display:flex;justify-content:space-between;align-items:center;background:#ffcf6a1c;border-radius:12px;padding:8px 11px;margin-top:6px;font-weight:800}
+.l3m-list li.qc{flex-wrap:wrap}.l3m-list li.qc .l3m-mini{flex:1 0 100%;margin-top:2px}.l3m-list li.qc.ready{box-shadow:0 0 0 1.5px var(--gold)}
+.l3m-list li.qc>span:first-child{flex:1 1 60%;min-width:0}.l3m-list li.qc>b{margin-left:auto;white-space:nowrap}.l3m-qc .l3m-k small{font-size:11px;font-weight:700;color:var(--ink)}
+.l3m-qc .l3m-mini i{background:var(--gold)}.l3m-qc.ready .l3m-mini i,.l3m-qc.done .l3m-mini i{background:var(--up)}.l3m-qc b.rdy{color:var(--up)}
+.l3m-lim{margin-top:7px;border-radius:10px;padding:5px 9px;font-size:12px;font-weight:700;background:#ffcf6a1c;color:var(--gold)}
+.l3m-lim.full{background:#ff8f8f1c;color:#ffd6d6;box-shadow:0 0 0 1px #ff8f8f55}
+.l3m-mini.low i{background:var(--gold)}.l3m-mini.full i{background:var(--dn)}
+.l3m-q{margin-top:6px;font-size:12px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}.l3m-q .lb{margin:0}
+.l3m-q .qn{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:#ff8fa3;color:#2a1d18;font:800 10px/1 var(--tx);margin-right:3px}
+.l3m-hb{width:24px;height:24px;padding:0!important;display:grid;place-items:center;flex:none;font:800 12px/1 var(--tx)!important}
+.l3m-help,.l3m-top{scrollbar-width:thin;scrollbar-color:#ffcf6a66 transparent;padding-bottom:0!important}
+.l3m-help>.l3m-btns,.l3m-top>.l3m-btns{position:sticky;bottom:0;margin:6px -18px 0;padding:18px 18px 12px;background:linear-gradient(#221a2800,#221a28 45%);justify-content:center}
+.l3m-x{position:sticky;top:0;float:right;margin:-6px -8px 0 0;width:28px;height:28px;border:0;border-radius:999px;background:#ffffff14;color:var(--ink);cursor:pointer;font:800 14px/1 var(--tx);z-index:1}
+.l3m-x:hover{background:#ffffff26}
+.l3m-help h4,.l3m-top h4{margin:12px 0 4px;font:700 13px/1.2 var(--hd);color:var(--gold)}
+.l3m-help ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:#e9dcd2}
+.l3m-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}.l3m-sum>div{background:#ffffff0c;border-radius:10px;padding:6px 8px;text-align:center}
+.l3m-sum b{display:block;font:400 18px/1.1 var(--num);color:var(--gold)}.l3m-sum span{font-size:11px;color:var(--mute)}
+.l3m-top ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.l3m-top li{display:grid;grid-template-columns:22px 1fr auto;gap:6px;background:#ffffff0c;border-radius:9px;padding:4px 9px;font-size:12.5px}
+.l3m-top li span{color:var(--mute);font-weight:800}.l3m-top li em{font-style:normal;font-weight:800}.l3m-top li.me{box-shadow:0 0 0 1.5px var(--gold)}.l3m-top li.me b{color:var(--gold)}
+.l3m-news{z-index:2}.l3m-news .l3m-win{width:min(420px,94%)}.l3m-news h3{font-size:19px}
+.l3m-news .l3m-list li{flex-direction:column;align-items:flex-start;gap:1px;padding:7px 11px}.l3m-news .l3m-list li>span{font-size:11px;color:var(--mute)}.l3m-news .l3m-list li b{font-size:14px}.l3m-news .l3m-btns{justify-content:center}.l3m-news .l3m-btn{padding:9px 26px;font-size:14px!important}
 @media (max-width:700px){.l3m-hud{width:224px}.l3m-jr{width:240px}}
 `;
 
@@ -110,11 +136,108 @@ export interface MineHudHandlers {
   /** The mine chat input got / lost focus (the room turns gameplay keys off while typing). */
   typing?(on: boolean): void;
 }
-export type CardKind = 'buy' | 'lamp' | 'quests' | null;
+export type CardKind = 'buy' | 'lamp' | 'quests' | 'news' | 'help' | 'top' | null;
 type JTab = 'log';
 const LS_MIN = 'l3d.mineHudMin';
 const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* */ } };
+
+/** Shared quest row for the «Поручения» card (site qcHtml): text, reward, own contribution vs threshold, participants, a bar. */
+export function qcRowHtml(qc: QuestC): string {
+  const need = Math.max(0, qc.min - qc.me), pct = Math.min(100, qc.p / Math.max(1, qc.g) * 100);
+  return `<li class="qc${qc.done ? ' done' : ''}${qcReady(qc) ? ' ready' : ''}${qc.cl ? ' cl' : ''}"><span>${esc(qc.t)}<br><small class="l3m-mut">Награда +${qc.c} каждому, кто вложил от ${qc.min}. Твой вклад: ${qc.me}${qc.ok ? ' — хватает' : ` — ещё ${need}`}. Участников: ${qc.n || 0}</small></span>`
+    + `<b>${qcStatus(qc)}</b><span class="l3m-mini"><i style="width:${pct.toFixed(1)}%"></i></span></li>`;
+}
+/** Compact shared-quest block of the HUD card. */
+export function qcHudHtml(qc: QuestC): string {
+  const pct = Math.min(100, qc.p / Math.max(1, qc.g) * 100), ready = qcReady(qc);
+  return `<div class="l3m-sec l3m-qc${qc.done ? ' done' : ''}${ready ? ' ready' : ''}" title="${esc(`${qc.t}. Награда +${qc.c} каждому, кто вложил от ${qc.min}. Твой вклад: ${qc.me}. Участников: ${qc.n || 0}`)}">`
+    + `<div class="l3m-k">Общее поручение недели<small>вклад ${qc.me} / ${qc.min}${qc.ok ? ' ✓' : ''}</small></div>`
+    + `<div class="l3m-row" style="align-items:flex-start"><span class="l3m-mut">${esc(qc.t)}</span><b class="${ready ? 'rdy' : ''}" style="flex:none;white-space:nowrap">${qcStatus(qc)}</b></div>`
+    + `<div class="l3m-mini"><i style="width:${pct.toFixed(1)}%"></i></div></div>`;
+}
+/** «Пока тебя не было» card body (site news()): stones, rare finds, ore into the hero's bag, pay for work. */
+export function newsHtml(nw: MineNews, buyerOn: boolean, idle: boolean): string {
+  const res = resList({ c: 0, r: nw.r || {}, p: nw.p || {} });
+  return `<h3>Пока тебя не было</h3><ul class="l3m-list"><li><span>${TX_UNIT}</span><b>${nw.b || 0}${nw.f ? ` · редких находок: ${nw.f}` : ''}</b></li>`
+    + (res.length ? `<li><span>${buyerOn ? 'В сумку героя' : 'В сумке'}</span><b>${res.map(([k, n, p]) => `${esc(resName(k))} ${esc(qty(n, p))}`).join('<br>')}</b></li>` : '')
+    + `<li><span>${buyerOn ? 'Оплата за работу (уже в кошельке)' : 'Заработок (выдаст скупщик)'}</span><b>+${coinsFrac(nw.cx != null ? nw.cx : nw.c || 0)}</b></li></ul>`
+    + `<p class="l3m-mut">${idle ? 'Герой выкопал свой камень и ждёт — выбери ему новый.' : 'Герой всё ещё копает свой камень.'}</p>`;
+}
+const TX_UNIT = 'Выкопано камней';
+
+/** «Дальше: ① железо 26 ур. ② …» under the own stone (site fx.q queue); a hint when the queue is on but empty. */
+export function queueHtml(on: boolean, queue: readonly number[], cells: { i: number; t: string; lv: number; r: string | null; a: number; k: 0 | 1 }[]): string {
+  if (!on) return '';
+  if (!queue.length) return `<p class="l3m-mut" style="margin-top:5px;font-size:11px"><span class="l3m-kc">Shift</span>+<span class="l3m-kc">E</span> по камню — в очередь (до 2): герой возьмёт его сам</p>`;
+  return `<div class="l3m-q" title="Очередь хранит игра. Сбросить — «Стоп» или E по другому камню"><span class="lb">Дальше</span>${queue.map((i, k) => { const c = cells[i]; return c ? `<span class="nw"><i class="qn">${k + 1}</i>${esc(blockTitle(c))}</span>` : ''; }).join('')}</div>`;
+}
+
+/** Depth reward ladder of the week (site help(): weekCoinsAt defaults). */
+export const WEEK_REWARDS: [number, number][] = [[10, 80], [20, 200], [30, 400], [40, 550], [60, 900]];
+export interface HelpVars { lampFrom: number; darkFrom: number; cap: number; pick: boolean; q2: boolean; queue: boolean; n: number }
+/** «Как устроена шахта» — the site's HELP text (mine.js 26.10), with the 3D controls instead of clicks. */
+export function helpParts(v: HelpVars): [string, string[]][] {
+  const week = WEEK_REWARDS.map(([f, c]) => `${f}-й этаж — ${c}`).join(', ') + ' монет';
+  const L = layerOf(v.n);
+  return [
+    ['Копать', [
+      'Подойди к камню с жёлтым кругом, наведи прицел и нажми E — герой докопает его сам, даже если закроешь сайт. Следующий камень выбираешь ты.',
+      ...(v.queue ? ['Очередь: пока герой копает, Shift+E по другому камню ставит его следующим (до 2). Сбросить — «Стоп» или E по другому камню.'] : []),
+      'Копать можно только камни фронта — рядом с уже расчищенным местом.',
+      'Вместе быстрее: на одном камне могут работать несколько героев. Добыча делится по вкладу — сколько работы вложил каждый.',
+      'Число на камне — его уровень: чем выше, тем дольше копать. Табличка над камнем — оценка «≈»: сколько осталось, твоя доля, монет в час.',
+    ]],
+    ['Этажи', [
+      'Расчистили этаж — клеть наверху зала горит, шахта спускается на следующий этаж.',
+      'Чем глубже, тем выше уровень камней (копать дольше); в глубоких пластах — другая руда.',
+      `Каждые 5 этажей — новый пласт. Сейчас: «${L.name}» (этажи ${layerSpan(L)}).`,
+      'В каждом десятке этажей один — угольный (какой — заранее не узнать): на нём кучи угля, а вокруг каждой — жила угольных камней.',
+    ]],
+    ['Добыча', [
+      'Руда приходит осколками по вкладу: 100 осколков = 1 штука.',
+      'Окаменевший сундук — осколки руды и монеты всем, кто его копал; может выпасть сфера или звезда — одному из копавших (шанс — по вкладу).',
+      'Редкая жила светится — за неё ещё бонус монетами всем копавшим.',
+      'Самоцвет у каждой шахты свой — по природе места.',
+    ]],
+    ['Скупщик', [
+      'За работу у скупщика копятся монеты и руда в рудной сумке. Сдай сумку скупщику: монеты — тебе, руда — в казну Ратуши города. Кнопка «Скупщик» в карточке ведёт героя к прилавку; продаёшь только ты, кнопкой в окне.',
+      'Поручения скупщика: каждый день — 3, каждую неделю — 2. Награду монетами забирай у скупщика.',
+      ...(v.q2 ? ['«Наработай N» — вклад в любые камни (засчитывается сразу, и недокопанное); «Собери N осколков» — любая руда и порода, доля камня по сделанному; общее поручение шахты — всей шахтой за неделю, награда каждому, кто вложил не меньше порога.'] : []),
+    ]],
+    ...(v.pick ? [['Кирка и рудная сумка', [
+      'У входа стоит Снабженец Кремень — торговец снаряжением для шахт: кирки, рудная сумка и «Каска шахтёра».',
+      'Кирка — навсегда и только твоя. Лучше кирка — сильнее удар: медная +10%, железная +20%, стальная +35%, золотая +50%, адамантитовая +70%. Камни копаются быстрее, доля добычи по вкладу больше; оплата за время работы не меняется.',
+      'Рудная сумка — тоже навсегда: руда кладётся в неё и не занимает места в сумке героя. Полна — руда идёт в обычную сумку, потом на склад.',
+    ]] as [string, string[]]] : []),
+    ['Темнота и каска', [
+      v.pick ? 'Снабженец продаёт «Каску шахтёра» с любого этажа.' : `С ${v.lampFrom}-го этажа у входа стоит Фонарщик — продаёт «Каску шахтёра».`,
+      `С ${v.darkFrom}-го этажа без надетой каски темно: камней не видно, копать нельзя.`,
+    ]],
+    ['Время', [
+      v.cap > 0 ? `Копать можно до ${mmss(v.cap)} в сутки (на все шахты). Новые сутки — в 05:00 МСК.` : 'Время работы за сутки считается от 05:00 МСК.',
+      'Неделя: каждую субботу в 18:00 МСК — новая шахта с 1-го этажа. Сумка, казна и мастерство остаются.',
+      `Кто вложил за неделю хотя бы 1 час работы — награда за глубину: ${week}. С 30-го этажа ещё сфера, с 60-го — звезда.`,
+    ]],
+  ];
+}
+export function helpHtml(v: HelpVars): string {
+  return `<h3>Как устроена шахта</h3><p class="l3m-mut">По правилам сайта на 28.10</p>`
+    + helpParts(v).map(([h, li]) => `<h4>${esc(h)}</h4><ul>${li.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`).join('');
+}
+interface HistWeek { floor?: number; players?: number; top?: { l: string; u: number }[] }
+/** «Итоги шахты» from the view we already have (site board(): st.top, st.hist[0], st.rec, st.working) — no request. */
+export function topHtml(st: MineView, login: string): string {
+  const me = String(login || '').toLowerCase();
+  const row = (l: string, u: number, i: number) => `<li class="${String(l).toLowerCase() === me ? 'me' : ''}"><span>${i + 1}</span><b class="nw">${esc(String(l).toLowerCase() === me ? l + ' (ты)' : l)}</b><em>${esc(u)}</em></li>`;
+  const h0 = (st.hist && (st.hist[0] as HistWeek)) || null;
+  const title = st.name && st.id !== 'home' ? `Итоги шахты · ${st.name}` : 'Итоги шахты';
+  return `<h3>${esc(title)}</h3><p class="l3m-mut">${stars(st.danger || 1)} · ${esc(BIO_RU[st.biome || ''] || '')}${st.gem ? ` · самоцвет — ${esc(resName(st.gem))}` : ''}</p>`
+    + `<div class="l3m-sum"><div><b>${st.n}</b><span>этаж сейчас</span></div><div><b>${st.rec || st.n}</b><span>рекорд</span></div><div><b>${st.working || 0}</b><span>копают</span></div></div>`
+    + `<h4>Лучшие копатели недели</h4><ol>${(st.top || []).map(([l, u], i) => row(l, u, i)).join('') || '<li><b class="l3m-mut">Пока никто не копал</b></li>'}</ol>`
+    + (h0 ? `<h4>Прошлая неделя — до этажа ${esc(h0.floor)}, копателей: ${esc(h0.players)}</h4><ol>${(h0.top || []).slice(0, 5).map((x, i) => row(x.l, x.u, i)).join('')}</ol>` : '')
+    + `<p class="l3m-mut" style="margin-top:8px">Вклад — сколько работы вложил герой. Каждую субботу в 18:00 — новая шахта.</p>`;
+}
 
 export class MineHud {
   readonly el: HTMLElement;
@@ -129,6 +252,9 @@ export class MineHud {
   /** Journal drawer: closed / log. */
   jr: JTab | null = null;
   private typingOn = false;
+  /** «Пока тебя не было»: shown once, in the first 15 s (site rules); the summary on screen. */
+  private gate = new NewsGate();
+  private newsNw: MineNews | null = null; private newsFocus = false;
   /** The idle hint shows for the first 90 s in the mine or until the first stone. */
   private born = Date.now(); private dug = false;
   constructor(host: HTMLElement, private client: MineClient, private h: MineHudHandlers) {
@@ -170,7 +296,7 @@ export class MineHud {
     }
   }
 
-  open(kind: CardKind): void { const was = !!this.card; this.card = kind; if (!!kind !== was) this.h.modal(!!kind); this.parts.modal = '\u0000'; this.render(); }   // sentinel: always redraw (closing too — '' would match the cleared slot and leave the card on screen)
+  open(kind: CardKind): void { const was = !!this.card; this.card = kind; if (kind !== 'news') this.newsFocus = false; if (!!kind !== was) this.h.modal(!!kind); this.parts.modal = '\u0000'; this.render(); }   // sentinel: always redraw (closing too — '' would match the cleared slot and leave the card on screen)
   close(): void { this.open(null); }
   /** Collapse / expand the card. */
   toggleMin(on = !this.min): void { this.min = on; lsSet(LS_MIN, on ? '1' : '0'); this.render(); }
@@ -194,9 +320,11 @@ export class MineHud {
     hud.hidden = jrOpen; hud.classList.toggle('min', this.min);
     // header: mine · floor · nature, counters, collapse
     const name = st.name && st.id !== 'home' ? `Шахта · ${st.name}` : 'Шахта';
-    this.set('hd', `<div class="l3m-hd" data-a="min" title="${this.min ? 'Развернуть' : 'Свернуть'}"><div class="g"><span class="t">⛏ ${esc(name)} · этаж ${st.n}</span>`
-      + `<span class="s" title="${left > 0 ? `Новая шахта через ${dd ? dd + ' д ' : ''}${hh} ч` : ''}">${stars(st.danger || 1)} ${esc(BIO_RU[st.biome || ''] || '')}${(st.rec || 0) > st.n ? ` · рекорд ${st.rec}` : ''}`
+    this.set('hd', `<div class="l3m-hd" data-a="min" title="${this.min ? 'Развернуть' : 'Свернуть'}"><div class="g"><span class="t" title="${esc(`Пласт «${layerOf(st.n).name}» (этажи ${layerSpan(layerOf(st.n))})`)}">⛏ ${esc(name)} · этаж ${st.n}</span>`
+      + `<span class="s" title="${esc(weekResetTxt(st.reset, now) || (left > 0 ? `Новая шахта через ${dd ? dd + ' д ' : ''}${hh} ч` : ''))}">${stars(st.danger || 1)} ${esc(BIO_RU[st.biome || ''] || '')}${(st.rec || 0) > st.n ? ` · рекорд ${st.rec}` : ''}`
       + ` · <span title="${M.hm ? `Были в шахте за последние ${M.hm} мин` : 'Сейчас в шахте'}">👥 ${all}</span> · <span title="Сейчас копают">⛏ ${w}</span></span></div>`
+      + `<button type="button" class="l3m-btn ghost sm l3m-hb" data-a="top" title="Итоги шахты: лучшие копатели недели" aria-label="Итоги шахты">🏆</button>`
+      + `<button type="button" class="l3m-btn ghost sm l3m-hb" data-a="help" title="Как устроена шахта" aria-label="Как устроена шахта">?</button>`
       + `<button type="button" class="l3m-btn ghost sm l3m-jb" data-a="jr" title="Журнал шахты [L]"><span class="l3m-kc">L</span></button>`
       + `<button type="button" class="l3m-tg" data-a="min" aria-label="${this.min ? 'Развернуть' : 'Свернуть'}" aria-expanded="${!this.min}">▾</button></div>`);
     // Сейчас
@@ -208,7 +336,7 @@ export class MineHud {
     if (dig) {
       nowH = `<div><div class="l3m-k">Сейчас<small>${pr && pr.n > 1 ? `копают: ${pr.n}` : ''}</small></div><p class="l3m-t">${TX.doing}: <b>${esc(blockTitle(dig))}</b></p>`
         + `<div class="l3m-bar"><i style="width:${(rem * 100).toFixed(1)}%;background:${barCol}"></i></div>`
-        + `<div class="l3m-row"><span class="l3m-mut">${esc(leftTxt((pr ? pr.eta : 0) * 1000))}</span><button type="button" class="l3m-btn ghost sm" data-a="stop">Стоп</button></div></div>`;
+        + `<div class="l3m-row"><span class="l3m-mut">${esc(leftTxt((pr ? pr.eta : 0) * 1000))}</span><button type="button" class="l3m-btn ghost sm" data-a="stop">Стоп</button></div>${queueHtml(c.queueOn, c.queue(), M.F ? M.F.cells : [])}</div>`;
     } else if (!this.dug && now - this.born < 90000) nowH = `<p class="l3m-mut" title="Подойди к камню, наведи прицел и нажми E — герой докопает сам, даже если закрыть сайт">Копай камни с <b style="color:var(--gold)">жёлтым кругом</b> — <span class="l3m-kc">E</span></p>`;
     else nowH = '';
     if (dig) this.dug = true;
@@ -218,14 +346,16 @@ export class MineHud {
     const orePcs = ore.reduce((a, it) => a + (+it.q || 0), 0);
     const earnL = M.buyerOn ? `${coinsFrac(bag.cx != null ? bag.cx : bag.c)}<span class="l3m-mut" title="${esc(ore.map((it) => `${resName(it.res)} ${qty(Math.floor(it.q / 100), it.q % 100)}`).join(', ') || 'Руды в сумке нет')}"> · руда ${pcs(orePcs)}</span>`
       : `${coinsFrac(bag.c)}<span class="l3m-mut"> · ${res.length ? res.map(([k, n]) => `${esc(resName(k))} ${n}`).slice(0, 2).join(', ') : 'сумка пуста'}</span>`;
-    const q = me.q || { d: [], w: [] };
-    const canClaim = !(c.claimed && now - c.claimed < 60000) && [...q.d, ...q.w].some((x) => x.done && !x.cl);
+    const q = me.q || { d: [], w: [] }, qc = q.c || null;
+    const canClaim = canClaimOf(q, c.claimed, now);
     const earnH = `<div class="l3m-sec l3m-row" title="${M.buyerOn ? 'Оплата за работу — сразу в кошелёк; руду купит скупщик' : 'Всё выдаст скупщик'}"><span class="nw"><span class="lb">Доход</span> ${earnL}</span><button type="button" class="l3m-btn sm" data-a="buyer">${M.buyerOn ? 'Скупщик' : 'Сдать'}</button></div>`;
     const mxx = me.mx || { lv: 1, xp: 0, need: 60 }, dayP = me.cap ? Math.min(100, me.day / me.cap * 100) : 0;
-    const metH = `<div class="l3m-sec l3m-meters"><div><div class="lb">Сегодня</div><div class="v">${hm(me.day)}${me.cap > 0 ? ` <span class="l3m-mut">/ ${hm(me.cap)}</span>` : ''}</div>${me.cap > 0 ? `<div class="l3m-mini"><i style="width:${dayP.toFixed(1)}%"></i></div>` : ''}</div>`
-      + `<div><div class="lb">${TX.mast}</div><div class="v">ур. ${mxx.lv}</div><div class="l3m-mini xp"><i style="width:${mxx.need ? Math.min(100, mxx.xp / mxx.need * 100).toFixed(1) : 100}%"></i></div></div></div>`;
+    const lim = dayLimit(me, now);
+    const limTitle = me.cap > 0 ? `Копать можно до ${hm(me.cap)} в сутки (на все шахты). Новые сутки в 05:00 МСК — через ${spanTxt(lim.resetIn)}` : 'Время работы за сутки считается от 05:00 МСК';
+    const metH = `<div class="l3m-sec"><div class="l3m-meters"><div title="${esc(limTitle)}"><div class="lb">Сегодня</div><div class="v">${hm(me.day)}${me.cap > 0 ? ` <span class="l3m-mut">/ ${hm(me.cap)}</span>` : ''}</div>${me.cap > 0 ? `<div class="l3m-mini ${lim.kind}"><i style="width:${dayP.toFixed(1)}%"></i></div>` : ''}</div>`
+      + `<div><div class="lb">${TX.mast}</div><div class="v">ур. ${mxx.lv}</div><div class="l3m-mini xp"><i style="width:${mxx.need ? Math.min(100, mxx.xp / mxx.need * 100).toFixed(1) : 100}%"></i></div></div></div>${lim.text ? `<div class="l3m-lim ${lim.kind}" role="status" title="${esc(limTitle)}">${esc(lim.text)}</div>` : ''}</div>`;
     const ftH = `<div class="l3m-row"><span class="l3m-mut">${canClaim ? '<b style="color:var(--gold)">Награда готова!</b>' : `Поручения: ${[...q.d, ...q.w].filter((x) => x.done).length} / ${q.d.length + q.w.length}`}</span><button type="button" class="l3m-btn ghost sm" data-a="quests">Поручения${canClaim ? ' <span class="l3m-dot">★</span>' : ''}</button></div>`;
-    this.set('bd', nowH + earnH + metH + ftH);
+    this.set('bd', nowH + earnH + metH + (qc ? qcHudHtml(qc) : '') + ftH);
     // journal drawer
     const jr = this.q0('jr'); jr.hidden = !jrOpen;
     if (jrOpen) {
@@ -243,12 +373,30 @@ export class MineHud {
     }
     this.q('other').hidden = !c.other;
     this.q('dark').hidden = !M.dark;
+    // «Пока тебя не было»: the site's rules (first 15 s only; later silently marked read) live in NewsGate
+    const nw = this.gate.tick(M.me, c.c, now, () => c.seen());
+    if (nw) { this.newsNw = nw; this.open('news'); return; }
     this.renderModal();
   }
 
   /* ---------------------------------------------------------------- cards */
   private renderModal(): void {
     if (!this.card) { this.set('modal', ''); return; }
+    if (this.card === 'news' && this.newsNw) {
+      const M = this.client.model;
+      this.set('modal', `<div class="l3m-modal l3m-news" data-a="bg"><div class="l3m-win" role="dialog" aria-modal="true" aria-label="Пока тебя не было">${newsHtml(this.newsNw, M.buyerOn, M.myI < 0)}<div class="l3m-btns"><button type="button" class="l3m-btn" data-a="news-ok">Понятно</button></div></div></div>`);
+      const ok = this.el.querySelector('[data-a="news-ok"]') as HTMLElement | null; if (ok && !this.newsFocus) { this.newsFocus = true; try { ok.focus({ preventScroll: true }); } catch { /* */ } }
+      return;
+    }
+    if (this.card === 'help' || this.card === 'top') {
+      const M = this.client.model, st = M.st!, me = M.me;
+      const body = this.card === 'help'
+        ? helpHtml({ lampFrom: st.lampFrom || 4, darkFrom: st.darkFrom || 5, cap: (me && +me.cap) || 0, pick: M.pickOn, q2: !!(me && me.q && me.q.c), queue: this.client.queueOn, n: st.n })
+        : topHtml(st, this.client.login);
+      const lbl = this.card === 'help' ? 'Как устроена шахта' : 'Итоги шахты';
+      this.set('modal', `<div class="l3m-modal" data-a="bg"><div class="l3m-win l3m-${this.card}" role="dialog" aria-modal="true" aria-label="${lbl}"><button type="button" class="l3m-x" data-a="back" aria-label="Закрыть" title="Закрыть [Esc]">✕</button>${body}<div class="l3m-btns"><button type="button" class="l3m-btn" data-a="back">Понятно</button></div></div></div>`);
+      return;
+    }
     const body = this.card === 'buy' ? this.buyerHtml() : this.card === 'lamp' ? this.supHtml() : this.questsHtml();
     this.set('modal', `<div class="l3m-modal" data-a="bg"><div class="l3m-win" role="dialog" aria-modal="true">${body}<div class="l3m-btns"><button type="button" class="l3m-btn ghost" data-a="back">Назад</button></div></div></div>`);
   }
@@ -271,10 +419,11 @@ export class MineHud {
   private questsHtml(): string {
     const c = this.client, M = c.model, me = M.me, q = (me && me.q) || { d: [], w: [] };
     const li = (x: Quest) => `<li class="${x.done ? 'done' : ''}${x.cl ? ' cl' : ''}"><span>${esc(x.t)}${x.h ? `<br><small class="l3m-mut">Где: ${esc(x.h)}</small>` : ''}</span><b>${x.cl ? 'получено' : x.done ? 'готово' : `${x.p} / ${x.g}`} · +${x.c}</b></li>`;
-    const canClaim = !(c.claimed && Date.now() - c.claimed < 60000) && [...q.d, ...q.w].some((x) => x.done && !x.cl);
+    const canClaim = canClaimOf(q, c.claimed, Date.now());
     return `<h3>Поручения скупщика</h3><p class="l3m-mut">Награду выдаёт ${TX.seller} — кнопка «Забрать награду», когда поручение готово.</p>`
       + `<div class="l3m-k" style="margin-top:8px">Поручения на сегодня</div><ul class="l3m-list">${q.d.map(li).join('') || '<li>Нет</li>'}</ul>`
       + `<div class="l3m-k">Поручения недели</div><ul class="l3m-list">${q.w.map(li).join('') || '<li>Нет</li>'}</ul>`
+      + (q.c ? `<div class="l3m-k">Общее поручение шахты</div><ul class="l3m-list">${qcRowHtml(q.c)}</ul>` : '')
       + `<div class="l3m-btns"><button type="button" class="l3m-btn" data-a="claim"${canClaim && !c.busyOp ? '' : ' disabled'}>Забрать награду</button></div>`;
   }
   private supHtml(): string {
@@ -326,25 +475,34 @@ export class MineHud {
     const t = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null; if (!t) return;
     const a = t.dataset.a, c = this.client;
     if ((t as HTMLButtonElement).disabled) return;
-    if (a === 'bg') { if (e.target === t) this.close(); return; }
+    if (a === 'bg') { if (e.target === t) { if (this.card === 'news') this.newsOk(); else this.close(); } return; }
     e.stopPropagation();
     switch (a) {
       case 'stop': (t as HTMLButtonElement).disabled = true; this.h.stop(); break;
       case 'buyer': this.h.toBuyer(); break;
       case 'quests': this.open('quests'); break;
+      case 'help': this.open('help'); break;
+      case 'top': this.open('top'); break;
       case 'min': this.toggleMin(); break;
       case 'jr': this.journal('toggle'); break;
       case 'jtab': this.journal((t.dataset.tab as JTab) || 'log'); break;
       case 'back': this.close(); break;
       case 'here': c.takeOver(); break;
       case 'sell': void c.sell().then(() => this.render()); this.render(); break;
-      case 'claim': void c.claim().then(() => this.render()); break;
+      case 'claim': void c.claim().then((ok) => { if (ok) markQcClaimed(c.model.me && c.model.me.q); this.render(); }); break;
+      case 'news-ok': this.newsOk(); break;
       case 'lamp': void c.lamp().then(() => this.render()); break;
       case 'wear': void c.wear(t.dataset.uid || '').then(() => this.render()); break;
       case 'tab': this.supTab = (t.dataset.tab as 'pick') || 'pick'; this.render(); break;
       case 'pick': void c.pick(+(t.dataset.to || 0), (t.dataset.use2 || '').split(',').filter(Boolean)).then(() => this.render()); this.render(); break;
       case 'orebag': void c.oreBag().then(() => this.render()); this.render(); break;
     }
+  }
+  /** «Понятно» (button or backdrop, like the site): close the window and send the one /api/mineSeen. */
+  private newsOk(): void {
+    const nw = this.newsNw; this.newsNw = null; this.newsFocus = false;
+    if (nw) this.gate.ack(nw, this.client.c, () => this.client.seen());
+    this.close();
   }
   dispose(): void { clearTimeout(this.tipT); if (this.card) this.h.modal(false); if (this.jr) this.h.journal?.(false); this.el.remove(); }
 }

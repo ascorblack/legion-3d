@@ -23,16 +23,20 @@ export interface MineView {
   working?: number; dl?: Dl[]; town?: string;
 }
 export interface Quest { id: string; t: string; p: number; g: number; c: number; done?: number; cl?: number; h?: string }
+/** Shared weekly mine quest (site 28.10, me.q.c): common progress p / g, own contribution me vs threshold min (ok = enough), n participants. */
+export interface QuestC { id?: string; t: string; p: number; g: number; c: number; min: number; me: number; n?: number; ok?: number | boolean; done?: number; cl?: number }
+/** «Пока тебя не было» (me.news): b stones, f rare finds, c / cx coins, r / p ore pieces / shards, at = when it was written. */
+export interface MineNews { b?: number; f?: number; c?: number; cx?: number; r?: Record<string, number>; p?: Record<string, number>; at?: number }
 /** Pickaxe ladder step: [name, power, mastery, price, ore needs (shards), discounts {res: [replaces, ratio]}]. */
 export type PickStep = [string, number, number, number, Record<string, number>, Record<string, [string, number]>];
 export interface MineMe {
   i: number; day: number; cap: number;
   bag?: { c: number; cx?: number; r: Record<string, number>; p?: Record<string, number> };
   mx?: { lv: number; xp: number; need: number }; wk?: number; pw?: number; pk?: number; lamp?: number;
-  q?: { d: Quest[]; w: Quest[] }; nm?: string; dist?: string; bi?: string; dg?: number; gem?: string;
+  q?: { d: Quest[]; w: Quest[]; c?: QuestC | null }; nm?: string; dist?: string; bi?: string; dg?: number; gem?: string;
   fx?: Record<string, number>; qq?: number[];
   pkx?: { lv: number; ob: { cap: number; used: number } | 0; obP: number; obL: number; obC: number; t: PickStep[] };
-  news?: unknown;
+  news?: MineNews | null;
 }
 export interface LookRec { n?: string; lv?: number; lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number; pk?: number }
 export interface PresenceA { l: string; n?: string; lv?: number; lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number; x: number; y: number; tx: number; ty: number; dt?: number }
@@ -104,6 +108,100 @@ export const mmss = (min: number) => { const m = Math.max(0, Math.round(min)); r
 export const leftTxt = (ms: number) => { const m = Math.ceil(ms / 60000); return ms <= 0 ? 'почти' : m < 60 ? `ещё ${m} мин` : `ещё ${Math.floor(m / 60)} ч ${m % 60} мин`; };
 /** Bag: r = whole pieces, p = shards above them → [[res, pieces, shards]]. */
 export const resList = (b: MineMe['bag']) => { const r = (b && b.r) || {}, p = (b && b.p) || {}; return [...new Set([...Object.keys(r), ...Object.keys(p)])].map((k) => [k, +r[k] || 0, +p[k] || 0] as [string, number, number]).filter(([, n, x]) => n > 0 || x > 0); };
+
+/* ============================================================ quests: shared quest, claim button */
+
+/** q.c is done for me and not yet taken (site qcReady). */
+export const qcReady = (qc: QuestC | null | undefined): boolean => !!(qc && qc.done && qc.ok && !qc.cl);
+/**
+ * «Забрать награду» is lit when any daily / weekly quest is done and not taken, OR only the shared q.c is ready for me
+ * (site canClaim); not within 60 s after a claim (the hero snapshot lags behind).
+ */
+export function canClaimOf(q: MineMe['q'] | null | undefined, claimedAt: number, now: number): boolean {
+  if (!q) return false;
+  if (claimedAt && now - claimedAt < 60000) return false;
+  return [...(q.d || []), ...(q.w || [])].some((x) => x.done && !x.cl) || qcReady(q.c);
+}
+/** After a successful claim the site marks the shared quest taken too (only if it was ready for me). */
+export function markQcClaimed(q: MineMe['q'] | null | undefined): void { if (q && q.c && q.c.done && q.c.ok) q.c.cl = 1; }
+/** Text on the right of a q.c row, as the site: «получено» / «готово» / «выполнено» / «p / g». */
+export const qcStatus = (qc: QuestC): string => (qc.cl ? 'получено' : qc.done ? (qc.ok ? 'готово' : 'выполнено') : `${qc.p} / ${qc.g}`);
+
+/* ============================================================ «Пока тебя не было» gate */
+
+export const newsKey = (nw: MineNews): string => `${nw.b || 0}:${nw.at || 0}:${nw.f || 0}`;
+/** Summaries already acknowledged on this page: mine id → key (as the site's NEWS_SEEN; a late hero snapshot must not bring one back). */
+const NEWS_SEEN = new Map<string, string>();
+/** The window shows only in the first NEWS_WINDOW ms after entering. */
+export const NEWS_WINDOW = 15000;
+/**
+ * Decides when me.news is shown (site mine.js «Пока тебя не было»): only within 15 s of entering the mine and once per
+ * visit; a summary that arrives later is marked read silently (one /api/mineSeen, no window over the game). «Понятно» →
+ * ack(): exactly one /api/mineSeen per summary. Pure (the caller passes `now` and the request).
+ */
+export class NewsGate {
+  private at0 = 0; private shown = false; private acked = new Set<string>();
+  constructor(private seenMap: Map<string, string> = NEWS_SEEN) {}
+  /** Call on every render with the current me. Returns the summary to show now, or null. */
+  tick(me: MineMe | null | undefined, c: string, now: number, seen: () => void): MineNews | null {
+    if (!me) return null;
+    if (!this.at0) this.at0 = now;
+    const nw = me.news; if (!nw || this.shown || this.seenMap.get(c) === newsKey(nw)) return null;
+    this.shown = true;
+    if (now - this.at0 < NEWS_WINDOW) return nw;
+    this.seenMap.set(c, newsKey(nw)); this.acked.add(c + '|' + newsKey(nw)); seen();
+    return null;
+  }
+  /** The player pressed «Понятно» (or clicked the backdrop, as on the site): one mineSeen. */
+  ack(nw: MineNews, c: string, seen: () => void): boolean {
+    const k = c + '|' + newsKey(nw); if (this.acked.has(k)) return false;
+    this.acked.add(k); this.seenMap.set(c, newsKey(nw)); seen(); return true;
+  }
+}
+
+/* ============================================================ day limit and resets (MSK = UTC+3) */
+
+export const MSK_MS = 3 * 3600e3;
+/** The game day starts at 05:00 Moscow time (= 02:00 UTC). */
+export const DAY_START_H = 5;
+/** Next 05:00 MSK strictly after `now` (epoch ms). */
+export function nextDayReset(now: number): number {
+  const t = now + MSK_MS, day0 = Math.floor(t / 864e5) * 864e5;
+  let r = day0 + DAY_START_H * 3600e3; if (r <= t) r += 864e5;
+  return r - MSK_MS;
+}
+/** «3 ч 12 мин» / «42 мин» / «2 д 4 ч» for a duration in ms (rounded up to the minute; days when ≥ 24 h). */
+export function spanTxt(ms: number): string {
+  const m = Math.max(0, Math.ceil(ms / 60000));
+  if (m >= 1440) { const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60); return `${d} д${h ? ` ${h} ч` : ''}`; }
+  return m >= 60 ? `${Math.floor(m / 60)} ч${m % 60 ? ` ${m % 60} мин` : ''}` : `${m} мин`;
+}
+export const DAY_LOW_MIN = 60;
+export interface DayLimit {
+  /** off: no cap; ok; low: ≤ 60 min left; full: nothing left. */
+  kind: 'off' | 'ok' | 'low' | 'full';
+  /** Minutes of work left today (cap − day), 0 when full. */
+  left: number;
+  /** ms until the next game day (05:00 MSK). */
+  resetIn: number;
+  /** One line for the HUD, '' when kind is ok / off. */
+  text: string;
+}
+export function dayLimit(me: { day: number; cap: number } | null | undefined, now: number): DayLimit {
+  const resetIn = nextDayReset(now) - now;
+  if (!me || !(me.cap > 0)) return { kind: 'off', left: 0, resetIn, text: '' };
+  const left = Math.max(0, me.cap - me.day);
+  if (left <= 0) return { kind: 'full', left: 0, resetIn, text: `На сегодня хватит. Новые сутки в 05:00 (через ${spanTxt(resetIn)})` };
+  if (left <= DAY_LOW_MIN) return { kind: 'low', left, resetIn, text: `Осталось ${spanTxt(left * 60000)} · новые сутки в 05:00 МСК` };
+  return { kind: 'ok', left, resetIn, text: '' };
+}
+const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+/** «Новая шахта в сб 18:00 (через 2 д 4 ч)» from st.reset (epoch ms); '' when unknown or passed. */
+export function weekResetTxt(reset: number | undefined, now: number): string {
+  if (!reset || reset <= now) return '';
+  const d = new Date(reset + MSK_MS), hh = String(d.getUTCHours()).padStart(2, '0'), mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `Новая шахта в ${WD[d.getUTCDay()]} ${hh}:${mm} МСК (через ${spanTxt(reset - now)})`;
+}
 
 /* ============================================================ model */
 

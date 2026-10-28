@@ -42,9 +42,15 @@ export class GB {
     return g;
   }
 }
-const sph = (r: number, w = 12, h = 9) => new THREE.SphereGeometry(r, w, h);
-const cyl = (rt: number, rb: number, h: number, s = 10) => new THREE.CylinderGeometry(rt, rb, h, s);
-const cone = (r: number, h: number, s = 8) => new THREE.ConeGeometry(r, h, s);
+/** Foe LOD: inside foeGeo small spheres get fewer segments (keeps every foe ≈ ≤ 1.1k triangles). */
+let foeLod = false;
+const sph = (r: number, w = 12, h = 9, ps = 0, pl = Math.PI * 2, ts = 0, tl = Math.PI) => {
+  if (foeLod) { const k = r < 0.04 ? 0.6 : r < 0.1 ? 0.7 : r < 0.2 ? 0.8 : r < 0.4 ? 0.9 : 1; w = Math.max(4, Math.round(w * k)); h = Math.max(3, Math.round(h * k)); }
+  return new THREE.SphereGeometry(r, w, h, ps, pl, ts, tl);
+};
+const lodSides = (s: number) => (foeLod && s > 8 ? Math.round(s * 0.8) : s);
+const cyl = (rt: number, rb: number, h: number, s = 10) => new THREE.CylinderGeometry(rt, rb, h, lodSides(s));
+const cone = (r: number, h: number, s = 8) => new THREE.ConeGeometry(r, h, lodSides(s));
 const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 const tor = (r: number, t: number, arc = Math.PI * 2, rs = 6, ts = 16) => new THREE.TorusGeometry(r, t, rs, ts, arc);
 const ico = (r: number, d = 0) => new THREE.IcosahedronGeometry(r, d);
@@ -180,77 +186,266 @@ export function catHullGeo(): THREE.BufferGeometry {
 }
 
 /* ------------------------------------------------------------------ foes */
+/*
+ * The foes follow the site's own drawings (questfoes.js: «Легион» wolf/skeleton/bandit/toad, the Halloween
+ * 'enemies-hollow' set): the same palettes, proportions and signature details, rebuilt as low-poly 3D. The site draws
+ * them in profile looking LEFT (feet at 0, ~160 px tall); here front = −Z, so a site x maps to our z and −y to our y.
+ */
+type V3 = [number, number, number];
+const _up = new THREE.Vector3(0, 1, 0), _dir = new THREE.Vector3();
+/** Tapered limb from a to c (radius r0 at a, r1 at c). */
+function seg(b: GB, a: V3, c: V3, r0: number, r1: number, col: string, s = 6): void {
+  _dir.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+  const L = _dir.length(); if (L < 1e-5) return;
+  _dir.multiplyScalar(1 / L);
+  const q = new THREE.Quaternion().setFromUnitVectors(_up, _dir);
+  b.add(cyl(r1, r0, L, s), col, new THREE.Matrix4().compose(new THREE.Vector3((a[0] + c[0]) / 2, (a[1] + c[1]) / 2, (a[2] + c[2]) / 2), q, new THREE.Vector3(1, 1, 1)));
+}
+/** Bent limb through points (radius r0 → r1), joints rounded. */
+function limb(b: GB, pts: V3[], r0: number, r1: number, col: string, s = 6): void {
+  const n = pts.length - 1;
+  for (let i = 0; i < n; i++) {
+    const ra = r0 + (r1 - r0) * i / n, rb = r0 + (r1 - r0) * (i + 1) / n;
+    seg(b, pts[i], pts[i + 1], ra, rb, col, s);
+    if (i > 0) b.add(sph(ra, s, 4), col, T(pts[i][0], pts[i][1], pts[i][2]));
+  }
+}
+/**
+ * Flat slab from an outline [u0, v0, u1, v1, …] (metres): 'side' = our ZY plane (u → z, v → y, thickness along X,
+ * centred at x = off); 'front' = XY plane (u → x, v → y, thickness along Z, centred at z = off).
+ */
+function slab(pts: readonly number[], d: number, plane: 'side' | 'front', off = 0): THREE.BufferGeometry {
+  const s = new THREE.Shape();
+  for (let i = 0; i < pts.length; i += 2) { if (i) s.lineTo(pts[i], pts[i + 1]); else s.moveTo(pts[i], pts[i + 1]); }
+  const g = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: false, curveSegments: 2 });
+  g.translate(0, 0, -d / 2);
+  if (plane === 'side') { g.rotateY(-Math.PI / 2); g.translate(off, 0, 0); } else g.translate(0, 0, off);
+  return g;
+}
+const mirrorU = (pts: readonly number[]) => pts.map((v, i) => (i % 2 ? v : -v));
+/** Ragged hem: n downward spikes around a ring (rags, sheets, robes). */
+function hem(b: GB, y: number, r: number, n: number, len: number, col: string, z0 = 0, sx = 1): void {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + 0.3, l = len * (i % 2 ? 0.6 : 1);
+    b.add(cone(r * 0.42, l, 4), col, T(Math.sin(a) * r * sx, y - l / 2, z0 + Math.cos(a) * r, Math.PI, 0, 0));
+  }
+}
+/** Jack-o'-lantern head (the site's pumpkinHead): ribbed rotten pumpkin, rot patches, glowing triangle eyes + jagged grin, vine stem. */
+function pumpkinHead(b: GB, y: number, r: number, body: string, glow: string, z = 0): void {
+  b.add(sph(r, 10, 7), body, T(0, y, z, 0, 0, 0, [1.05, 0.86, 0.98]));
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    b.add(sph(r * 0.62, 7, 5), i % 2 ? body : HW.pumpD, T(Math.sin(a) * r * 0.46, y, z + Math.cos(a) * r * 0.46, 0, a, 0, [0.7, 0.9, 1]));
+  }
+  b.add(sph(r * 0.3, 6, 4), HW.rotP, T(r * 0.55, y + r * 0.15, z - r * 0.62, 0, 0, 0, [0.7, 1, 0.5]));
+  const f = z - r * 0.84, d = r * 0.36;
+  for (const s of [-1, 1]) b.add(slab([-r * 0.2, 0, r * 0.2, 0, s * 0.03 * r, r * 0.38], d, 'front', f), glow, T(s * r * 0.36, y + r * 0.0, 0));
+  b.add(slab([-r * 0.62, 0, r * 0.62, 0, r * 0.42, -r * 0.3, r * 0.22, -r * 0.16, 0, -r * 0.34, -r * 0.22, -r * 0.16, -r * 0.42, -r * 0.3], d, 'front', f + r * 0.08), glow, T(0, y - r * 0.2, 0));
+  limb(b, [[0, y + r * 0.65, z], [r * 0.02, y + r * 1.12, z + r * 0.08], [-r * 0.2, y + r * 1.36, z + r * 0.02], [-r * 0.42, y + r * 1.3, z - r * 0.06]], r * 0.16, r * 0.08, '#4f5e46', 5);
+}
+/** Halloween palette (site enemies-hollow C): cold rot, rags, bone; warm light only in pumpkins and lanterns, red only in eyes. */
+const HW = {
+  rot: '#76857c', rotD: '#55635c', cloth: '#3a4150', clothD: '#272c37', dark: '#21242c', wood: '#3a3530', woodD: '#28241f',
+  straw: '#7d7660', strawD: '#5c5748', bone: '#c4beac', boneD: '#9c9686', ghost: '#b4c2d8', ghostD: '#8a98b0', ghostL: '#d6e0ee',
+  lilac: '#6a5a8a', lilacL: '#8a7aa8', fur: '#1a1c24', furL: '#2e323e', pump: '#b8561c', pumpD: '#7e3a14', rotP: '#4e3a2c',
+  vine: '#3a4436', fire: '#ffb347', fireY: '#ffd34d', eye: '#e0283a', hole: '#0b0c10', metal: '#6a6e78',
+};
 
 /** Head height (m, unscaled) — crowns, hp bars and telegraph signs sit above it. */
-export const FOE_TOP: Record<FoeArt, number> = { wolf: 1.15, skeleton: 1.5, bandit: 1.4, boar: 1.0, drowner: 1.35, spider: 1.0, bat: 1.75, ghost: 1.55, slime: 0.95, pumpkin: 1.2, golem: 1.75 };
+export const FOE_TOP: Record<FoeArt, number> = {
+  wolf: 1.15, skeleton: 1.62, bandit: 1.42, boar: 1.0, drowner: 1.35, spider: 0.95, bat: 1.85, ghost: 1.45, slime: 0.95, pumpkin: 1.32, golem: 1.75,
+  pumpkinlet: 0.66, cat: 1.15, zombie: 1.5, scarecrow: 1.76, witch: 1.95, crow: 1.5, jack: 2.3, toad: 1.55, bones: 1.6,
+  wolfLead: 1.4, skeletonLead: 1.87, banditLead: 1.42, toadLead: 1.69, ghostLead: 1.8, batLead: 1.85, spiderLead: 1.2, zombieLead: 1.73, bonesLead: 1.75, witchLead: 2.2, catLead: 1.32, scarecrowLead: 1.76, rat: 1.25, beast: 1.0, lavaslime: 0.5, splasher: 1.1, crab: 0.85, mushroom: 1.1, shroom: 1.0, mummy: 1.55, imp: 1.32, icelet: 1.35, potion: 1.03, book: 1.12, blade: 1.68, sandworm: 1.2, tentacle: 1.7, automaton: 1.1, stonegolem: 1.32, shade: 1.73, voidling: 1.35, minerghost: 1.62, knight: 1.46, monk: 1.57, tinnik: 1.3, frostdead: 1.5, sailor: 1.53, prisoner: 1.5, widow: 1.2, skullguard: 1.44, squire: 1.6, smuggler: 1.42,
+};
 /** Body radius for hits. */
-export const FOE_R: Record<FoeArt, number> = { wolf: 0.55, skeleton: 0.4, bandit: 0.45, boar: 0.55, drowner: 0.5, spider: 0.65, bat: 0.45, ghost: 0.45, slime: 0.5, pumpkin: 0.45, golem: 0.62 };
-/** Fliers bob in the air. */
-export const FOE_FLY: Record<FoeArt, number> = { wolf: 0, skeleton: 0, bandit: 0, boar: 0, drowner: 0, spider: 0, bat: 1.0, ghost: 0.25, slime: 0, pumpkin: 0, golem: 0 };
+export const FOE_R: Record<FoeArt, number> = {
+  wolf: 0.6, skeleton: 0.4, bandit: 0.45, boar: 0.55, drowner: 0.5, spider: 0.7, bat: 0.5, ghost: 0.45, slime: 0.5, pumpkin: 0.42, golem: 0.62,
+  pumpkinlet: 0.3, cat: 0.5, zombie: 0.42, scarecrow: 0.5, witch: 0.6, crow: 0.4, jack: 0.45, toad: 0.45, bones: 0.4,
+  wolfLead: 0.6, skeletonLead: 0.45, banditLead: 0.45, toadLead: 0.5, ghostLead: 0.55, batLead: 0.6, spiderLead: 0.75, zombieLead: 0.45, bonesLead: 0.45, witchLead: 0.6, catLead: 0.5, scarecrowLead: 0.5, rat: 0.4, beast: 0.6, lavaslime: 0.5, splasher: 0.45, crab: 0.5, mushroom: 0.4, shroom: 0.55, mummy: 0.4, imp: 0.4, icelet: 0.45, potion: 0.35, book: 0.4, blade: 0.3, sandworm: 0.45, tentacle: 0.35, automaton: 0.45, stonegolem: 0.6, shade: 0.5, voidling: 0.42, minerghost: 0.45, knight: 0.4, monk: 0.4, tinnik: 0.4, frostdead: 0.42, sailor: 0.42, prisoner: 0.42, widow: 0.75, skullguard: 0.45, squire: 0.4, smuggler: 0.45,
+};
+/** Local z of the head (front = −Z): hp bars and crowns sit over the head, not over the body centre. */
+export const FOE_HEAD_Z: Partial<Record<FoeArt, number>> = { wolf: -0.75, wolfLead: -0.75, beast: -0.7, boar: -0.5, cat: -0.5, catLead: -0.5, crab: -0.2, rat: -0.12 };
+const sizes = new Map<FoeArt, [number, number]>();
+/** Footprint of a model: [length along the facing (z), width (x)] in metres (unscaled), from its geometry. */
+export function foeSize(a: FoeArt): [number, number] {
+  let v = sizes.get(a);
+  if (!v) { const g = foeGeo(a); if (!g.boundingBox) g.computeBoundingBox(); const bb = g.boundingBox!; v = [bb.max.z - bb.min.z, bb.max.x - bb.min.x]; sizes.set(a, v); }
+  return v;
+}
+/** Fliers bob in the air (and drop by this much when they die). */
+export const FOE_FLY: Record<FoeArt, number> = {
+  wolf: 0, skeleton: 0, bandit: 0, boar: 0, drowner: 0, spider: 0, bat: 1.0, ghost: 0.25, slime: 0, pumpkin: 0, golem: 0,
+  pumpkinlet: 0, cat: 0, zombie: 0, scarecrow: 0, witch: 0.5, crow: 0.9, jack: 0, toad: 0, bones: 0,
+  wolfLead: 0, skeletonLead: 0, banditLead: 0, toadLead: 0, ghostLead: 0.25, batLead: 0.3, spiderLead: 0, zombieLead: 0, bonesLead: 0, witchLead: 0.5, catLead: 0, scarecrowLead: 0, rat: 0, beast: 0, lavaslime: 0, splasher: 0, crab: 0, mushroom: 0, shroom: 0, mummy: 0, imp: 0, icelet: 0, potion: 0, book: 0, blade: 0, sandworm: 0, tentacle: 0, automaton: 0, stonegolem: 0, shade: 0.2, voidling: 0.25, minerghost: 0.25, knight: 0, monk: 0, tinnik: 0, frostdead: 0, sailor: 0, prisoner: 0, widow: 0, skullguard: 0, squire: 0, smuggler: 0,
+};
 
+/** Whole-model scale of some leaders (the site draws them bigger: spider widow ×1.25, the maze beast). */
+const FOE_SCALE: Partial<Record<FoeArt, number>> = { spiderLead: 1.2, widow: 1.25, beast: 1.15 };
 export function foeGeo(a: FoeArt): THREE.BufferGeometry {
   return cached('foe:' + a, () => {
+    foeLod = true;
+    try { const g = foeBuild(a); const k = FOE_SCALE[a]; if (k) { g.scale(k, k, k); g.computeBoundingSphere(); } return g; } finally { foeLod = false; }
+  });
+}
+function foeBuild(a: FoeArt): THREE.BufferGeometry {
+  {
     const b = new GB();
-    const INK = '#231a2c';
+    const INK = '#15122e';
     switch (a) {
-      case 'wolf': {
-        const c0 = '#9a9aa6', c1 = '#62626e', c2 = '#e4e0d8';
-        b.add(sph(0.36, 12, 9), c0, T(0, 0.58, 0.05, 0, 0, 0, [0.95, 0.85, 1.45]));
-        b.add(sph(0.26, 10, 7), c2, T(0, 0.5, -0.1, 0, 0, 0, [0.8, 0.7, 1.2]));
-        b.add(sph(0.29, 12, 9), c0, T(0, 0.86, -0.5));
-        b.add(cone(0.15, 0.32, 8), c0, T(0, 0.8, -0.78, -Math.PI / 2, 0, 0, [1, 1, 0.8]));
-        b.add(sph(0.05, 6, 4), INK, T(0, 0.83, -0.94));
-        for (const s of [-1, 1]) {
-          b.add(cone(0.1, 0.24, 5), c1, T(s * 0.15, 1.12, -0.45, 0, 0, -s * 0.25));
-          b.add(sph(0.05, 6, 5), '#ffd34d', T(s * 0.11, 0.93, -0.74));
-          b.add(sph(0.024, 5, 4), INK, T(s * 0.11, 0.93, -0.785));
-          b.add(cone(0.025, 0.07, 4), '#ffffff', T(s * 0.05, 0.7, -0.86, Math.PI, 0, 0));
-          b.add(cyl(0.075, 0.06, 0.46, 6), c1, T(s * 0.18, 0.23, -0.32));
-          b.add(cyl(0.075, 0.06, 0.46, 6), c1, T(s * 0.18, 0.23, 0.38));
+      case 'wolf': case 'wolfLead': {
+        // «Легион» wolf v2 (grey coat): long low body, light belly, dark saddle, a light fluffy ruff, the head carried low
+        // on a thick neck, tall ears, long snout with a light jaw, amber almond eye, short stubby legs on round paws, a
+        // bushy plume tail rising from the rump in an S with a light tip. The pack leader (o.boss): a coal coat, a red eye
+        // with a scar, a gold crown of spikes between the ears, a pale collar with a gold ring and the tail raised high
+        const lead = a === 'wolfLead';
+        const M = lead ? '#4a4458' : '#7a7488', D = lead ? '#2e2a3a' : '#5a5468', L = lead ? '#a4a2b2' : '#a8a2b4', E = lead ? '#ff3b3b' : '#ffd34d';
+        const RUFF = lead ? '#d8d4e0' : L;
+        b.add(sph(0.36, 9, 6), M, T(0, 0.6, 0.08, 0, 0, 0, [0.8, 0.82, 1.7]));
+        b.add(sph(0.3, 8, 5), D, T(0, 0.72, 0.16, 0, 0, 0, [0.7, 0.42, 1.55]));
+        b.add(sph(0.26, 8, 5), L, T(0, 0.42, 0.02, 0, 0, 0, [0.72, 0.36, 1.8]));
+        for (const s of [-1, 1]) for (const z of [-0.36, 0.5]) {
+          const c = s < 0 ? M : D;
+          seg(b, [s * 0.14, 0.5, z], [s * 0.14, 0.08, z - 0.03], 0.09, 0.07, c, 6);
+          b.add(sph(0.085, 6, 4), c, T(s * 0.14, 0.055, z - 0.07, 0, 0, 0, [1, 0.62, 1.45]));
         }
-        b.add(cone(0.12, 0.5, 7), c1, T(0, 0.78, 0.62, -0.9, 0, 0));
-        b.add(cone(0.14, 0.12, 8), c1, T(0, 0.86, -0.04, 0, 0, 0, [2.2, 1, 1.3]));
+        // thick neck and the ruff: overlapping light balls at the throat and chest (no loose shards)
+        b.add(sph(0.25, 8, 6), M, T(0, 0.68, -0.46, 0.45, 0, 0, [0.88, 1, 1.25]));
+        b.add(sph(0.2, 8, 5), RUFF, T(0, 0.52, -0.56, 0, 0, 0, [0.95, 1.1, 0.75]));
+        for (const s of [-1, 1]) b.add(sph(0.13, 6, 3), RUFF, T(s * 0.12, 0.64, -0.6, 0, 0, 0, [0.7, 1, 0.8]));
+        // head: skull, snout, light jaw, nose, teeth, eyes, ears
+        b.add(sph(0.2, 8, 6), M, T(0, 0.66, -0.72, 0, 0, 0, [0.95, 0.92, 1.15]));
+        seg(b, [0, 0.64, -0.82], [0, 0.57, -1.2], 0.12, 0.065, M, 7);
+        b.add(sph(0.1, 8, 5), L, T(0, 0.52, -1.0, 0, 0, 0, [0.9, 0.5, 2.0]));
+        b.add(sph(0.05, 6, 4), INK, T(0, 0.6, -1.22));
+        b.add(box(0.13, 0.02, 0.3), INK, T(0, 0.555, -1.02));
+        for (const s of [-1, 1]) {
+          b.add(cone(0.02, 0.06, 4), '#ffffff', T(s * 0.05, 0.53, -1.08, Math.PI, 0, 0));
+          b.add(sph(0.06, 7, 5), E, T(s * 0.13, 0.72, -0.86, 0, 0, s * 0.3, [0.7, 0.55, 1.25]));
+          b.add(sph(0.026, 5, 4), INK, T(s * 0.165, 0.72, -0.9));
+          b.add(cone(0.085, 0.34, 4), M, T(s * 0.1, 0.96, -0.66, -0.12, 0, -s * 0.14));
+          b.add(cone(0.045, 0.2, 4), L, T(s * 0.105, 0.92, -0.7, -0.12, 0, -s * 0.14));
+        }
+        // tail plume: rooted inside the rump, swelling then tapering to a light tip (S-curve up and back)
+        const tp: V3[] = lead ? [[0, 0.62, 0.6], [0, 0.74, 0.84], [0, 0.96, 0.98], [0, 1.16, 0.96], [0, 1.28, 0.84]]
+          : [[0, 0.58, 0.6], [0, 0.66, 0.86], [0, 0.82, 1.04], [0, 1.0, 1.12], [0, 1.14, 1.1]];
+        const tr = [0.085, 0.12, 0.14, 0.12, 0.085];
+        for (let i = 0; i < 4; i++) seg(b, tp[i], tp[i + 1], tr[i], tr[i + 1], M, 6);
+        for (let i = 2; i < 4; i++) b.add(sph(tr[i], 6, 4), M, T(...tp[i]));
+        b.add(sph(0.1, 7, 5), L, T(tp[4][0], tp[4][1] + 0.02, tp[4][2], 0, 0, 0, [0.9, 1.15, 0.9]));
+        if (lead) {
+          b.add(tor(0.22, 0.03, Math.PI * 2, 3, 8), '#d8d0c0', T(0, 0.64, -0.5, 0.95, 0, 0, [0.9, 1, 1]));
+          b.add(tor(0.04, 0.014, Math.PI * 2, 3, 6), '#e8b13a', T(0, 0.48, -0.68, 0.4, 0, 0));
+          b.add(cyl(0.13, 0.15, 0.06, 6), '#e8b13a', T(0, 0.84, -0.7));
+          for (let i = -2; i <= 2; i++) b.add(cone(0.045, 0.2 - Math.abs(i) * 0.04, 4), '#e8b13a', T(Math.sin(i * 0.5) * 0.13, 0.95, -0.7 - Math.cos(i * 0.5) * 0.06, 0, 0, -i * 0.15));
+          }
         break;
       }
       case 'skeleton': {
-        const bone = '#f1ead6', dark = '#3a3046';
+        // «Легион» skeleton: ivory bones, yellow-glowing sockets, dented iron helm, rusty iron pauldron, leather belt,
+        // tattered brown cloak behind, a notched rusty sword (the Изнанка bone-man shares this model)
+        const BONE = '#e2dac2', BONE2 = '#c4b994', IRON = '#8e959c', IRON_D = '#5f666d', RUST = '#9c5a32', CLOAK = '#7a5236', LEATHER = '#5a3a24';
+        b.add(slab([-0.12, 1.1, 0.12, 1.1, 0.24, 0.04, 0.16, 0.12, 0.08, 0.02, 0.0, 0.14, -0.08, 0.03, -0.14, 0.13, -0.2, 0.05], 0.34, 'side'), CLOAK, T(0, 0, 0.17));
         for (const s of [-1, 1]) {
-          b.add(cyl(0.04, 0.035, 0.55, 6), bone, T(s * 0.1, 0.28, 0));
-          b.add(sph(0.06, 6, 4), bone, T(s * 0.1, 0.03, -0.04, 0, 0, 0, [1, 0.6, 1.4]));
-          b.add(cyl(0.035, 0.03, 0.42, 6), bone, T(s * 0.25, 0.82, -0.06, -0.3, 0, s * 0.35));
+          limb(b, [[s * 0.07, 0.58, 0.0], [s * 0.1, 0.3, -0.05], [s * 0.1, 0.06, 0.0]], 0.04, 0.035, BONE, 5);
+          b.add(box(0.07, 0.04, 0.16), BONE, T(s * 0.1, 0.03, -0.06));
         }
-        b.add(box(0.28, 0.1, 0.14), bone, T(0, 0.58, 0));
-        b.add(cyl(0.035, 0.035, 0.45, 6), bone, T(0, 0.8, 0.02));
-        for (let i = 0; i < 3; i++) b.add(tor(0.14 - i * 0.015, 0.028, Math.PI * 2, 4, 12), bone, T(0, 0.74 + i * 0.1, 0, Math.PI / 2, 0, 0, [1.15, 0.85, 1]));
-        b.add(sph(0.26, 12, 9), bone, T(0, 1.22, -0.02, 0, 0, 0, [1, 0.95, 0.95]));
-        b.add(box(0.2, 0.1, 0.14), bone, T(0, 1.03, -0.07));
-        for (const s of [-1, 1]) { b.add(sph(0.07, 7, 5), INK, T(s * 0.09, 1.22, -0.22)); b.add(sph(0.03, 5, 4), '#7affb0', T(s * 0.09, 1.22, -0.27)); }
-        b.add(box(0.05, 0.42, 0.02), '#a8a29a', T(0.4, 1.0, -0.2, 0.5, 0, 0));
-        b.add(box(0.14, 0.03, 0.04), '#7a5232', T(0.4, 0.83, -0.1, 0.5, 0, 0));
-        b.add(cyl(0.2, 0.2, 0.05, 10), '#6a4a30', T(-0.36, 0.8, -0.12, Math.PI / 2, 0, 0.3));
-        b.add(sph(0.05, 6, 4), dark, T(-0.37, 0.8, -0.16));
+        b.add(box(0.26, 0.09, 0.13), BONE2, T(0, 0.6, 0));
+        b.add(cyl(0.16, 0.16, 0.06, 10), LEATHER, T(0, 0.66, 0));
+        b.add(box(0.07, 0.07, 0.03), '#c9a24a', T(0, 0.66, -0.16));
+        seg(b, [0, 0.62, 0.02], [0, 1.1, 0.02], 0.03, 0.03, BONE, 5);
+        b.add(sph(0.13, 8, 6), '#2a2436', T(0, 0.9, 0.01, 0, 0, 0, [1, 1.5, 0.8]));
+        for (let i = 0; i < 4; i++) b.add(tor(0.14 - i * 0.012, 0.028, Math.PI * 1.4, 3, 7), BONE, T(0, 0.78 + i * 0.08, 0.0, Math.PI / 2, 0, -Math.PI * 0.2, [1.1, 0.8, 1]));
+        b.add(sph(0.07, 7, 5), BONE, T(-0.19, 1.07, 0));
+        b.add(sph(0.11, 8, 6), IRON, T(0.2, 1.08, 0, 0, 0, -0.4, [1.1, 0.7, 1.1]));
+        b.add(sph(0.025, 4, 3), RUST, T(0.27, 1.12, -0.06));
+        // far arm hangs, near arm holds the sword forward
+        limb(b, [[0.2, 1.05, 0.02], [0.24, 0.84, 0.06], [0.22, 0.64, 0.0]], 0.032, 0.028, BONE, 5);
+        limb(b, [[-0.2, 1.05, 0.0], [-0.32, 1.22, -0.12], [-0.3, 1.44, -0.16]], 0.034, 0.03, BONE, 5);
+        seg(b, [-0.3, 1.38, -0.2], [-0.3, 1.78, 0.1], 0.04, 0.05, BONE, 5);
+        for (const o of [-1, 1]) { b.add(sph(0.055, 6, 4), BONE, T(-0.3 + o * 0.035, 1.8, 0.12)); b.add(sph(0.045, 6, 4), BONE2, T(-0.3 + o * 0.03, 1.36, -0.22)); }
+        // skull, jaw, sockets with yellow embers, helm
+        b.add(sph(0.26, 10, 7), BONE, T(0, 1.36, -0.02, 0, 0, 0, [0.95, 1, 1]));
+        b.add(box(0.22, 0.11, 0.18), BONE, T(0, 1.14, -0.08));
+        for (let i = 0; i < 4; i++) b.add(box(0.014, 0.06, 0.02), INK, T(-0.066 + i * 0.044, 1.14, -0.175));
+        for (const s of [-1, 1]) { b.add(sph(0.085, 7, 5), INK, T(s * 0.095, 1.34, -0.18, 0, 0, 0, [1, 1, 0.7])); b.add(sph(0.035, 5, 4), '#ffd36a', T(s * 0.095, 1.34, -0.235)); }
+        b.add(sph(0.23, 12, 5), IRON, T(0, 1.48, 0.03, -0.3, 0, 0, [1.06, 0.6, 1.06]));
+        b.add(sph(0.03, 4, 3), RUST, T(0.13, 1.56, -0.08));
         break;
       }
-      case 'bandit': {
-        const cloak = '#5a4636', hood = '#3a3040', skin = '#e8c8a0';
-        b.add(cyl(0.2, 0.36, 0.78, 12), cloak, T(0, 0.44, 0));
-        for (const s of [-1, 1]) b.add(cyl(0.07, 0.07, 0.2, 6), '#2a2230', T(s * 0.1, 0.08, 0));
-        b.add(box(0.5, 0.06, 0.42), '#8a6a3a', T(0, 0.55, 0, 0, 0, 0, [0.9, 1, 0.9]));
-        b.add(box(0.08, 0.08, 0.04), '#e8c04a', T(0, 0.55, -0.2));
-        b.add(sph(0.24, 12, 9), skin, T(0, 1.0, -0.02));
-        b.add(sph(0.28, 12, 9), hood, T(0, 1.06, 0.06, 0, 0, 0, [1, 1.05, 1]));
-        b.add(cone(0.12, 0.25, 6), hood, T(0, 1.32, 0.2, -0.9, 0, 0));
-        b.add(box(0.36, 0.08, 0.1), '#b8323a', T(0, 0.98, -0.2));
-        for (const s of [-1, 1]) b.add(sph(0.03, 5, 4), INK, T(s * 0.08, 1.04, -0.23));
-        for (const s of [-1, 1]) b.add(sph(0.08, 7, 5), cloak, T(s * 0.3, 0.62, -0.05));
-        b.add(cone(0.04, 0.3, 4), '#dfe4ee', T(0.32, 0.78, -0.12, 0.2, 0, 0));
-        b.add(cone(0.08, 0.04, 6), '#c8a04a', T(0.32, 0.62, -0.1));
+      case 'bones': case 'bonesLead': {
+        // Leader («Костяной страж», o.boss): a metal skull-cap with curved horns and a coffin-lid shield with a bone cross
+        const lead = a === 'bonesLead';
+        // Изнанка bone-man (hw_skeleton): grey bones, a black ribcage with pale ribs, red embers in the sockets and a crack
+        // in the skull, a rusty notched sword forward and a scrap of slate cloth as a shield on the far arm
+        const bn = HW.bone;
+        for (const s of [-1, 1]) {
+          limb(b, [[s * 0.1, 0.56, 0.0], [s * 0.12, 0.28, -0.04], [s * 0.12, 0.05, 0.0]], 0.04, 0.035, bn, 5);
+          b.add(box(0.07, 0.04, 0.15), bn, T(s * 0.12, 0.03, -0.05));
+        }
+        b.add(cyl(0.18, 0.15, 0.55, 8), HW.dark, T(0, 0.8, 0));
+        for (let i = 0; i < 4; i++) b.add(tor(0.16 - i * 0.008, 0.032, Math.PI, 3, 6), bn, T(0, 0.66 + i * 0.1, -0.03, Math.PI / 2 + 0.15, 0, Math.PI, [1.1, 0.8, 1]));
+        seg(b, [0, 0.56, -0.17], [0, 1.08, -0.15], 0.022, 0.022, bn, 5);
+        for (const s of [-1, 1]) b.add(sph(0.065, 7, 5), bn, T(s * 0.19, 1.05, 0));
+        limb(b, [[-0.19, 1.05, 0], [-0.3, 0.88, -0.14], [-0.32, 0.86, -0.36]], 0.03, 0.026, bn, 5);
+        b.add(slab([-0.035, 0, 0.035, 0, 0.03, 0.56, 0, 0.64, -0.03, 0.56], 0.025, 'front', 0), HW.metal, T(-0.32, 0.87, -0.4, -Math.PI / 2 + 0.12, 0, 0));
+        b.add(box(0.14, 0.035, 0.035), HW.rotP, T(-0.32, 0.87, -0.38));
+        b.add(sph(0.025, 4, 3), HW.rotP, T(-0.32, 0.93, -0.8));
+        limb(b, [[0.19, 1.05, 0], [0.3, 0.86, -0.04], [0.33, 0.74, -0.14]], 0.03, 0.026, bn, 5);
+        if (lead) {
+          b.add(slab([-0.17, 0.2, 0.17, 0.2, 0.15, -0.34, -0.15, -0.34], 0.04, 'side', 0.38), HW.wood, T(0, 0.9, -0.12));
+          b.add(box(0.03, 0.36, 0.06), HW.bone, T(0.41, 0.86, -0.12));
+          b.add(box(0.03, 0.06, 0.22), HW.bone, T(0.41, 0.96, -0.12));
+          b.add(sph(0.27, 10, 5, 0, Math.PI * 2, 0, Math.PI * 0.5), HW.metal, T(0, 1.38, -0.02, -0.1, 0, 0, [1.04, 0.9, 1.04]));
+          b.add(cyl(0.265, 0.27, 0.05, 10), '#585c66', T(0, 1.39, -0.02, -0.1, 0, 0));
+          for (const s of [-1, 1]) limb(b, [[s * 0.24, 1.46, 0], [s * 0.42, 1.52, 0.02], [s * 0.5, 1.7, 0.04]], 0.06, 0.012, '#8a8e98', 4);
+        } else b.add(slab([-0.12, 0.16, 0.12, 0.18, 0.1, -0.12, -0.02, -0.16, -0.12, -0.08], 0.03, 'side', 0.37), HW.cloth, T(0, 0.82, -0.08));
+        b.add(sph(0.25, 10, 7), bn, T(0, 1.34, -0.02));
+        b.add(box(0.22, 0.11, 0.17), bn, T(0, 1.13, -0.08));
+        for (let i = 0; i < 4; i++) b.add(box(0.014, 0.06, 0.02), INK, T(-0.066 + i * 0.044, 1.13, -0.17));
+        for (const s of [-1, 1]) { b.add(sph(0.08, 7, 5), HW.hole, T(s * 0.09, 1.32, -0.18, 0, 0, 0, [1, 0.8, 0.6])); b.add(sph(0.032, 5, 4), HW.eye, T(s * 0.09, 1.32, -0.225)); }
+        if (!lead) b.add(box(0.02, 0.15, 0.02), INK, T(0.04, 1.5, -0.17, -0.5, 0, 0.3));
+        break;
+      }
+      case 'bandit': case 'banditLead': case 'smuggler': {
+        // «Легион» bandit: bell robe in brown, deep plum hood around the face, red cloth band across the eyes, rope belt
+        // with a brass buckle, dark legs, a pale knife held forward. The ataman (o.boss): oxblood robe, a gold arc over
+        // the hood and the red cloth pulled up over the whole lower face
+        // dg_smuggler shares the body: olive coat, a green-grey cap instead of the hood, a black eye mask and a moustache
+        const lead = a === 'banditLead', smug = a === 'smuggler';
+        const ROBE = lead ? '#4a2a2a' : smug ? '#3e3f30' : '#5a4a3a', HOOD = smug ? '#2e2a26' : '#3a3040', SKIN = '#e8c8a0', BAND = smug ? '#15151a' : '#8a2a2a';
+        for (const s of [-1, 1]) seg(b, [s * 0.12, 0.36, 0], [s * 0.12, 0.04, -0.02], 0.065, 0.06, HOOD, 6);
+        b.add(cyl(0.21, 0.3, 0.54, 12), ROBE, T(0, 0.56, 0));
+        b.add(sph(0.22, 12, 7), ROBE, T(0, 0.8, 0, 0, 0, 0, [1.05, 0.7, 0.95]));
+        b.add(cyl(0.265, 0.27, 0.07, 12), '#8a6a3a', T(0, 0.5, 0));
+        b.add(box(0.1, 0.1, 0.04), '#c8a04a', T(0, 0.5, -0.27));
+        // hood + face opening + red band + eyes
+        if (smug) {
+          b.add(sph(0.23, 9, 4, 0, Math.PI * 2, 0, Math.PI * 0.5), '#4a5a40', T(0, 1.16, 0.0, 0.15, 0, 0, [1.05, 0.8, 1.1]));
+          b.add(cyl(0.2, 0.2, 0.02, 9), '#4a5a40', T(0, 1.17, -0.12, 0.15, 0, 0, [1, 1, 0.9]));
+          b.add(box(0.16, 0.03, 0.04), '#5a3a24', T(0, 1.03, -0.29));
+        } else {
+          b.add(sph(0.27, 10, 7), HOOD, T(0, 1.13, 0.04, 0, 0, 0, [1, 1.12, 1.05]));
+          b.add(cone(0.1, 0.18, 6), HOOD, T(0, 1.38, 0.08, -0.35, 0, 0));
+        }
+        b.add(sph(0.2, 8, 6), SKIN, T(0, 1.08, -0.13, 0, 0, 0, [0.95, 0.9, 0.75]));
+        b.add(sph(0.205, 10, 4), BAND, T(0, 1.12, -0.13, 0, 0, 0, [0.98, 0.32, 0.78]));
+        for (const s of [-1, 1]) b.add(sph(0.03, 5, 4), INK, T(s * 0.07, 1.13, -0.28));
+        if (!smug) b.add(cone(0.035, 0.18, 4), BAND, T(0.05, 1.06, 0.26, 1.2, 0, 0));
+        // knife arm
+        limb(b, [[-0.23, 0.82, -0.02], [-0.3, 0.66, -0.2], [-0.27, 0.68, -0.36]], 0.06, 0.05, ROBE, 6);
+        b.add(sph(0.045, 6, 4), SKIN, T(-0.27, 0.68, -0.38));
+        b.add(slab([0, 0, 0.05, 0.035, 0.36, 0.16, 0.05, -0.03], 0.03, 'side', -0.27), '#d8dce8', T(0, 0.69, -0.38, 0, 0, 0));
+        b.add(sph(0.08, 7, 5), ROBE, T(0.24, 0.72, 0.02));
+        if (lead) {
+          b.add(sph(0.2, 8, 4), BAND, T(0, 1.02, -0.135, 0, 0, 0, [0.97, 0.42, 0.76]));
+          b.add(tor(0.27, 0.035, Math.PI, 4, 10), '#c8a04a', T(0, 1.2, 0.05, 0, Math.PI / 2, 0, [1, 0.75, 1]));
+        }
         break;
       }
       case 'boar': {
         const c0 = '#7a5236', c1 = '#4f3424';
-        b.add(sph(0.4, 12, 9), c0, T(0, 0.55, 0.05, 0, 0, 0, [1, 0.88, 1.35]));
-        b.add(sph(0.31, 12, 9), c0, T(0, 0.58, -0.5));
+        b.add(sph(0.4, 10, 7), c0, T(0, 0.55, 0.05, 0, 0, 0, [1, 0.88, 1.35]));
+        b.add(sph(0.31, 10, 7), c0, T(0, 0.58, -0.5));
         b.add(cyl(0.13, 0.15, 0.16, 10), '#d89a8a', T(0, 0.52, -0.8, Math.PI / 2, 0, 0));
         for (const s of [-1, 1]) {
           b.add(sph(0.025, 5, 4), INK, T(s * 0.05, 0.52, -0.89));
@@ -267,9 +462,9 @@ export function foeGeo(a: FoeArt): THREE.BufferGeometry {
       case 'drowner': {
         const c0 = '#4fa89a', c1 = '#2f7470', c2 = '#a8e0c8';
         b.add(sph(0.38, 12, 10), c0, T(0, 0.55, 0, 0, 0, 0, [1, 1.25, 0.95]));
-        b.add(sph(0.26, 10, 8), c2, T(0, 0.5, -0.17, 0, 0, 0, [1, 1.1, 0.6]));
+        b.add(sph(0.26, 8, 6), c2, T(0, 0.5, -0.17, 0, 0, 0, [1, 1.1, 0.6]));
         for (const s of [-1, 1]) {
-          b.add(sph(0.12, 10, 8), '#ffffff', T(s * 0.15, 1.02, -0.18));
+          b.add(sph(0.12, 8, 6), '#ffffff', T(s * 0.15, 1.02, -0.18));
           b.add(sph(0.06, 6, 5), INK, T(s * 0.15, 1.02, -0.29));
           b.add(cone(0.12, 0.32, 4), c1, T(s * 0.42, 0.68, 0.02, 0, 0, -s * 1.2, [0.4, 1, 1]));
           b.add(sph(0.09, 6, 5), c0, T(s * 0.17, 0.08, -0.06, 0, 0, 0, [1, 0.5, 1.5]));
@@ -279,88 +474,780 @@ export function foeGeo(a: FoeArt): THREE.BufferGeometry {
         b.add(cone(0.1, 0.3, 4), c1, T(0, 1.05, 0.15, -0.5, 0, 0, [0.4, 1, 1]));
         break;
       }
-      case 'spider': {
-        const c0 = '#3e2f56', c1 = '#2a1f3a';
-        b.add(sph(0.42, 12, 9), c0, T(0, 0.6, 0.38, 0, 0, 0, [1, 0.85, 1.1]));
-        b.add(sph(0.12, 8, 6), '#ff9a3a', T(0, 0.92, 0.36, 0, 0, 0, [1, 0.4, 1]));
-        b.add(sph(0.26, 10, 8), c0, T(0, 0.5, -0.15));
+      case 'toad': case 'toadLead': {
+        // «Легион» toad (17.10): a frog ronin — wide flat green head with ball eyes on the top corners, light lip, scarf
+        // with flying ends, cream shirt with a dark placket, leather belts with brass, baggy dark trousers, webbed
+        // feet, a katana raised in the near hand
+        // The toad shogun (o.boss): ochre skin, black shirt, red scarf and shoulder plates, a straw kasa hat, red eyes and a
+        // long nodachi
+        const lead = a === 'toadLead';
+        const SK = lead ? '#a0874a' : '#5aa04a', SKD = lead ? '#6e5a2e' : '#3e7a32', SKL = lead ? '#cdb47a' : '#9acb7a', SHIRT = lead ? '#2e2a32' : '#e8dcc0',
+          PANTS = lead ? '#5a1216' : '#2a282e', LEATHER = '#6b4228', LEATHER_D = '#4a2c18', BRASS = '#c9a24a', SCARF = lead ? '#8a1e22' : '#5a2a2a';
         for (const s of [-1, 1]) {
-          b.add(sph(0.05, 6, 4), '#ff3a4a', T(s * 0.08, 0.6, -0.38));
-          b.add(sph(0.03, 5, 4), '#ff3a4a', T(s * 0.15, 0.66, -0.33));
-          for (let i = 0; i < 4; i++) {
-            const z = -0.3 + i * 0.2, ang = -0.6 + i * 0.4;
-            b.add(cyl(0.035, 0.03, 0.5, 5), c1, T(s * 0.38, 0.62, z + Math.sin(ang) * 0.1, 0, 0, s * 1.0));
-            b.add(cyl(0.03, 0.02, 0.6, 5), c1, T(s * 0.72, 0.32, z + Math.sin(ang) * 0.2, 0, 0, -s * 0.35));
+          seg(b, [s * 0.13, 0.58, 0], [s * 0.15, 0.14, -0.02], 0.12, 0.09, s < 0 ? PANTS : '#1c1a20', 6);
+          b.add(cyl(0.1, 0.1, 0.06, 6), LEATHER_D, T(s * 0.15, 0.13, -0.02));
+          b.add(sph(0.12, 8, 5), s < 0 ? SK : SKD, T(s * 0.17, 0.035, -0.1, 0, s * 0.4, 0, [1, 0.3, 1.6]));
+        }
+        b.add(cyl(0.25, 0.27, 0.42, 12), SHIRT, T(0, 0.8, 0));
+        b.add(box(0.1, 0.4, 0.06), PANTS, T(0, 0.82, -0.24));
+        b.add(box(0.07, 0.62, 0.04), LEATHER_D, T(0, 0.82, -0.255, 0, 0, 0.8));
+        b.add(cyl(0.275, 0.275, 0.07, 12), LEATHER, T(0, 0.64, 0));
+        b.add(box(0.08, 0.08, 0.04), BRASS, T(-0.1, 0.64, -0.27));
+        b.add(cyl(0.18, 0.27, 0.12, 9), SCARF, T(0, 1.04, 0));
+        b.add(slab([0, 0, 0.15, -0.08, 0.32, -0.36, 0.22, -0.3, 0.06, -0.12], 0.05, 'side', 0.12), SCARF, T(0, 1.06, 0.16));
+        // arms: far hand on the belt, near hand raises the katana
+        limb(b, [[0.27, 0.98, 0], [0.32, 0.8, 0.02], [0.27, 0.66, -0.06]], 0.07, 0.06, SHIRT, 5);
+        b.add(sph(0.06, 6, 4), SK, T(0.27, 0.63, -0.08));
+        limb(b, [[-0.27, 0.98, 0], [-0.34, 0.82, -0.12], [-0.33, 0.66, -0.3]], 0.07, 0.06, SHIRT, 5);
+        b.add(cyl(0.065, 0.065, 0.1, 6), LEATHER_D, T(-0.335, 0.72, -0.24, -1.0, 0, 0));
+        b.add(sph(0.06, 6, 4), SK, T(-0.33, 0.64, -0.32));
+        b.add(cyl(0.025, 0.025, 0.18, 5), PANTS, T(-0.33, 0.62, -0.32, -0.6, 0, 0));
+        b.add(cyl(0.06, 0.06, 0.02, 8), BRASS, T(-0.33, 0.68, -0.37, -0.6, 0, 0));
+        if (lead) b.add(box(0.025, 0.95, 0.05), '#d0d6de', T(-0.33, 1.02, -0.66, -0.6, 0, 0));
+        else b.add(box(0.025, 0.7, 0.05), '#d0d6de', T(-0.33, 0.95, -0.56, -0.6, 0, 0));
+        // head: wide flat dome, light lower lip, mouth line, ball eyes
+        b.add(sph(0.36, 10, 6), SK, T(0, 1.25, -0.03, 0, 0, 0, [1.18, 0.64, 0.95]));
+        b.add(sph(0.31, 10, 5), SKL, T(0, 1.13, -0.06, 0, 0, 0, [1.1, 0.32, 0.92]));
+        b.add(tor(0.31, 0.014, Math.PI * 0.8, 3, 10), SKD, T(0, 1.17, -0.05, Math.PI / 2, 0, Math.PI * 0.6, [1.12, 0.95, 1]));
+        for (const s of [-1, 1]) {
+          b.add(sph(0.13, 8, 6), SK, T(s * 0.22, 1.42, -0.08));
+          b.add(sph(0.095, 8, 6), '#f4f0e0', T(s * 0.22, 1.43, -0.15));
+          b.add(sph(0.05, 6, 4), lead ? '#ff3b2a' : '#3a2416', T(s * 0.22, 1.43, -0.23));
+          if (lead) b.add(box(0.14, 0.05, 0.2), '#7a1a1e', T(s * 0.31, 1.0, 0, 0, 0, -s * 0.5));
+        }
+        if (lead) {
+          b.add(cone(0.5, 0.17, 8), '#d8b46a', T(0, 1.6, -0.04));
+          b.add(box(0.012, 0.09, 0.02), '#e8a0a8', T(-0.3, 1.5, -0.14, 0, 0, 0.6));
+        }
+        for (const [x, y] of [[-0.18, 0.92], [0.17, 0.95], [-0.2, 0.78], [0.2, 0.8]]) b.add(sph(0.03, 5, 3), SK, T(x, y, -0.22, 0, 0, 0, [1, 0.8, 0.4]));
+        break;
+      }
+      case 'spider': case 'spiderLead': case 'widow': {
+        // Изнанка spider: wide and low, coal-grey, broken bent legs, rag stripes on the abdomen, four red eyes, bone fangs.
+        // The widow (o.boss, ×1.25 — FOE_SCALE): coal-black with a dirty-lilac hourglass and cobweb strands on the back;
+        // dgb_spider: plum body with a crimson diamond
+        const lead = a === 'spiderLead', widow = a === 'widow';
+        const c = lead ? HW.fur : widow ? '#3b1f44' : HW.furL, legC = widow ? '#1e1424' : c;
+        b.add(sph(0.48, 10, 7), c, T(0, 0.54, 0.29, 0, 0, 0, [0.95, 0.85, 1.05]));
+        if (lead || widow) {
+          // the mark on both flanks (the site draws it on the abdomen in profile): lilac hourglass / crimson diamond
+          const m = lead ? HW.lilacL : '#e0305a';
+          for (const s of [-1, 1]) {
+            if (lead) for (const v of [1, -1]) b.add(slab([-0.08, v * 0.12, 0.08, v * 0.12, 0, 0], 0.03, 'side', s * 0.465), m, T(0, 0.6, 0.3, 0, 0, 0));
+            else b.add(new THREE.OctahedronGeometry(0.15, 0), m, T(s * 0.45, 0.6, 0.3, 0, 0, s * 0.2, [0.25, 1.1, 0.8]));
           }
-          b.add(cone(0.035, 0.12, 4), '#f4eedc', T(s * 0.06, 0.34, -0.36, Math.PI, 0, 0));
+          if (lead) for (let i = 0; i < 3; i++) b.add(box(0.012, 0.012, 0.36), HW.ghostD, T(-0.2 + i * 0.2, 0.86 - Math.abs(i - 1) * 0.1, 0.3, 0.6, (i - 1) * 0.5, 0));
+        } else {
+          for (let i = 0; i < 2; i++) b.add(tor(0.3 - i * 0.05, 0.022, Math.PI, 3, 8), HW.cloth, T(0, 0.62 - i * 0.12, 0.25 + i * 0.05, 0, Math.PI / 2, Math.PI / 2 + 0.35, [1, 1, 1.15]));
+          b.add(sph(0.06, 5, 4), HW.hole, T(0.1, 0.62, 0.62));
+        }
+        b.add(sph(0.23, 8, 6), c, T(0, 0.4, -0.28));
+        for (const s of [-1, 1]) {
+          for (let i = 0; i < 4; i++) {
+            const z = -0.3 + i * 0.17, kz = z + (i - 1.5) * 0.12, fz = z + (i - 1.5) * 0.3;
+            limb(b, [[s * 0.15, 0.42, z], [s * (0.48 + i * 0.03), 0.76 - i * 0.04, kz], [s * (0.86 + i * 0.05), 0.02, fz]], 0.038, 0.024, legC, 4);
+          }
+          b.add(sph(0.05, 6, 4), HW.eye, T(s * 0.075, 0.48, -0.47));
+          b.add(sph(0.036, 5, 4), HW.eye, T(s * 0.12, 0.39, -0.46));
+          seg(b, [s * 0.05, 0.3, -0.44], [s * 0.04, 0.17, -0.54], 0.03, 0.014, HW.bone, 4);
         }
         break;
       }
       case 'bat': {
-        const c0 = '#4a3a5e', c1 = '#2e2240', w = '#6a4a7e';
-        b.add(sph(0.22, 10, 8), c0, T(0, 1.55, 0, 0, 0, 0, [1, 1.1, 0.9]));
-        b.add(sph(0.18, 10, 8), c0, T(0, 1.82, -0.05));
+        // Изнанка bat: a black furry ball with ears and red eyes, ragged dark wings spread wide with holes, small fangs
+        const Y = 1.55;
+        b.add(sph(0.18, 8, 6), HW.fur, T(0, Y, 0, 0, 0, 0, [1, 1.12, 0.9]));
         for (const s of [-1, 1]) {
-          b.add(cone(0.07, 0.2, 4), c0, T(s * 0.1, 2.02, -0.03, 0, 0, -s * 0.3));
-          b.add(sph(0.045, 6, 4), '#ff4a5a', T(s * 0.07, 1.84, -0.2));
-          const wing = new THREE.BufferGeometry();
-          wing.setAttribute('position', new THREE.Float32BufferAttribute([0, 0.12, 0, s * 0.8, 0.28, 0.05, s * 0.55, -0.12, 0.05, 0, 0.12, 0, s * 0.55, -0.12, 0.05, s * 0.22, -0.18, 0.02,
-            0, 0.12, 0, s * 0.55, -0.12, 0.05, s * 0.8, 0.28, 0.05, 0, 0.12, 0, s * 0.22, -0.18, 0.02, s * 0.55, -0.12, 0.05], 3));
-          wing.computeVertexNormals();
-          b.add(wing, w, T(s * 0.12, 1.55, 0.02));
-          b.add(cone(0.02, 0.06, 4), '#ffffff', T(s * 0.04, 1.73, -0.17, Math.PI, 0, 0));
+          b.add(cone(0.06, 0.18, 4), HW.fur, T(s * 0.09, Y + 0.24, 0, 0, 0, -s * 0.25));
+          b.add(sph(0.035, 6, 4), HW.eye, T(s * 0.065, Y + 0.03, -0.15));
+          b.add(cone(0.014, 0.05, 4), HW.bone, T(s * 0.025, Y - 0.07, -0.15, Math.PI, 0, 0));
+          const w = [0.02, 0.04, 0.4, 0.34, 0.71, 0.13, 0.58, 0.06, 0.55, -0.08, 0.4, 0.02, 0.3, -0.11, 0.13, -0.02];
+          b.add(slab(s < 0 ? mirrorU(w) : w, 0.025, 'front', 0.03), HW.furL, T(0, Y, 0, 0, -s * 0.25, 0));
+          b.add(slab([0, 0, 0.06, 0.01, 0.03, 0.07], 0.03, 'front', 0.03), HW.hole, T(s * 0.47, Y + 0.12, -0.0, 0, -s * 0.25, 0));
         }
-        b.add(cyl(0.015, 0.015, 0.2, 4), c1, T(0, 1.3, 0));
         break;
       }
-      case 'ghost': {
-        const c0 = '#e8f0ff';
-        b.add(sph(0.36, 14, 10), c0, T(0, 1.05, 0));
-        b.add(cyl(0.36, 0.48, 0.7, 14), c0, T(0, 0.68, 0));
-        for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2; b.add(cone(0.12, 0.2, 5), c0, T(Math.cos(a2) * 0.38, 0.26, Math.sin(a2) * 0.38, Math.PI, 0, 0)); }
-        for (const s of [-1, 1]) b.add(sph(0.07, 7, 5), INK, T(s * 0.12, 1.1, -0.32, 0, 0, 0, [1, 1.4, 0.5]));
-        b.add(sph(0.07, 7, 5), INK, T(0, 0.92, -0.34, 0, 0, 0, [1, 1.3, 0.5]));
-        for (const s of [-1, 1]) b.add(sph(0.1, 7, 5), c0, T(s * 0.42, 0.85, -0.05, 0, 0, s * 0.6, [1, 1.6, 1]));
-        break;
-      }
-      case 'pumpkin': {
-        const o = '#ff8a2a';
-        for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2; b.add(sph(0.26, 10, 8), o, T(Math.cos(a2) * 0.16, 0.62, Math.sin(a2) * 0.16, 0, 0, 0, [0.8, 1, 0.8])); }
-        b.add(cyl(0.04, 0.05, 0.18, 6), '#4f7a2a', T(0, 1.0, 0, 0.2, 0, 0.2));
-        for (const s of [-1, 1]) { b.add(cone(0.08, 0.1, 3), '#2a1206', T(s * 0.12, 0.72, -0.36, -Math.PI / 2, 0, 0)); b.add(cyl(0.05, 0.05, 0.3, 5), '#3a5a2a', T(s * 0.12, 0.15, 0)); }
-        b.add(box(0.28, 0.06, 0.05), '#2a1206', T(0, 0.52, -0.38));
-        b.add(sph(0.06, 6, 4), '#ffd34d', T(0, 0.62, -0.3));
-        break;
-      }
-      case 'golem': {
-        // the Pumpkin Golem (hw_pumpkin leader, «Тыквенный голем»): a hulk of rotten pumpkins on vine legs, vine arms
-        // with pumpkin fists, a glowing jack-o'-lantern head and a crown of bone shards (site: topBoss 212 vs top 146)
-        const o = '#b8561c', od = '#7e3a14', vine = '#3a4436', bone = '#c4beac';
-        for (const s of [-1, 1]) b.add(cyl(0.09, 0.12, 0.42, 6), vine, T(s * 0.2, 0.21, 0));
-        for (let i = 0; i < 7; i++) { const a2 = (i / 7) * Math.PI * 2; b.add(sph(0.3, 10, 8), i % 2 ? o : od, T(Math.cos(a2) * 0.2, 0.78, Math.sin(a2) * 0.2, 0, 0, 0, [0.85, 1.05, 0.85])); }
-        b.add(sph(0.27, 10, 8), od, T(0, 1.02, 0.02, 0, 0, 0, [1.1, 0.8, 1]));
+      case 'crow': {
+        // the ravens that answer the scarecrow: a plump level teardrop body tapering into the tail, the head merged into
+        // it, a small dark straw beak, red eye, broad ragged wings spread low and swept back with a scalloped edge
+        const Y = 1.2;
+        b.add(sph(0.15, 9, 6), HW.fur, T(0, Y, 0.04, 0.06, 0, 0, [0.85, 0.82, 1.9]));
+        b.add(cone(0.11, 0.3, 6), HW.fur, T(0, Y + 0.02, 0.4, Math.PI / 2 - 0.12, 0, 0, [1.25, 1, 0.6]));
+        b.add(sph(0.11, 8, 6), HW.fur, T(0, Y + 0.05, -0.22));
+        b.add(cone(0.032, 0.11, 4), HW.strawD, T(0, Y + 0.03, -0.36, -Math.PI / 2 - 0.15, 0, 0));
         for (const s of [-1, 1]) {
-          b.add(cyl(0.06, 0.07, 0.62, 6), vine, T(s * 0.5, 0.85, -0.05, 0.3, 0, s * 0.55));
-          b.add(sph(0.16, 9, 7), o, T(s * 0.66, 0.55, -0.15));
+          b.add(sph(0.022, 4, 3), HW.eye, T(s * 0.07, Y + 0.08, -0.28));
+          const w = [0.02, 0.1, 0.24, 0.12, 0.44, 0.04, 0.6, -0.14, 0.5, -0.12, 0.45, -0.21, 0.35, -0.15, 0.28, -0.24, 0.18, -0.15, 0.1, -0.21, 0.02, -0.1];
+          const g = slab((s < 0 ? mirrorU(w) : w).map((v, i) => (i % 2 ? v * 1.35 : v)), 0.022, 'front'); g.rotateX(-Math.PI / 2);
+          b.add(g, HW.furL, T(s * 0.07, Y + 0.08, 0.04, 0, 0, s * (s < 0 ? 0.95 : 0.7)));
         }
-        b.add(sph(0.3, 12, 9), o, T(0, 1.38, 0, 0, 0, 0, [1, 0.85, 1]));
-        for (const s of [-1, 1]) b.add(cone(0.07, 0.09, 3), '#ffd34d', T(s * 0.11, 1.45, -0.27, -Math.PI / 2, 0, 0));
-        b.add(box(0.26, 0.06, 0.05), '#ffd34d', T(0, 1.3, -0.28));
-        for (let i = 0; i < 5; i++) b.add(cone(0.035, 0.15, 4), bone, T((i - 2) * 0.08, 1.66, 0, 0, 0, (i - 2) * 0.12));
+        break;
+      }
+      case 'ghost': case 'ghostLead': case 'minerghost': {
+        // Изнанка ghost: a wispy blue-grey sheet, a bell that flares into a pointed scalloped hem, a darker fold down the
+        // back and a light streak on the front, hollow teardrop eyes and a moaning mouth, one thin arm reaching forward.
+        // The leader (o.boss, ×1.3): a black hood draped over the head with tear streaks and a candle in the hand.
+        // dg_minerghost: aqua, white beard, miner's helmet with a lamp flame and a pickaxe
+        const lead = a === 'ghostLead', miner = a === 'minerghost', k = lead ? 1.25 : 1;
+        const G = miner ? '#92d8d8' : HW.ghost, GD = miner ? '#6fb0b0' : HW.ghostD, GL = miner ? '#e0f0f4' : HW.ghostL;
+        const prof = [[0.52, 0.4], [0.47, 0.52], [0.42, 0.72], [0.4, 0.92], [0.38, 1.12], [0.3, 1.29], [0.17, 1.39], [0, 1.42]].map(([r, y]) => new THREE.Vector2(r * k, y * k));
+        b.add(new THREE.LatheGeometry(prof, 12), G, T(0, 0, 0.02));
+        for (let i = 0; i < 7; i++) {
+          const a2 = (i / 7) * Math.PI * 2 + 0.2, r = 0.44 * k;
+          b.add(sph(0.17 * k, 7, 4), G, T(Math.sin(a2) * r, (0.4 - (i % 2) * 0.07) * k, 0.07 + Math.cos(a2) * r, 0, a2, 0, [1.15, 0.75, 1.0]));
+        }
+        if (!miner && !lead) b.add(slab([0.12, 0.55, 0.46, 0.9, 0.44, 1.3, 0.32, 1.54, 0.12, 1.64, 0.24, 1.46, 0.28, 1.2, 0.16, 0.82].map((v) => v * k), 0.22 * k, 'side'), GD, T(0, 0, 0.0));
+        b.add(slab([0, 0, 0.03, -0.25, 0.0, -0.5, -0.03, -0.25].map((v) => v * k), 0.04, 'side', 0), GL, T(-0.3 * k, 1.22 * k, -0.18 * k, 0, 0.6, 0));
+        for (const s of [-1, 1]) {
+          if (miner) b.add(sph(0.045, 8, 6), HW.hole, T(s * 0.12, 1.1, -0.37));
+          else b.add(sph(0.1 * k, 10, 8), HW.hole, T(s * 0.14 * k, 1.1 * k, -0.33 * k, 0, -s * 0.35, s * 0.2, [0.9, 1.45, 0.5]));
+          if (!miner) b.add(sph(0.026 * k, 4, 3), GL, T(s * 0.14 * k - 0.02 * k, 1.15 * k, -0.38 * k));
+          if (lead) b.add(box(0.024, 0.14, 0.02), GL, T(s * 0.14 * k, 0.94 * k, -0.4 * k));
+        }
+        b.add(sph(0.08 * k, 6, 4), HW.hole, T(-0.02, 0.84 * k, -0.4 * k, 0, 0, 0, [0.85, 1.6, 0.5]));
+        if (lead) limb(b, [[-0.34 * k, 1.0 * k, -0.06 * k], [-0.6 * k, 0.96 * k, -0.2 * k], [-0.8 * k, 1.08 * k, -0.26 * k]], 0.11 * k, 0.03, G, 6);
+        else limb(b, [[-0.34 * k, 1.0 * k, -0.06 * k], [-0.62 * k, 0.86 * k, -0.2 * k], [-0.88 * k, 0.6 * k, -0.24 * k]], 0.12 * k, 0.02, G, 6);
+        if (lead) {
+          // hood: a dark cap over the crown with lappets down the sides
+          b.add(sph(0.36 * k, 12, 4, 0, Math.PI * 2, 0, Math.PI * 0.5), HW.fur, T(0, 1.24 * k, 0.04, 0, 0, 0, [1.25, 0.62, 1.2]));
+          b.add(cyl(0.45 * k, 0.45 * k, 0.03, 12), HW.fur, T(0, 1.24 * k, 0.04));
+          for (const s of [-1, 1]) b.add(slab([-0.12, 0, 0.14, 0, 0.1, -0.36, 0.02, -0.26, -0.08, -0.34], 0.03, 'side', s * 0.42 * k), HW.fur, T(0, 1.26 * k, 0.04));
+          // candle on the reaching hand
+          b.add(cyl(0.05, 0.055, 0.2, 6), HW.bone, T(-0.8 * k, 1.08 * k + 0.1, -0.26 * k));
+          b.add(cone(0.045, 0.14, 5), HW.fire, T(-0.8 * k, 1.08 * k + 0.27, -0.26 * k));
+        }
+        if (miner) {
+          b.add(sph(0.3, 10, 4, 0, Math.PI * 2, 0, Math.PI * 0.5), '#9a8466', T(0, 1.2, 0.02, 0, 0, 0, [1.05, 0.9, 1.05]));
+          b.add(cyl(0.34, 0.34, 0.03, 10), '#7e6a50', T(0, 1.22, 0.02));
+          b.add(cyl(0.05, 0.06, 0.07, 6), '#d8d4c8', T(0, 1.46, -0.12, -0.3, 0, 0));
+          b.add(cone(0.045, 0.13, 5), HW.fireY, T(0, 1.6, -0.13));
+          b.add(sph(0.2, 8, 6), GL, T(0, 0.8, -0.33, 0.3, 0, 0, [1.05, 1.1, 0.5]));
+          seg(b, [-0.86, 0.3, -0.24], [-0.86, 0.98, -0.24], 0.022, 0.022, '#8a6a4a', 5);
+          b.add(tor(0.22, 0.028, Math.PI * 0.8, 3, 7), '#c8ccd4', T(-0.86, 0.8, -0.24, 0, Math.PI / 2, Math.PI * 0.1));
+        }
+        break;
+      }
+      case 'skullguard': case 'squire': {
+        // dg_skullguard: a big skull with red eyes in orange rings over a boxy beige armoured tunic, grey legs, a stone
+        // tablet shield. dg_squire: a small skeleton under a grey cap-helmet, cream ribs, a maroon round shield with a gold
+        // boss and a spear
+        const BONE = '#e8dcc8';
+        if (a === 'skullguard') {
+          for (const s of [-1, 1]) seg(b, [s * 0.1, 0.44, 0], [s * 0.11, 0.03, -0.02], 0.06, 0.055, '#8a8a92', 5);
+          b.add(box(0.46, 0.46, 0.32), '#a89f90', T(0, 0.66, 0));
+          b.add(box(0.48, 0.06, 0.34), '#857c6e', T(0, 0.5, 0));
+          b.add(sph(0.3, 10, 7), BONE, T(0, 1.14, -0.02));
+          b.add(box(0.26, 0.12, 0.2), BONE, T(0, 0.9, -0.08));
+          for (let i = 0; i < 4; i++) b.add(box(0.016, 0.06, 0.02), INK, T(-0.07 + i * 0.047, 0.92, -0.185));
+          for (const s of [-1, 1]) { b.add(sph(0.09, 7, 5), INK, T(s * 0.11, 1.12, -0.22, 0, 0, 0, [1, 1, 0.6])); b.add(tor(0.07, 0.016, Math.PI * 2, 3, 8), '#e8902a', T(s * 0.11, 1.12, -0.27)); b.add(sph(0.03, 5, 3), '#ff3b3b', T(s * 0.11, 1.12, -0.27)); }
+          b.add(box(0.06, 0.62, 0.42), '#b5afa0', T(-0.32, 0.66, -0.1));
+          b.add(box(0.065, 0.5, 0.06), '#8a8478', T(-0.33, 0.66, -0.1));
+          limb(b, [[0.24, 0.84, 0], [0.3, 0.66, 0.04], [0.3, 0.5, 0]], 0.05, 0.045, BONE, 5);
+        } else {
+          for (const s of [-1, 1]) seg(b, [s * 0.08, 0.56, 0], [s * 0.1, 0.05, -0.02], 0.04, 0.035, BONE, 5);
+          b.add(box(0.24, 0.08, 0.13), BONE, T(0, 0.6, 0));
+          b.add(cyl(0.16, 0.14, 0.42, 8), HW.dark, T(0, 0.86, 0));
+          for (let i = 0; i < 4; i++) b.add(tor(0.15 - i * 0.008, 0.026, Math.PI, 3, 6), BONE, T(0, 0.72 + i * 0.09, -0.03, Math.PI / 2 + 0.15, 0, Math.PI, [1.1, 0.8, 1]));
+          b.add(sph(0.23, 9, 6), BONE, T(0, 1.3, -0.02));
+          b.add(box(0.2, 0.1, 0.16), BONE, T(0, 1.1, -0.08));
+          for (const s of [-1, 1]) { b.add(sph(0.07, 6, 4), INK, T(s * 0.085, 1.28, -0.17, 0, 0, 0, [1, 1, 0.6])); b.add(sph(0.025, 4, 3), '#ffd36a', T(s * 0.085, 1.28, -0.215)); }
+          b.add(sph(0.245, 9, 4, 0, Math.PI * 2, 0, Math.PI * 0.45), '#8a8f9c', T(0, 1.33, 0));
+          b.add(cyl(0.25, 0.25, 0.03, 9), '#6a6e78', T(0, 1.36, 0));
+          limb(b, [[-0.18, 1.04, 0], [-0.26, 0.88, -0.1], [-0.28, 0.86, -0.2]], 0.03, 0.026, BONE, 4);
+          b.add(cyl(0.26, 0.26, 0.04, 12), '#7a2a3a', T(-0.33, 0.84, -0.14, 0, 0, Math.PI / 2));
+          b.add(sph(0.07, 6, 4), '#c9a030', T(-0.36, 0.84, -0.14, 0, 0, 0, [0.6, 1, 1]));
+          limb(b, [[0.18, 1.04, 0], [0.26, 0.88, -0.04], [0.26, 0.86, -0.14]], 0.03, 0.026, BONE, 4);
+          seg(b, [0.26, 0.06, 0.12], [0.26, 1.6, -0.42], 0.02, 0.02, '#8a6a45', 4);
+          seg(b, [0.26, 1.6, -0.42], [0.26, 1.74, -0.47], 0.04, 0.003, '#c8ccd4', 4);
+        }
+        break;
+      }
+      case 'skeletonLead': {
+        // the skeleton leader (skeletonBoss): a legionary of bone — gold helm with a tall red horsehair crest, cheek guards
+        // and neck guard, a snarling skull with red-glowing sockets, gold cuirass and greaves, red pteruges skirt, a red
+        // cape behind, a big round gold shield with a lion boss on the near arm and a gold-tipped spear forward
+        const BONE = '#e2dac2', GM = '#e8b13a', GD = '#a9741c', GL = '#ffe08a', RM = '#c0182b', RD = '#7a0d18', WOOD = '#5a2a14';
+        b.add(slab([-0.16, 1.16, 0.16, 1.16, 0.34, 0.1, 0.2, 0.18, 0.08, 0.06, -0.04, 0.16, -0.14, 0.08], 0.3, 'side'), RD, T(0, 0, 0.2));
+        for (const s of [-1, 1]) {
+          seg(b, [s * 0.08, 0.58, 0], [s * 0.1, 0.06, -0.02], 0.04, 0.035, BONE, 5);
+          b.add(cyl(0.06, 0.052, 0.22, 6), GM, T(s * 0.1, 0.2, -0.03));
+          b.add(box(0.08, 0.035, 0.17), WOOD, T(s * 0.1, 0.02, -0.05));
+          b.add(sph(0.1, 6, 4), GM, T(s * 0.24, 1.06, 0, 0, 0, -s * 0.4, [1.1, 0.7, 1.1]));
+        }
+        b.add(cyl(0.2, 0.24, 0.12, 8), RM, T(0, 0.62, 0));
+        for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2 + 0.5; b.add(box(0.075, 0.2, 0.025), i % 2 ? GD : RM, T(Math.sin(a2) * 0.23, 0.5, Math.cos(a2) * 0.23, 0, a2, 0)); }
+        b.add(cyl(0.22, 0.19, 0.4, 9), GM, T(0, 0.86, 0));
+        b.add(sph(0.22, 9, 4), GM, T(0, 1.04, 0, 0, 0, 0, [1.1, 0.45, 1]));
+        for (const s of [-1, 1]) b.add(sph(0.085, 5, 3), GL, T(s * 0.08, 0.94, -0.17, 0, 0, 0, [1, 0.8, 0.45]));
+        b.add(cyl(0.225, 0.225, 0.04, 10), GD, T(0, 0.69, 0));
+        // far arm: the spear; near arm: the round shield
+        limb(b, [[0.24, 1.04, 0], [0.3, 0.86, -0.04], [0.3, 0.84, -0.14]], 0.032, 0.028, BONE, 4);
+        seg(b, [0.3, 0.08, 0.16], [0.3, 1.66, -0.5], 0.022, 0.022, WOOD, 5);
+        seg(b, [0.3, 1.66, -0.5], [0.3, 1.84, -0.57], 0.045, 0.004, GM, 4);
+        limb(b, [[-0.24, 1.04, 0], [-0.3, 0.88, -0.08], [-0.32, 0.86, -0.16]], 0.032, 0.028, BONE, 4);
+        b.add(cyl(0.32, 0.32, 0.05, 12), GM, T(-0.38, 0.84, -0.12, 0, 0, Math.PI / 2));
+        b.add(tor(0.31, 0.03, Math.PI * 2, 3, 10), WOOD, T(-0.385, 0.84, -0.12, 0, Math.PI / 2, 0));
+        b.add(tor(0.12, 0.035, Math.PI * 2, 3, 7), GD, T(-0.41, 0.84, -0.12, 0, Math.PI / 2, 0));
+        b.add(sph(0.08, 6, 4), GL, T(-0.42, 0.84, -0.12, 0, 0, 0, [0.6, 1, 1]));
+        // skull: snarling open jaw, red sockets
+        b.add(sph(0.24, 8, 5), BONE, T(0, 1.34, -0.02));
+        b.add(box(0.2, 0.08, 0.16), BONE, T(0, 1.1, -0.1, 0.25, 0, 0));
+        for (let i = 0; i < 4; i++) b.add(box(0.014, 0.05, 0.02), INK, T(-0.06 + i * 0.04, 1.16, -0.2));
+        for (const s of [-1, 1]) { b.add(sph(0.075, 6, 4), INK, T(s * 0.09, 1.32, -0.18, 0, 0, 0, [1, 0.9, 0.7])); b.add(sph(0.035, 5, 3), '#ff3b3b', T(s * 0.09, 1.32, -0.235)); }
+        // helm: dome, brow band, cheek guards, neck guard, crest holder and the red crest front-to-back
+        b.add(sph(0.255, 10, 5, 0, Math.PI * 2, 0, Math.PI * 0.5), GM, T(0, 1.4, 0.0, 0, 0, 0, [1.04, 0.9, 1.06]));
+        b.add(cyl(0.26, 0.26, 0.05, 10), GD, T(0, 1.41, 0));
+        for (const s of [-1, 1]) b.add(box(0.03, 0.17, 0.13), GM, T(s * 0.24, 1.3, -0.05, 0, 0, s * 0.12));
+        b.add(box(0.36, 0.1, 0.05), GM, T(0, 1.32, 0.22, -0.4, 0, 0));
+        b.add(box(0.05, 0.08, 0.12), GD, T(0, 1.66, 0));
+        b.add(slab([-0.26, 1.64, -0.24, 1.74, -0.14, 1.83, 0.02, 1.87, 0.18, 1.82, 0.3, 1.66, 0.26, 1.54, 0.16, 1.64, 0.02, 1.7, -0.12, 1.68], 0.08, 'side'), RM, T(0, 0, 0));
+        break;
+      }
+      case 'batLead': {
+        // Вампир (hw_bat leader): standing in a slate cloak with a dark collar, a pale face with a black widow's peak, red
+        // eyes and fangs, huge black ragged wings spread behind in a shallow V, a pale hand reaching forward
+        const Y = 0.25;
+        b.add(cyl(0.14, 0.32, 1.0, 9), HW.furL, T(0, Y + 0.6, 0.02));
+        b.add(cyl(0.14, 0.12, 0.08, 9), HW.cloth, T(0, Y + 1.12, 0.02));
+        b.add(sph(0.2, 9, 6), HW.ghostL, T(0, Y + 1.38, -0.02, 0, 0, 0, [0.95, 1.08, 0.95]));
+        b.add(sph(0.205, 9, 4, 0, Math.PI * 2, 0, Math.PI * 0.42), HW.fur, T(0, Y + 1.4, 0.02, 0.35, 0, 0));
+        b.add(cone(0.05, 0.1, 4), HW.fur, T(0, Y + 1.5, -0.18, Math.PI + 0.5, 0, 0));
+        for (const s of [-1, 1]) {
+          b.add(sph(0.035, 5, 3), HW.eye, T(s * 0.07, Y + 1.38, -0.18));
+          b.add(cone(0.014, 0.05, 3), HW.bone, T(s * 0.03, Y + 1.27, -0.18, Math.PI, 0, 0));
+          const w = [0.06, 0.06, 0.5, 0.2, 0.9, 0.04, 1.02, -0.32, 0.98, -0.84, 0.72, -0.62, 0.6, -0.94, 0.4, -0.66, 0.22, -1.02, 0.0, -0.74];
+          b.add(slab(s < 0 ? mirrorU(w) : w, 0.03, 'front'), HW.fur, T(0, Y + 1.34, 0.16, 0, -s * 0.75, 0));
+          b.add(slab([0, 0, 0.1, 0.02, 0.04, 0.12], 0.035, 'front'), HW.hole, T(s * 0.4, Y + 0.95, 0.16 + 0.36, 0, -s * 0.75, 0));
+        }
+        limb(b, [[-0.13, Y + 1.04, -0.04], [-0.3, Y + 0.96, -0.24], [-0.38, Y + 1.0, -0.44]], 0.035, 0.025, HW.ghostL, 5);
+        break;
+      }
+      case 'rat': case 'beast': {
+        // dg_rat: an upright grey rat leaning back — egg body with cream belly crescents, pointed head with a pink nose,
+        // a big round pink ear, stubby legs, a long pink tail curling up behind, a thin blade raised forward.
+        // dgb_maze (the maze beast): the same family on all fours, long and low, warm brown, red eye, gold collar
+        if (a === 'rat') {
+          const G = '#8e8e9a', GD = '#6e6e7a', C = '#e8dcc8', P = '#e0a0a0';
+          for (const s of [-1, 1]) { seg(b, [s * 0.12, 0.26, 0.02], [s * 0.13, 0.05, -0.02], 0.065, 0.055, GD, 5); b.add(sph(0.07, 6, 4), G, T(s * 0.13, 0.035, -0.08, 0, 0, 0, [1, 0.5, 1.5])); }
+          b.add(sph(0.3, 10, 7), G, T(0, 0.52, 0.04, -0.25, 0, 0, [0.95, 1.25, 0.9]));
+          b.add(sph(0.22, 8, 5), C, T(0, 0.48, -0.12, -0.25, 0, 0, [0.95, 1.1, 0.55]));
+          b.add(sph(0.18, 9, 6), G, T(0, 0.92, -0.12));
+          b.add(cone(0.12, 0.28, 7), G, T(0, 0.88, -0.36, -Math.PI / 2 - 0.2, 0, 0));
+          b.add(sph(0.035, 5, 3), '#d9908f', T(0, 0.84, -0.5));
+          for (const s of [-1, 1]) {
+            b.add(sph(0.032, 5, 3), INK, T(s * 0.09, 0.97, -0.24));
+            b.add(cyl(0.11, 0.11, 0.025, 9), G, T(s * 0.14, 1.12, -0.02, 0, 0, Math.PI / 2 - s * 0.3));
+            b.add(cyl(0.07, 0.07, 0.03, 8), '#d9908f', T(s * 0.145, 1.12, -0.03, 0, 0, Math.PI / 2 - s * 0.3));
+          }
+          limb(b, [[0, 0.3, 0.3], [0, 0.22, 0.56], [0, 0.42, 0.78], [0, 0.7, 0.8]], 0.03, 0.012, P, 4);
+          limb(b, [[-0.24, 0.66, -0.04], [-0.3, 0.6, -0.22], [-0.28, 0.72, -0.34]], 0.045, 0.04, G, 5);
+          b.add(slab([0, 0, 0.03, 0.02, 0.36, 0.1, 0.04, -0.02], 0.02, 'side', -0.28), '#b8c4d4', T(0, 0.72, -0.36, -0.9, 0, 0));
+        } else {
+          const M = '#7a4a2e', D = '#4e2e1c';
+          b.add(sph(0.36, 10, 6), M, T(0, 0.52, 0.06, 0, 0, 0, [0.78, 0.66, 1.75]));
+          for (const s of [-1, 1]) for (const z of [-0.36, 0.48]) seg(b, [s * 0.14, 0.36, z], [s * 0.14, 0.03, z - 0.04], 0.05, 0.04, D, 5);
+          b.add(sph(0.18, 8, 6), M, T(0, 0.56, -0.56));
+          b.add(cone(0.13, 0.36, 7), M, T(0, 0.5, -0.84, -Math.PI / 2 - 0.12, 0, 0));
+          b.add(sph(0.03, 4, 3), INK, T(0, 0.46, -1.02));
+          b.add(tor(0.16, 0.03, Math.PI * 2, 3, 10), '#c9a04a', T(0, 0.54, -0.42, 0.3, 0, 0, [0.85, 1, 1]));
+          for (const s of [-1, 1]) { b.add(sph(0.03, 4, 3), '#ff3b3b', T(s * 0.11, 0.62, -0.7)); b.add(cone(0.06, 0.2, 4), D, T(s * 0.08, 0.78, -0.54, -0.25, 0, -s * 0.25)); }
+          limb(b, [[0, 0.56, 0.66], [0, 0.46, 0.94], [0, 0.44, 1.16], [0, 0.56, 1.3]], 0.07, 0.03, M, 5);
+        }
+        break;
+      }
+      case 'crab': {
+        // dg_crab: a hermit crab — a tall tan spiral shell at the back, a low red-orange body, eye stalks, one big claw forward
+        const R = '#dd5a3a', RD = '#a83a24';
+        b.add(sph(0.36, 10, 7), '#e4c8aa', T(0, 0.48, 0.18, 0, 0, 0, [0.9, 1.05, 1]));
+        b.add(tor(0.2, 0.05, Math.PI * 1.6, 3, 10), '#8a6a4a', T(-0.31, 0.5, 0.18, 0, Math.PI / 2, 0));
+        b.add(tor(0.09, 0.04, Math.PI * 1.6, 3, 8), '#8a6a4a', T(-0.32, 0.52, 0.2, 0, Math.PI / 2, 0));
+        b.add(sph(0.26, 9, 6), R, T(0, 0.2, -0.2, 0, 0, 0, [1.1, 0.6, 1.2]));
+        for (const s of [-1, 1]) {
+          seg(b, [s * 0.08, 0.3, -0.36], [s * 0.1, 0.52, -0.42], 0.018, 0.014, R, 4);
+          b.add(sph(0.04, 5, 4), INK, T(s * 0.1, 0.54, -0.42));
+          for (let i = 0; i < 3; i++) limb(b, [[s * 0.2, 0.18, -0.3 + i * 0.14], [s * 0.42, 0.24, -0.34 + i * 0.16], [s * 0.5, 0.02, -0.36 + i * 0.18]], 0.025, 0.018, RD, 4);
+        }
+        limb(b, [[-0.18, 0.22, -0.36], [-0.28, 0.34, -0.56], [-0.24, 0.36, -0.74]], 0.06, 0.055, R, 5);
+        b.add(sph(0.17, 8, 6), R, T(-0.24, 0.38, -0.88, 0, 0, 0, [0.8, 0.75, 1.2]));
+        b.add(cone(0.08, 0.26, 5), '#f4e0d0', T(-0.24, 0.46, -1.1, -Math.PI / 2 + 0.25, 0, 0));
+        b.add(cone(0.06, 0.2, 5), '#f4e0d0', T(-0.24, 0.3, -1.06, -Math.PI / 2 - 0.3, 0, 0));
+        break;
+      }
+      case 'mushroom': case 'shroom': {
+        // dg_mushroom: a cream stalk-body with a sad face under a red cap with cream spots, a spear raised forward.
+        // dgb_shroom: a much wider flat purple cap with two lime spots, a short wide stalk, navy legs, a stick hanging down
+        const big = a === 'shroom', CAP = big ? '#8e3aaa' : '#d9322e', SPOT = big ? '#d8f090' : '#f5e6d0', ST = '#ede4d6';
+        const sr = big ? 0.26 : 0.19, sh = big ? 0.42 : 0.5;
+        for (const s of [-1, 1]) seg(b, [s * 0.09, 0.2, 0], [s * 0.1, 0.03, -0.02], 0.055, 0.05, big ? '#1e1e3a' : '#d8ccb8', 5);
+        b.add(cyl(sr * 0.9, sr, sh, 10), ST, T(0, 0.2 + sh / 2, 0));
+        const cy = 0.2 + sh, cr = big ? 0.62 : 0.44;
+        b.add(sph(cr, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), CAP, T(0, cy - 0.02, 0, 0, 0, 0, [1, big ? 0.62 : 0.75, 1]));
+        b.add(cyl(cr, cr * 0.7, 0.05, 12), '#d8c0a0', T(0, cy - 0.04, 0));
+        const spots = big ? [[0.22, -0.4, 0.16], [-0.3, -0.3, 0.12]] : [[0.2, -0.3, 0.07], [-0.18, -0.28, 0.06], [0, -0.38, 0.05], [0.32, 0.1, 0.06], [-0.3, 0.12, 0.06], [0.05, 0.3, 0.07]];
+        for (const [x, z, r] of spots) { const yy = cy - 0.02 + Math.sqrt(Math.max(0, 1 - (x * x + z * z) / (cr * cr))) * cr * (big ? 0.62 : 0.75); b.add(sph(r, 7, 4), SPOT, T(x, yy, z, -z * 1.4, 0, x * 1.4, [1, 0.35, 1])); }
+        for (const s of [-1, 1]) b.add(sph(0.03, 5, 3), INK, T(s * 0.07, cy - 0.16, -sr * 0.92));
+        if (!big) b.add(tor(0.04, 0.01, Math.PI, 3, 6), INK, T(0, cy - 0.27, -sr * 0.95));
+        if (big) seg(b, [-0.24, cy - 0.22, -0.04], [-0.62, cy - 0.34, -0.18], 0.03, 0.025, '#c8b090', 4);
+        else {
+          limb(b, [[-0.18, 0.5, 0], [-0.28, 0.46, -0.16], [-0.28, 0.56, -0.26]], 0.035, 0.03, '#d8c8a8', 4);
+          seg(b, [-0.28, 0.1, 0.08], [-0.28, 1.0, -0.5], 0.018, 0.018, '#8a6a45', 4);
+          seg(b, [-0.28, 1.0, -0.5], [-0.28, 1.1, -0.56], 0.04, 0.003, '#d0d0d8', 4);
+        }
+        break;
+      }
+      case 'mummy': {
+        // dg_mummy: bandaged cream body and head, tan wrap bands, a dark eye slit with cyan eyes, one stiff arm straight
+        // forward, a loose bandage tail from the head
+        const W = '#e5d5ae', WD = '#b89e74';
+        for (const s of [-1, 1]) seg(b, [s * 0.11, 0.56, 0], [s * 0.12, 0.03, -0.02], 0.08, 0.075, W, 5);
+        b.add(cyl(0.24, 0.21, 0.56, 9), W, T(0, 0.84, 0));
+        for (let i = 0; i < 4; i++) b.add(cyl(0.235 - i * 0.008, 0.235 - i * 0.008, 0.025, 9), WD, T(0, 0.64 + i * 0.13, 0, 0.15 * (i % 2 ? 1 : -1), 0, 0.1));
+        b.add(sph(0.22, 9, 6), W, T(0, 1.32, -0.02));
+        for (let i = 0; i < 3; i++) b.add(cyl(0.222, 0.222, 0.02, 9), WD, T(0, 1.22 + i * 0.12, -0.02, 0, 0, 0.08 * (i - 1)));
+        b.add(box(0.3, 0.07, 0.1), '#3a3040', T(0, 1.32, -0.17));
+        for (const s of [-1, 1]) b.add(sph(0.025, 4, 3), '#7ad8ff', T(s * 0.07, 1.32, -0.22));
+        limb(b, [[-0.25, 1.04, -0.02], [-0.26, 1.04, -0.36], [-0.26, 1.04, -0.6]], 0.07, 0.065, W, 5);
+        for (let i = 0; i < 3; i++) b.add(box(0.15, 0.014, 0.02), WD, T(-0.26, 1.04 + (i - 1) * 0.03, -0.2 - i * 0.14, 0, 0, Math.PI / 2));
+        limb(b, [[0.21, 1.04, 0], [0.26, 0.86, 0.04], [0.27, 0.7, 0]], 0.05, 0.045, W, 5);
+        limb(b, [[0.14, 1.38, 0.12], [0.26, 1.26, 0.22], [0.3, 1.06, 0.3]], 0.025, 0.02, W, 3);
+        break;
+      }
+      case 'imp': {
+        // dg_imp: a big round red head with cream horns and yellow eyes, a short crimson body with a brown apron, a curled
+        // tail with an arrow tip, a hammer raised forward
+        const R = '#d94a38', RD = '#a8302a';
+        for (const s of [-1, 1]) seg(b, [s * 0.09, 0.3, 0], [s * 0.1, 0.03, -0.02], 0.055, 0.05, R, 5);
+        b.add(cyl(0.16, 0.22, 0.34, 9), RD, T(0, 0.46, 0));
+        b.add(box(0.2, 0.26, 0.04), '#5a3a2e', T(0, 0.44, -0.2, 0.15, 0, 0));
+        b.add(sph(0.3, 10, 7), R, T(0, 0.9, -0.02));
+        for (const s of [-1, 1]) {
+          b.add(cone(0.07, 0.24, 5), '#f0e0c0', T(s * 0.2, 1.18, 0, 0, 0, -s * 0.5));
+          b.add(sph(0.06, 6, 4), '#ffc83a', T(s * 0.11, 0.94, -0.26, 0, 0, 0, [1, 1, 0.5]));
+          b.add(sph(0.025, 4, 3), INK, T(s * 0.11, 0.94, -0.29));
+        }
+        b.add(tor(0.06, 0.012, Math.PI, 3, 6), INK, T(0, 0.8, -0.28, 0, 0, Math.PI));
+        limb(b, [[0, 0.4, 0.18], [0, 0.32, 0.42], [0, 0.5, 0.58], [0, 0.66, 0.5]], 0.03, 0.02, R, 4);
+        b.add(cone(0.05, 0.1, 4), R, T(0, 0.7, 0.46, -0.6, 0, 0));
+        limb(b, [[-0.18, 0.58, 0], [-0.3, 0.68, -0.14], [-0.3, 0.86, -0.22]], 0.04, 0.035, R, 4);
+        seg(b, [-0.3, 0.7, -0.16], [-0.3, 1.18, -0.34], 0.02, 0.02, '#6a4a30', 4);
+        b.add(box(0.12, 0.12, 0.22), '#707078', T(-0.3, 1.2, -0.35, -0.36, 0, 0));
+        break;
+      }
+      case 'icelet': {
+        // dg_icelet: an angular ice block — a faceted cyan body wider than the faceted pale head, dark crack lines, angry
+        // brows and blue eyes, two dark horn spikes, stubby legs, an ice shard arm
+        const I = '#bfe6fa', ID = '#8fcbea';
+        for (const s of [-1, 1]) seg(b, [s * 0.12, 0.2, 0], [s * 0.12, 0.03, -0.02], 0.07, 0.065, ID, 5);
+        b.add(new THREE.DodecahedronGeometry(0.36, 0), I, T(0, 0.52, 0, 0, 0.3, 0, [1.25, 0.85, 0.85]));
+        b.add(new THREE.IcosahedronGeometry(0.26, 0), '#d8f2ff', T(0, 0.98, -0.02, 0.1, 0.2, 0, [1.05, 0.95, 1]));
+        for (let i = 0; i < 3; i++) b.add(box(0.012, 0.16, 0.02), '#5a9ac8', T(-0.1 + i * 0.1, 0.5 + (i % 2) * 0.06, -0.31, 0, 0, 0.5 - i * 0.4));
+        for (const s of [-1, 1]) {
+          b.add(cone(0.02, 0.24, 3), '#3a4a60', T(s * 0.13, 1.26, 0, 0, 0, -s * 0.3));
+          b.add(sph(0.04, 5, 3), '#3a7ad8', T(s * 0.09, 1.0, -0.24));
+          b.add(box(0.1, 0.022, 0.02), INK, T(s * 0.09, 1.07, -0.24, 0, 0, s * 0.4));
+        }
+        b.add(box(0.1, 0.018, 0.02), INK, T(0, 0.88, -0.25));
+        b.add(cone(0.09, 0.56, 4), ID, T(-0.44, 0.5, -0.28, -1.8, 0, 0.5));
+        break;
+      }
+      case 'potion': {
+        // dg_potion: a living flask — round pale-blue glass belly half full of lime liquid with bubbles, narrow neck,
+        // brown cork, a face at the liquid line, two little dark legs
+        for (const s of [-1, 1]) seg(b, [s * 0.1, 0.14, 0], [s * 0.11, 0.02, -0.02], 0.04, 0.035, '#4a4048', 4);
+        b.add(sph(0.3, 10, 4, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), '#7df84a', T(0, 0.44, 0));
+        b.add(sph(0.31, 10, 4, 0, Math.PI * 2, 0, Math.PI * 0.47), '#d4eefa', T(0, 0.44, 0));
+        b.add(cyl(0.09, 0.11, 0.24, 8), '#d4eefa', T(0, 0.82, 0));
+        b.add(cyl(0.08, 0.08, 0.09, 8), '#a8703a', T(0, 0.97, 0));
+                for (const s of [-1, 1]) b.add(sph(0.045, 7, 5), INK, T(s * 0.1, 0.5, -0.29));
+        b.add(tor(0.06, 0.014, Math.PI, 3, 6), INK, T(0, 0.42, -0.3, 0, 0, Math.PI));
+        break;
+      }
+      case 'book': {
+        // dg_book: a floating open book — red-brown covers in a shallow V, cream pages with two eyes, a jagged-tooth mouth
+        // along the bottom, a gold bookmark ribbon hanging down
+        const Y = 0.85;
+        for (const s of [-1, 1]) {
+          b.add(box(0.4, 0.34, 0.04), '#9b4030', T(s * 0.2, Y + 0.06, 0.04, 0, s * 0.3, s * 0.28));
+          b.add(box(0.36, 0.3, 0.04), '#e8ddb8', T(s * 0.19, Y + 0.07, 0.0, 0, s * 0.3, s * 0.28));
+          b.add(sph(0.055, 8, 6), INK, T(s * 0.17, Y + 0.14, -0.08));
+          b.add(sph(0.016, 4, 3), '#ffffff', T(s * 0.17 - 0.015, Y + 0.16, -0.13));
+        }
+        b.add(box(0.5, 0.05, 0.04), INK, T(0, Y - 0.04, -0.06));
+        for (let i = 0; i < 6; i++) b.add(cone(0.035, 0.09, 3), '#f4eedc', T(-0.2 + i * 0.08, Y - 0.02 + (i % 2) * 0.0, -0.09, 0, 0, i % 2 ? 0 : Math.PI));
+        b.add(slab([-0.035, 0, 0.035, 0, 0.035, -0.32, 0, -0.26, -0.035, -0.32], 0.015, 'front', 0.06), '#e8c050', T(0, Y - 0.12, 0));
+        break;
+      }
+      case 'blade': {
+        // dg_armory: a haunted sword floating point-down — silver blade with a fuller, gold crossguard with a cyan gem,
+        // brown wrapped grip, gold pommel
+        b.add(slab([-0.08, 0, 0.08, 0, 0.08, 0.9, -0.08, 0.9], 0.04, 'front'), '#eef2f8', T(0, 0.42, 0));
+        b.add(cone(0.08, 0.2, 4), '#eef2f8', T(0, 0.32, 0, Math.PI, Math.PI / 4, 0, [1, 1, 0.3]));
+        b.add(box(0.025, 0.7, 0.045), '#c4ccda', T(0, 0.82, 0));
+        b.add(box(0.46, 0.06, 0.08), '#c9a04a', T(0, 1.34, 0));
+        b.add(sph(0.045, 5, 3), '#4fb3e8', T(0, 1.34, -0.045));
+        b.add(cyl(0.035, 0.035, 0.22, 6), '#6b4226', T(0, 1.48, 0));
+        b.add(sph(0.06, 6, 4), '#c9a04a', T(0, 1.62, 0));
+        break;
+      }
+      case 'sandworm': case 'tentacle': {
+        // dg_sandworm / dg_rootworm: three fat orange-tan segments stepping up out of a sand mound to a head with a dark
+        // star mouth and yellow dots. dgb_living: a tall mauve tentacle swaying up out of jagged dark spikes, a red slash
+        if (a === 'sandworm') {
+          b.add(sph(0.5, 10, 4, 0, Math.PI * 2, 0, Math.PI * 0.5), '#e8c688', T(0, 0, 0.1, 0, 0, 0, [1, 0.28, 1]));
+          const P = [[0, 0.24, 0.22, 0.24], [0, 0.5, 0.0, 0.22], [0, 0.78, -0.18, 0.2], [0, 1.0, -0.34, 0.17]];
+          P.forEach(([x, y, z, r], i) => { b.add(sph(r, 9, 6), '#d9a05a', T(x, y, z)); if (i < 3) b.add(tor(r * 0.9, 0.012, Math.PI, 3, 8), '#8a5a2a', T(x, y, z - r * 0.4, 0, 0, Math.PI)); });
+          b.add(cyl(0.1, 0.1, 0.03, 8), '#222222', T(0, 1.02, -0.5, Math.PI / 2 - 0.3, 0, 0));
+          for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2; b.add(cone(0.03, 0.08, 3), '#222222', T(Math.cos(a2) * 0.11, 1.02 + Math.sin(a2) * 0.11, -0.5, 0, 0, a2 - Math.PI / 2)); }
+          b.add(sph(0.035, 4, 3), '#d03a3a', T(0, 1.02, -0.51));
+          for (const s of [-1, 1]) b.add(sph(0.03, 4, 3), '#ffd23f', T(s * 0.12, 1.14, -0.42));
+        } else {
+          for (let i = 0; i < 5; i++) { const a2 = (i / 5) * Math.PI * 2; b.add(cone(0.1, 0.3 - (i % 2) * 0.1, 4), '#3a2e3a', T(Math.cos(a2) * 0.26, 0.12, Math.sin(a2) * 0.26, Math.sin(a2) * 0.4, 0, -Math.cos(a2) * 0.4)); }
+          limb(b, [[0, 0, 0], [0, 0.45, -0.1], [0, 0.9, 0.08], [0, 1.3, -0.08], [0, 1.62, -0.24]], 0.2, 0.06, '#7a6a72', 7);
+          b.add(sph(0.06, 6, 4), '#7a6a72', T(0, 1.62, -0.24));
+          b.add(box(0.03, 0.24, 0.04), '#c03040', T(0, 0.9, -0.08 - 0.15, 0, 0, 0.6));
+          for (let i = 0; i < 3; i++) b.add(box(0.1, 0.02, 0.03), '#4a3640', T(0, 0.4 + i * 0.36, -0.12 - (i === 1 ? -0.16 : 0) - 0.08));
+        }
+        break;
+      }
+      case 'automaton': {
+        // dg_automaton (also the astrolabe, the clockwork bird and the clock beetle): a squat gold clockwork box with
+        // rivets and a cream clock face, a gold head with cyan eyes and a T antenna, a hammer arm and a piston arm
+        const GO = '#c89b4a', GD = '#8a6a2a';
+        for (const s of [-1, 1]) b.add(box(0.12, 0.18, 0.14), '#4a4a55', T(s * 0.13, 0.09, 0));
+        b.add(box(0.56, 0.48, 0.44), GO, T(0, 0.42, 0));
+        b.add(box(0.57, 0.08, 0.45), GD, T(0, 0.56, 0));
+        b.add(cyl(0.15, 0.15, 0.03, 12), '#e8dcc0', T(0, 0.36, -0.225, Math.PI / 2, 0, 0));
+        b.add(tor(0.15, 0.014, Math.PI * 2, 3, 12), INK, T(0, 0.36, -0.24));
+        b.add(box(0.014, 0.1, 0.02), INK, T(0, 0.4, -0.245)); b.add(box(0.08, 0.014, 0.02), INK, T(0.04, 0.36, -0.245));
+        for (const [x, y] of [[-0.24, 0.24], [0.24, 0.24], [-0.24, 0.62], [0.24, 0.62]]) b.add(sph(0.022, 4, 3), GD, T(x, y, -0.225));
+        b.add(box(0.36, 0.2, 0.3), GO, T(0, 0.78, 0));
+        for (const s of [-1, 1]) b.add(sph(0.045, 6, 4), '#5bc8e8', T(s * 0.08, 0.8, -0.16));
+        seg(b, [0, 0.88, 0], [0, 1.08, 0], 0.012, 0.012, '#808090', 4);
+        b.add(box(0.14, 0.025, 0.025), '#808090', T(0, 1.08, 0));
+        seg(b, [-0.28, 0.5, 0], [-0.42, 0.7, -0.12], 0.025, 0.025, '#7a7a88', 4);
+        b.add(box(0.14, 0.1, 0.1), '#5a5a64', T(-0.44, 0.74, -0.14));
+        seg(b, [0.28, 0.46, 0], [0.5, 0.46, -0.06], 0.025, 0.025, '#8a8a98', 4);
+        b.add(box(0.03, 0.16, 0.06), '#8a8a98', T(0.51, 0.46, -0.06));
+        break;
+      }
+      case 'stonegolem': {
+        // dgb_golem: a heavy taupe stone golem — wide trapezoid torso with two lighter plates, a small dome head with
+        // glowing mint slit eyes, thick dark legs, one huge arm sweeping forward and down
+        const S = '#a8967e', SD = '#6b4a3a', SL = '#d8c8aa';
+        for (const s of [-1, 1]) b.add(box(0.2, 0.4, 0.22), SD, T(s * 0.18, 0.2, 0));
+        b.add(cyl(0.48, 0.34, 0.74, 7), S, T(0, 0.76, 0, 0, Math.PI / 7, 0, [1, 1, 0.75]));
+        b.add(box(0.2, 0.18, 0.04), SL, T(-0.14, 0.86, -0.29, 0, 0, 0.1));
+        b.add(box(0.16, 0.14, 0.04), SL, T(0.16, 0.6, -0.25, 0, 0, -0.1));
+        b.add(sph(0.24, 9, 5, 0, Math.PI * 2, 0, Math.PI * 0.6), S, T(0, 1.12, -0.04));
+        for (const s of [-1, 1]) b.add(box(0.09, 0.04, 0.03), '#40e0d0', T(s * 0.09, 1.22, -0.26));
+        limb(b, [[-0.46, 1.04, 0], [-0.66, 0.86, -0.22], [-0.66, 0.5, -0.36]], 0.14, 0.11, S, 6);
+        b.add(sph(0.16, 7, 5), S, T(-0.66, 0.42, -0.38));
+        limb(b, [[0.46, 1.04, 0], [0.56, 0.76, 0.08], [0.56, 0.5, 0.04]], 0.12, 0.1, S, 6);
+        break;
+      }
+      case 'shade': case 'voidling': {
+        // dgb_light: a tall bell of near-black navy with two lighter streaks, red almond eyes with yellow slits and one
+        // thin tentacle arm. dg_voidling: the same night-blob, smaller, white star dots and white triangle eyes
+        const big = a === 'shade', k = big ? 1.15 : 0.9, C = big ? '#231b45' : '#2a2550';
+        const prof = [[0.48, 0.36], [0.46, 0.5], [0.44, 0.8], [0.42, 1.1], [0.34, 1.32], [0.2, 1.46], [0, 1.5]].map(([r, y]) => new THREE.Vector2(r * k, y * k));
+        b.add(new THREE.LatheGeometry(prof, 12), C, T(0, 0, 0));
+        for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2; b.add(sph(0.14 * k, 6, 4), C, T(Math.sin(a2) * 0.4 * k, 0.36 * k, Math.cos(a2) * 0.4 * k, 0, 0, 0, [1.1, 0.7, 1.1])); }
+        if (big) {
+          for (const s of [-1, 1]) { b.add(sph(0.07, 6, 4), '#ff3a2a', T(s * 0.12, 1.24 * k, -0.4 * k, 0, 0, -s * 0.3, [1.3, 0.7, 0.5])); b.add(box(0.015, 0.07, 0.02), '#ffd23f', T(s * 0.12, 1.24 * k, -0.44 * k)); }
+          for (const s of [-1, 1]) b.add(box(0.03, 0.5, 0.03), '#4a3a7a', T(s * 0.22, 0.8 * k, -0.43 * k, -0.05, 0, s * 0.1));
+        } else {
+          for (const s of [-1, 1]) b.add(cone(0.08, 0.15, 3), '#ffffff', T(s * 0.11, 1.08 * k, -0.4 * k, 0, 0, Math.PI + s * 0.3, [1, 1, 0.3]));
+          for (const [az, y, r] of [[0.5, 0.8, 0.045], [-0.6, 0.66, 0.035], [1.0, 1.12, 0.03], [-0.15, 0.52, 0.04], [-1.1, 1.0, 0.03]]) b.add(sph(r, 5, 4), '#ffffff', T(Math.sin(az) * 0.45 * k, y * k, -Math.cos(az) * 0.45 * k));
+        }
+        limb(b, [[-0.36 * k, 0.9 * k, -0.1], [-0.66 * k, 0.86 * k, -0.24 * k], [-0.8 * k, 0.56 * k, -0.3 * k]], 0.08, 0.025, C, 5);
+        b.add(cone(0.07, 0.16, 4), C, T(-0.82 * k, 0.48 * k, -0.3 * k, 0, 0, Math.PI - 0.3));
+        break;
+      }
+      case 'knight': {
+        // dgb_knight: a small slate knight — round dark helm-head with mint eye dots, a slate trapezoid body narrowing
+        // down, thin dark legs, a tall maroon shield with a gold bar on the near arm
+        const SL = '#575a78', SLD = '#4a4d68';
+        for (const s of [-1, 1]) seg(b, [s * 0.1, 0.42, 0], [s * 0.1, 0.03, -0.02], 0.045, 0.04, '#2e3048', 5);
+        b.add(cyl(0.28, 0.16, 0.54, 8), SL, T(0, 0.7, 0));
+        b.add(sph(0.26, 10, 7), SLD, T(0, 1.2, 0));
+        b.add(box(0.36, 0.05, 0.1), '#3a3c54', T(0, 1.2, -0.22));
+        for (const s of [-1, 1]) b.add(sph(0.03, 4, 3), '#7af0c0', T(s * 0.08, 1.2, -0.26));
+        b.add(box(0.04, 0.6, 0.4), '#7a3040', T(-0.34, 0.74, -0.12));
+        b.add(box(0.045, 0.56, 0.06), '#c9a04a', T(-0.345, 0.74, -0.12));
+        limb(b, [[0.28, 0.92, 0], [0.32, 0.74, 0.04], [0.3, 0.58, 0]], 0.045, 0.04, SL, 5);
+        break;
+      }
+      case 'monk': case 'tinnik': {
+        // dg_monk: a tall bell robe in brown-taupe with a darker hood, a peach face with a cream cloth over the mouth, a
+        // gold rope belt, a tall staff with a gold orb. dg_tinnik: the swamp version — green-grey skin, mossy dark cloak
+        // with vine strands, yellow-green eyes, a gold three-prong fork
+        const sw = a === 'tinnik';
+        const ROBE = sw ? '#46604a' : '#8a7660', HOOD = sw ? '#3e5a3a' : '#6e5a45', SKIN = sw ? '#7f9e92' : '#e8c4a0';
+        if (sw) for (const s of [-1, 1]) b.add(box(0.14, 0.2, 0.14), SKIN, T(s * 0.1, 0.1, 0));
+        b.add(cyl(0.16, 0.32, sw ? 0.8 : 1.0, 10), ROBE, T(0, sw ? 0.56 : 0.5, 0));
+        b.add(cyl(0.22, 0.22, 0.05, 10), sw ? '#4f7a2a' : '#b89a68', T(0, 0.66, 0));
+        b.add(sph(0.22, 9, 6), HOOD, T(0, sw ? 1.08 : 1.18, 0.02, 0, 0, 0, [1, 1.08, 1]));
+        b.add(sph(0.16, 8, 5), SKIN, T(0, sw ? 1.06 : 1.15, -0.13, 0, 0, 0, [1, 1, 0.75]));
+        for (const s of [-1, 1]) b.add(sph(0.025, 4, 3), sw ? '#c8f040' : INK, T(s * 0.06, sw ? 1.09 : 1.19, -0.21, 0, 0, 0, [1, 1.4, 1]));
+        if (!sw) b.add(sph(0.11, 7, 4), '#f4eedc', T(0, 1.07, -0.2, 0, 0, 0, [1, 0.55, 0.5]));
+        else for (const x of [-0.2, 0.2]) limb(b, [[x, 1.14, -0.06], [x * 1.1, 0.8, -0.2], [x * 1.05, 0.4, -0.26]], 0.022, 0.016, '#4f7a2a', 3);
+        limb(b, [[-0.18, 0.9, 0], [-0.36, 0.9, -0.12], [-0.46, 0.96, -0.2]], 0.05, 0.045, sw ? SKIN : ROBE, 5);
+        if (sw) {
+          seg(b, [-0.46, 0.84, -0.2], [-0.46, 1.16, -0.2], 0.018, 0.018, '#c8aa6a', 4);
+          b.add(box(0.025, 0.025, 0.18), '#c8aa6a', T(-0.46, 1.16, -0.2));
+          for (const z of [-0.08, 0, 0.08]) b.add(box(0.02, 0.09, 0.02), '#c8aa6a', T(-0.46, 1.2, -0.2 + z));
+        } else {
+          b.add(sph(0.045, 5, 4), SKIN, T(-0.46, 0.96, -0.2));
+          seg(b, [-0.46, 0.02, -0.16], [-0.48, 1.46, -0.24], 0.022, 0.022, '#8a6a45', 4);
+          b.add(sph(0.07, 6, 4), '#d4b05a', T(-0.48, 1.5, -0.24));
+        }
+        break;
+      }
+      case 'lavaslime': {
+        // dg_lavaslime: a low red-orange magma dome with glowing yellow cracks, eyes set in the cracks, orange drips at the rim
+        b.add(sph(0.46, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.55), '#cc3b17', T(0, 0.05, 0, 0, 0, 0, [1.1, 0.95, 1]));
+        b.add(cyl(0.52, 0.5, 0.1, 12), '#cc3b17', T(0, 0.05, 0));
+        // glowing cracks: zigzag strokes lying on the dome (points on the surface, slightly proud of it)
+        const onDome = (az: number, el: number): V3 => [Math.sin(az) * Math.cos(el) * 0.52, 0.05 + Math.sin(el) * 0.45, -Math.cos(az) * Math.cos(el) * 0.47];
+        for (const path of [[[-1.1, 0.35], [-0.8, 0.6], [-0.55, 0.42], [-0.3, 0.75]], [[0.25, 0.8], [0.5, 0.5], [0.8, 0.66], [1.15, 0.38]], [[-0.2, 1.1], [0.15, 1.2], [0.3, 1.0]], [[2.4, 0.5], [2.8, 0.8], [3.3, 0.55]]])
+          for (let i = 0; i + 1 < path.length; i++) seg(b, onDome(path[i][0], path[i][1]), onDome(path[i + 1][0], path[i + 1][1]), 0.022, 0.022, '#ffd23f', 3);
+        for (const s of [-1, 1]) { b.add(sph(0.075, 8, 6), '#ffd23f', T(s * 0.15, 0.3, -0.4, 0, 0, 0, [1.1, 0.9, 0.5])); b.add(sph(0.035, 6, 4), INK, T(s * 0.15, 0.3, -0.44)); }
+        for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2 + 0.3; b.add(sph(0.07, 5, 3), '#f07a20', T(Math.sin(a2) * 0.5, 0.06, Math.cos(a2) * 0.5, 0, 0, 0, [1, 1.4, 1])); }
+        break;
+      }
+      case 'splasher': {
+        // dg_splasher: a sky-blue water drop with a rounded point, a smiling face, a light highlight, three splash curls on
+        // top and a flat grey-blue puddle
+        b.add(cyl(0.48, 0.5, 0.04, 12), '#7ab0c8', T(0, 0.02, 0));
+        b.add(new THREE.LatheGeometry([[0, 0.04], [0.3, 0.08], [0.4, 0.26], [0.38, 0.5], [0.26, 0.74], [0.1, 0.94], [0, 1.0]].map(([r, y]) => new THREE.Vector2(r, y)), 12), '#6cc8e8', T(0, 0, 0));
+        b.add(sph(0.08, 6, 4), '#a0dcf0', T(0.22, 0.28, -0.32, 0, 0, 0, [0.7, 1, 0.4]));
+        for (const s of [-1, 1]) { b.add(sph(0.075, 8, 6), '#ffffff', T(s * 0.13, 0.52, -0.34)); b.add(sph(0.038, 6, 4), INK, T(s * 0.13, 0.52, -0.41)); }
+        b.add(tor(0.07, 0.016, Math.PI, 3, 6), INK, T(0, 0.38, -0.4, 0, 0, Math.PI));
+        for (let i = -1; i <= 1; i++) b.add(tor(0.1, 0.02, Math.PI * 0.9, 3, 6), '#a8e4f4', T(i * 0.12, 1.06, 0, 0, 0, Math.PI * 0.1 - i * 0.7));
         break;
       }
       case 'slime':
       default: {
         const c0 = '#7ed36a', c1 = '#4fa84a';
-        b.add(sph(0.45, 14, 10), c0, T(0, 0.38, 0, 0, 0, 0, [1, 0.78, 1]));
-        b.add(sph(0.2, 10, 8), '#c8f4b0', T(-0.14, 0.58, -0.22, 0, 0, 0, [1, 0.5, 0.5]));
+        b.add(sph(0.45, 12, 8), c0, T(0, 0.38, 0, 0, 0, 0, [1, 0.78, 1]));
+        b.add(sph(0.2, 8, 6), '#c8f4b0', T(-0.14, 0.58, -0.22, 0, 0, 0, [1, 0.5, 0.5]));
         for (const s of [-1, 1]) { b.add(sph(0.08, 8, 6), '#ffffff', T(s * 0.14, 0.52, -0.38)); b.add(sph(0.04, 6, 4), INK, T(s * 0.14, 0.52, -0.44)); }
         b.add(sph(0.1, 8, 6), c1, T(0, 0.78, 0.05));
         break;
       }
+      case 'pumpkin': {
+        // Тыквоголов: a scarecrow body in slate rags (ragged hem, darker patches), thin dark legs, a reaching arm with
+        // straw fingers, a rotten pumpkin head with a warm glowing face and a vine stem
+        for (const s of [-1, 1]) seg(b, [s * 0.11, 0.4, 0], [s * 0.13, 0.02, -0.02], 0.05, 0.045, HW.dark, 6);
+        b.add(cyl(0.18, 0.23, 0.44, 10), HW.cloth, T(0, 0.58, 0));
+        hem(b, 0.38, 0.22, 7, 0.14, HW.cloth);
+        b.add(sph(0.18, 10, 6), HW.cloth, T(0, 0.78, 0, 0, 0, 0, [1.1, 0.6, 1]));
+        b.add(box(0.12, 0.1, 0.04), HW.clothD, T(-0.06, 0.62, -0.215, 0, 0, 0.3));
+        for (const r of [0.7, -0.7]) b.add(box(0.3, 0.03, 0.02), HW.strawD, T(0.0, 0.7, -0.225, 0, 0, r));
+        limb(b, [[-0.19, 0.76, 0], [-0.36, 0.68, -0.16], [-0.44, 0.48, -0.26]], 0.05, 0.045, HW.cloth, 6);
+        for (let i = 0; i < 3; i++) seg(b, [-0.44, 0.48, -0.26], [-0.44 + (i - 1) * 0.06, 0.32, -0.32], 0.02, 0.012, HW.straw, 4);
+        b.add(sph(0.06, 6, 4), HW.cloth, T(0.2, 0.72, 0.02));
+        seg(b, [0.2, 0.72, 0.02], [0.25, 0.5, 0.06], 0.045, 0.04, HW.cloth, 6);
+        pumpkinHead(b, 1.04, 0.27, HW.pump, HW.fire);
+        break;
+      }
+      case 'pumpkinlet': {
+        // Тыквёнок: a round little jack-o'-lantern on stubby vine legs
+        for (const s of [-1, 1]) seg(b, [s * 0.09, 0.14, 0], [s * 0.1, 0.02, -0.02], 0.04, 0.035, HW.vine, 6);
+        pumpkinHead(b, 0.36, 0.25, HW.pump, HW.fire);
+        break;
+      }
+      case 'golem': {
+        // the Pumpkin Golem («Тыквенный голем», hw_pumpkin leader): a hulk of dark rotten pumpkin with rot grooves and
+        // patches, thick vine legs and vine arms ending in pumpkin fists, a dark lantern head glowing yellow, a crown of
+        // bone shards (site: topBoss 212 vs top 146)
+        for (const s of [-1, 1]) seg(b, [s * 0.26, 0.36, 0], [s * 0.28, 0.02, -0.02], 0.14, 0.13, HW.vine, 7);
+        b.add(sph(0.52, 12, 8), HW.pumpD, T(0, 0.72, 0, 0, 0, 0, [1.12, 0.76, 0.72]));
+        for (let i = 0; i < 6; i++) { const a2 = (i / 6) * Math.PI * 2; b.add(sph(0.3, 8, 6), i % 2 ? HW.pumpD : '#8a4216', T(Math.sin(a2) * 0.3, 0.72, Math.cos(a2) * 0.19, 0, a2, 0, [0.6, 1.0, 1])); }
+        for (const x of [-0.26, 0, 0.26]) b.add(box(0.035, 0.5, 0.03), HW.rotP, T(x, 0.72, -0.36 + Math.abs(x) * 0.25, 0, -x * 1.2, 0));
+        b.add(sph(0.12, 6, 4), HW.rotP, T(-0.2, 0.8, -0.34, 0, 0, 0, [1, 0.6, 0.4]));
+        b.add(sph(0.1, 6, 4), HW.rotP, T(0.18, 0.62, -0.35, 0, 0, 0, [1, 0.6, 0.4]));
+        for (const s of [-1, 1]) {
+          limb(b, [[s * 0.5, 0.92, 0], [s * 0.82, 1.0, -0.05], [s * 1.02, 0.82, -0.1], [s * 1.08, 0.56, -0.14]], 0.12, 0.1, HW.vine, 6);
+          b.add(sph(0.17, 9, 7), HW.pump, T(s * 1.08, 0.44, -0.14, 0, 0, 0, [1, 0.9, 1]));
+        }
+        pumpkinHead(b, 1.18, 0.37, HW.pumpD, HW.fireY);
+        b.add(cyl(0.2, 0.22, 0.06, 8), HW.boneD, T(0, 1.5, 0.02));
+        for (let i = 0; i < 5; i++) b.add(cone(0.06, 0.24 - Math.abs(i - 2) * 0.05, 4), HW.boneD, T((i - 2) * 0.09, 1.6 - Math.abs(i - 2) * 0.02, 0.02, 0, 0, (i - 2) * 0.12));
+        break;
+      }
+      case 'cat': case 'catLead': {
+        // Leader («Кот-ведьмак», o.boss): a ragged slate witch-hat and cold pale-blue eyes
+        const lead = a === 'catLead';
+        // Изнанка black cat: mangy, arched back with a ragged belly, thin legs, a long tail rising high with bone
+        // rings, a torn ear, yellow eyes with slit pupils, grey whiskers and stitches
+        const c = HW.fur;
+        for (const [z, s] of [[-0.32, -1], [-0.15, 1], [0.28, -1], [0.42, 1]] as [number, number][]) seg(b, [s * 0.1, 0.48, z], [s * 0.1, 0.03, z - 0.02], 0.045, 0.04, c, 6);
+        b.add(sph(0.32, 10, 6), c, T(0, 0.66, 0.06, 0.12, 0, 0, [0.62, 0.58, 1.45]));
+        b.add(sph(0.2, 8, 6), c, T(0, 0.82, 0.06, 0, 0, 0, [0.8, 0.5, 1.4]));
+        hem(b, 0.5, 0.13, 6, 0.1, c, 0.05, 1);
+        limb(b, [[0, 0.7, 0.46], [0, 0.76, 0.66], [0, 0.86, 0.82], [0, 1.0, 0.86], [0, 1.12, 0.8], [0, 1.24, 0.76], [0, 1.36, 0.8], [0, 1.42, 0.9]], 0.065, 0.045, c, 5);
+        b.add(tor(0.062, 0.018, Math.PI * 2, 3, 8), HW.bone, T(0, 0.98, 0.86, Math.PI / 2, 0, 0));
+        b.add(tor(0.055, 0.018, Math.PI * 2, 3, 8), HW.bone, T(0, 1.2, 0.76, Math.PI / 2, 0, 0));
+        b.add(sph(0.23, 10, 7), c, T(0, 0.72, -0.5));
+        b.add(cone(0.1, 0.28, 4), c, T(-0.12, 0.97, -0.52, 0, 0, 0.25));
+        b.add(cone(0.09, 0.24, 4), c, T(0.13, 0.95, -0.5, 0, 0, -0.35));
+        for (const s of [-1, 1]) {
+          b.add(sph(0.065, 7, 5), lead ? HW.ghostL : HW.fireY, T(s * 0.09, 0.75, -0.68, 0, 0, 0, [0.9, 1.25, 0.6]));
+          b.add(box(0.016, 0.09, 0.02), INK, T(s * 0.09, 0.75, -0.72));
+          for (const t of [0, 1]) seg(b, [s * 0.12, 0.66 - t * 0.03, -0.68], [s * 0.34, 0.68 - t * 0.09, -0.64], 0.006, 0.004, '#8a8f9e', 3);
+        }
+        limb(b, [[-0.1, 0.6, -0.3], [-0.14, 0.4, -0.5], [-0.12, 0.2, -0.58]], 0.045, 0.04, c, 6);
+        b.add(box(0.12, 0.012, 0.012), '#5a5f6e', T(0.1, 0.92, 0.1, 0, 0.6, 0));
+        if (lead) {
+          b.add(cyl(0.3, 0.28, 0.025, 10), HW.cloth, T(0, 0.92, -0.5, -0.15, 0, 0.1));
+          limb(b, [[0, 0.92, -0.5], [0.02, 1.12, -0.46], [0.1, 1.3, -0.36]], 0.15, 0.02, HW.cloth, 7);
+        }
+        break;
+      }
+      case 'zombie': case 'zombieLead': case 'frostdead': case 'sailor': case 'prisoner': {
+        // Изнанка zombie: rotting grey-green skin, slate shirt torn into a jagged hem with holes and bare ribs, dark legs,
+        // one arm stretched forward with bone fingertips, a slack jaw full of holes, one big red eye, thin hairs.
+        // Leader (o.boss «староста»): a darker shirt, a battered top hat and a rusty shovel. The same body serves the
+        // dungeon dead: dg_frostdead (icy skin, slate tunic, cyan eyes, white hood), dg_sailor (red bandana, striped
+        // shirt, cutlass), dg_prisoner (tan rags, brown hair, ball and chain)
+        const lead = a === 'zombieLead', frost = a === 'frostdead', sailor = a === 'sailor', pris = a === 'prisoner';
+        const SKIN = frost ? '#a8b8cc' : sailor ? '#8faf9f' : pris ? '#e0c09a' : HW.rot, SKIND = frost ? '#8494aa' : sailor ? '#6f8f7f' : pris ? '#b8987a' : HW.rotD;
+        const CL = lead ? '#33303a' : frost ? '#5a6a7a' : sailor ? '#3f5a9a' : pris ? '#9a8660' : HW.cloth, CLD = frost ? '#46566a' : pris ? '#7a6a48' : HW.clothD;
+        const EYE = frost ? '#7af0ff' : pris || sailor ? INK : HW.eye, LEGS = frost ? '#7aa8c8' : sailor ? '#232a44' : pris ? '#6a4a30' : HW.dark;
+        for (const s of [-1, 1]) seg(b, [s * 0.11, 0.52, 0], [s * 0.13, 0.03, -0.02], 0.06, 0.055, LEGS, 5);
+        b.add(cyl(0.2, 0.23, 0.56, 9), CL, T(0, 0.78, 0));
+        hem(b, 0.52, 0.22, 7, 0.14, CL);
+        if (sailor) for (let i = 0; i < 4; i++) b.add(cyl(0.224 - i * 0.006, 0.226 - i * 0.006, 0.06, 9), '#f0ece4', T(0, 0.6 + i * 0.12, 0));
+        if (!pris) {
+          b.add(sph(0.08, 6, 4), CLD, T(0.05, 0.85, -0.25, 0, 0, 0, [1.4, 1.2, 0.4]));
+          for (let i = 0; i < 2; i++) b.add(box(0.12, 0.022, 0.02), HW.bone, T(0.05, 0.88 - i * 0.05, -0.27));
+        }
+        b.add(sph(0.05, 6, 4), CLD, T(-0.1, 0.6, -0.26, 0, 0, 0, [1.2, 1.2, 0.4]));
+        b.add(sph(0.26, 8, 6), SKIN, T(0, 1.22, -0.02, 0, 0, 0, [1, 1.08, 1]));
+        b.add(box(0.22, 0.1, 0.17), SKIN, T(0, 0.99, -0.08));
+        if (pris || sailor) b.add(box(0.1, 0.02, 0.03), INK, T(0, 1.03, -0.16, 0, 0, pris ? 0 : 0.2));
+        else {
+          b.add(box(0.16, 0.04, 0.03), HW.hole, T(0, 1.01, -0.15));
+          for (let i = 0; i < 4; i++) b.add(box(0.014, 0.035, 0.02), HW.bone, T(-0.05 + i * 0.033, 1.02, -0.165));
+        }
+        if (frost || pris || sailor) for (const s of [-1, 1]) b.add(sph(0.035, 5, 4), EYE, T(s * 0.09, 1.24, -0.235));
+        else {
+          b.add(sph(0.06, 6, 4), HW.hole, T(-0.09, 1.23, -0.22));
+          b.add(sph(0.026, 5, 4), HW.eye, T(-0.09, 1.23, -0.26));
+          b.add(sph(lead ? 0.068 : 0.055, 6, 5), HW.eye, T(0.09, 1.25, -0.22));
+        }
+        if (!lead && !frost && !sailor && !pris) for (let i = 0; i < 3; i++) limb(b, [[-0.06 + i * 0.06, 1.44, -0.02], [-0.08 + i * 0.07, 1.54, 0.0], [-0.14 + i * 0.08, 1.6 - (i % 2) * 0.04, 0.02]], 0.014, 0.008, INK, 3);
+        limb(b, [[-0.2, 0.94, -0.03], [-0.26, 0.95, -0.34], [-0.24, 0.98, -0.66]], 0.06, 0.05, SKIN, 5);
+        for (let i = 0; i < 3; i++) seg(b, [-0.24, 0.98, -0.66], [-0.27 + i * 0.03, 0.98 + (i - 1) * 0.04, -0.77], 0.018, 0.012, frost ? '#d8f4ff' : pris || sailor ? SKIN : HW.bone, 4);
+        limb(b, [[0.22, 0.94, 0], [0.3, 0.74, 0.08], [0.33, 0.56, 0.0]], 0.055, 0.045, SKIND, 5);
+        if (lead) {
+          b.add(cyl(0.3, 0.3, 0.025, 10), '#1c1e26', T(0, 1.45, 0, 0.08, 0, 0.06));
+          b.add(cyl(0.17, 0.19, 0.26, 9), '#1c1e26', T(0, 1.59, 0.01, 0.08, 0, 0.1));
+          seg(b, [-0.24, 0.2, -0.7], [-0.24, 1.36, -0.66], 0.025, 0.025, HW.woodD, 5);
+          b.add(box(0.03, 0.28, 0.22), HW.metal, T(-0.24, 0.12, -0.7));
+        }
+        if (frost) {
+          b.add(sph(0.29, 9, 5, 0, Math.PI * 2, 0, Math.PI * 0.55), '#eef4fa', T(0, 1.24, 0.03, -0.3, 0, 0));
+          for (let i = 0; i < 3; i++) b.add(cone(0.025, 0.1, 4), '#d8f4ff', T(-0.26 + i * 0.03, 0.88, -0.36 - i * 0.12, Math.PI, 0, 0));
+        }
+        if (sailor) {
+          b.add(sph(0.27, 9, 4, 0, Math.PI * 2, 0, Math.PI * 0.45), '#d63a3a', T(0, 1.26, -0.0));
+          b.add(cone(0.05, 0.18, 4), '#d63a3a', T(0.06, 1.32, 0.28, 1.2, 0, 0));
+          b.add(slab([0.03, 0.06, 0.08, 0.04, 0.0, -0.3, -0.12, -0.56, -0.06, -0.3], 0.03, 'side', -0.3), '#d8dce4', T(0, 0.96, -0.72));
+          b.add(box(0.05, 0.03, 0.16), '#c9a04a', T(-0.3, 1.02, -0.68));
+        }
+        if (pris) {
+          b.add(sph(0.27, 9, 4, 0, Math.PI * 2, 0, Math.PI * 0.4), '#7a5a3a', T(0, 1.26, 0.02, 0.3, 0, 0));
+          seg(b, [0.13, 0.08, -0.02], [0.3, 0.06, 0.32], 0.012, 0.012, '#555560', 3);
+          b.add(sph(0.1, 7, 5), '#2a2a33', T(0.3, 0.1, 0.36));
+          b.add(cyl(0.07, 0.07, 0.05, 6), '#555560', T(0.13, 0.1, -0.02));
+        }
+        break;
+      }
+      case 'scarecrow': case 'scarecrowLead': {
+        // Leader («Пугало-жнец», o.boss): darker rags, a sickle on the near arm and a raven on the far shoulder
+        const lead = a === 'scarecrowLead', rag = lead ? '#33303a' : HW.cloth;
+        // Изнанка scarecrow: a rotten pole with a crossbar, slate rags with a jagged hem and patches, straw tufts at the
+        // ends, a burlap sack head with red ember eyes and a stitched grin, a floppy wooden-brown hat
+        seg(b, [0, 0, 0.05], [0, 1.42, 0.05], 0.035, 0.03, HW.woodD, 6);
+        seg(b, [-0.58, 0.98, 0.04], [0.58, 0.98, 0.04], 0.032, 0.032, HW.woodD, 6);
+        b.add(cyl(0.2, 0.28, 0.7, 10), rag, T(0, 0.68, 0));
+        hem(b, 0.34, 0.27, 8, 0.14, rag);
+        b.add(box(0.13, 0.13, 0.03), HW.clothD, T(0.07, 0.84, -0.2));
+        b.add(box(0.1, 0.07, 0.03), HW.clothD, T(-0.1, 0.62, -0.24));
+        for (const s of [-1, 1]) {
+          seg(b, [s * 0.18, 0.98, 0.04], [s * 0.52, 0.98, 0.04], 0.06, 0.05, rag, 6);
+          for (let i = 0; i < 3; i++) seg(b, [s * 0.54, 0.98, 0.04], [s * (0.62 + i * 0.03), 0.82 + i * 0.03, 0.04 + (i - 1) * 0.05], 0.026, 0.012, '#a89c74', 4);
+          for (let i = 0; i < 2; i++) seg(b, [s * 0.18, 0.36, -0.05 + i * 0.1], [s * 0.26, 0.18, -0.08 + i * 0.12], 0.026, 0.012, '#a89c74', 4);
+        }
+        b.add(sph(0.22, 8, 6), '#8a8268', T(0, 1.28, -0.01, 0, 0, 0, [1, 1.1, 0.95]));
+        b.add(cyl(0.1, 0.14, 0.06, 8), HW.strawD, T(0, 1.07, 0));
+        b.add(sph(0.045, 5, 4), HW.eye, T(-0.08, 1.34, -0.2));
+        b.add(sph(0.04, 5, 4), HW.eye, T(0.08, 1.35, -0.2));
+        for (const r of [0.7, -0.7]) b.add(box(0.1, 0.016, 0.02), INK, T(-0.08, 1.34, -0.215, 0, 0, r));
+        for (let i = 0; i < 4; i++) b.add(box(0.05, 0.016, 0.02), INK, T(-0.09 + i * 0.06, 1.2 - (i % 2) * 0.016, -0.2, 0, 0, (i % 2 ? 0.5 : -0.5)));
+        b.add(cyl(0.36, 0.3, 0.03, 12), HW.wood, T(0, 1.46, 0, 0.18, 0, 0.12));
+        limb(b, [[0.0, 1.46, 0.02], [0.03, 1.6, 0.04], [0.12, 1.7, 0.08]], 0.16, 0.06, HW.wood, 8);
+        if (lead) {
+          seg(b, [-0.5, 0.98, 0.04], [-0.56, 0.42, -0.12], 0.022, 0.022, HW.woodD, 5);
+          b.add(tor(0.26, 0.03, Math.PI * 0.9, 3, 8), HW.metal, T(-0.56, 0.62, -0.34, 0, Math.PI / 2, -Math.PI * 0.55, [1, 1, 0.5]));
+          b.add(sph(0.09, 7, 5), HW.fur, T(0.2, 1.14, 0.06, 0, 0, 0, [0.8, 0.85, 1.4]));
+          b.add(sph(0.06, 6, 4), HW.fur, T(0.2, 1.22, -0.06));
+          b.add(cone(0.022, 0.08, 4), HW.strawD, T(0.2, 1.21, -0.14, -Math.PI / 2, 0, 0));
+          b.add(sph(0.015, 4, 3), HW.eye, T(0.245, 1.24, -0.08));
+          b.add(cone(0.06, 0.14, 4), HW.fur, T(0.2, 1.12, 0.2, Math.PI / 2, 0, 0, [1.3, 1, 0.5]));
+        }
+        break;
+      }
+      case 'witch': case 'witchLead': {
+        // Leader («Старшая ведьма», o.boss): darker robe and skin, a taller hat and a dark cauldron at the belt
+        const lead = a === 'witchLead', robe = lead ? '#4a3e66' : HW.lilac, skin = lead ? '#7f9480' : '#94a892';
+        // Изнанка witch on a broom: grey-lilac rags, pale green skin with a long nose, red eyes, a tall black hat with a
+        // lilac band, bone-grey hair, dangling dark legs, a lilac potion in the reaching hand
+        seg(b, [0, 0.5, -0.66], [0, 0.66, 0.7], 0.03, 0.03, HW.wood, 6);
+        b.add(cone(0.16, 0.42, 7), '#a89c74', T(0, 0.68, 0.9, Math.PI / 2 + 0.1, 0, 0));
+        b.add(cyl(0.05, 0.05, 0.06, 6), HW.woodD, T(0, 0.67, 0.68, Math.PI / 2 + 0.1, 0, 0));
+        b.add(cyl(0.13, 0.27, 0.6, 10), robe, T(0, 0.88, 0.05));
+        hem(b, 0.6, 0.25, 7, 0.14, robe, 0.05);
+        if (lead) { b.add(sph(0.11, 7, 5), HW.dark, T(0.06, 0.76, -0.27, 0, 0, 0, [1, 0.85, 1])); b.add(tor(0.08, 0.015, Math.PI * 2, 3, 8), HW.metal, T(0.06, 0.84, -0.27, Math.PI / 2, 0, 0)); }
+        for (const s of [-1, 1]) seg(b, [s * 0.1, 0.56, -0.04], [s * 0.12, 0.32, -0.12], 0.035, 0.03, HW.dark, 5);
+        limb(b, [[-0.16, 1.08, 0], [-0.3, 1.04, -0.22], [-0.36, 1.12, -0.42]], 0.05, 0.04, robe, 6);
+        b.add(sph(0.07, 7, 5), HW.lilacL, T(-0.36, 1.15, -0.48));
+        b.add(sph(0.14, 8, 6), skin, T(0, 1.32, -0.03));
+        b.add(cone(0.035, 0.14, 5), skin, T(0, 1.28, -0.2, -Math.PI / 2 - 0.4, 0, 0));
+        for (const s of [-1, 1]) b.add(sph(0.025, 5, 4), HW.eye, T(s * 0.055, 1.35, -0.13));
+        limb(b, [[0.08, 1.38, 0.08], [0.12, 1.2, 0.2], [0.09, 1.0, 0.24]], 0.02, 0.014, HW.boneD, 4);
+        limb(b, [[-0.06, 1.38, 0.1], [-0.08, 1.2, 0.2], [-0.04, 1.04, 0.22]], 0.02, 0.014, HW.boneD, 4);
+        b.add(cyl(0.3, 0.3, 0.03, 12), HW.fur, T(0, 1.44, 0, -0.08, 0, 0));
+        b.add(cyl(0.14, 0.15, 0.06, 10), HW.lilacL, T(0, 1.48, 0));
+        if (lead) limb(b, [[0, 1.48, 0], [0.0, 1.8, 0.03], [0.0, 2.2, 0.18]], 0.15, 0.02, HW.fur, 8);
+        else limb(b, [[0, 1.48, 0], [0.0, 1.72, 0.04], [0.0, 1.95, 0.16]], 0.14, 0.02, HW.fur, 8);
+        break;
+      }
+      case 'jack': {
+        // Джек-Фонарщик: tall and thin in a long dark coat with ragged tails, a lantern with a warm flame in the reaching
+        // hand, a pumpkin head with a yellow grin, a battered top hat with a lilac band
+        for (const s of [-1, 1]) seg(b, [s * 0.13, 0.64, 0], [s * 0.16, 0.03, -0.02], 0.065, 0.055, HW.dark, 6);
+        b.add(cyl(0.25, 0.3, 1.0, 10), HW.clothD, T(0, 0.98, 0));
+        hem(b, 0.5, 0.3, 8, 0.16, HW.clothD);
+        b.add(sph(0.25, 10, 6), HW.clothD, T(0, 1.46, 0, 0, 0, 0, [1.2, 0.5, 1]));
+        b.add(box(0.06, 0.6, 0.03), HW.cloth, T(0, 1.15, -0.27));
+        limb(b, [[-0.27, 1.42, 0], [-0.52, 1.2, -0.24], [-0.6, 0.94, -0.42]], 0.075, 0.065, HW.clothD, 5);
+        seg(b, [-0.6, 0.92, -0.42], [-0.6, 0.76, -0.42], 0.01, 0.01, INK, 3);
+        b.add(cyl(0.11, 0.13, 0.05, 6), HW.metal, T(-0.6, 0.76, -0.42));
+        b.add(cyl(0.12, 0.12, 0.04, 6), HW.metal, T(-0.6, 0.48, -0.42));
+        b.add(sph(0.1, 8, 6), HW.fireY, T(-0.6, 0.62, -0.42, 0, 0, 0, [1.25, 1.2, 1.25]));
+        limb(b, [[0.27, 1.42, 0], [0.5, 1.16, 0.1], [0.56, 0.88, 0.06]], 0.075, 0.065, HW.clothD, 5);
+        pumpkinHead(b, 1.78, 0.33, HW.pump, HW.fireY);
+        b.add(cyl(0.34, 0.34, 0.03, 12), HW.fur, T(0, 2.02, 0));
+        b.add(cyl(0.17, 0.18, 0.28, 10), HW.fur, T(0, 2.16, 0, 0, 0, 0.06));
+        b.add(cyl(0.185, 0.185, 0.05, 10), HW.lilacL, T(0, 2.06, 0, 0, 0, 0.06));
+        break;
+      }
     }
     return tinted(b.build());
-  });
+  }
 }
 
 export function crownGeo(): THREE.BufferGeometry {
@@ -633,8 +1520,9 @@ export function chestGeo(): THREE.BufferGeometry {
 export function lidGeo(): THREE.BufferGeometry {
   return cached('lid', () => {
     const b = new GB();
-    b.add(new THREE.CylinderGeometry(0.33, 0.33, 1.0, 10, 1, false, 0, Math.PI), '#a8743e', T(0, 0, 0.33, 0, 0, Math.PI / 2));
-    for (const x of [-0.42, 0, 0.42]) b.add(new THREE.CylinderGeometry(0.345, 0.345, 0.08, 10, 1, false, 0, Math.PI), '#e8c04a', T(x, 0, 0.33, 0, 0, Math.PI / 2));
+    // pivot = the hinge on the BACK top edge (chest +z); the lid reaches forward to the lock side (−z)
+    b.add(new THREE.CylinderGeometry(0.33, 0.33, 1.0, 10, 1, false, 0, Math.PI), '#a8743e', T(0, 0, -0.33, 0, 0, Math.PI / 2));
+    for (const x of [-0.42, 0, 0.42]) b.add(new THREE.CylinderGeometry(0.345, 0.345, 0.08, 10, 1, false, 0, Math.PI), '#e8c04a', T(x, 0, -0.33, 0, 0, Math.PI / 2));
     return b.build();
   });
 }

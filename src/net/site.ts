@@ -16,7 +16,7 @@ import { npcPlaces, makeOpts } from '../events/halloween/hwnpc';
 import { CAMP, campScene, detectTown, readTownSignals, townMeta, type CampScene, type HeroTownFlags } from './town';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
-const W = window as any;
+const W = (typeof window !== 'undefined' ? window : globalThis) as any;   // importable in node tests (pure helpers below)
 const bus = (): Bus | null => W.__L3D_BUS || null;
 const base = (): string => String(W.LG_BASE || '');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -65,6 +65,20 @@ export const styleId = (): string => { try { return String(W.MDDoodle?.active ||
 /** Style a look is drawn in: a hero with a personal style (Печать Метаморфозы, 26.10: `ps` in the look, doodle.js styleFor)
  *  keeps it in every channel; everyone else is drawn in the channel's style. */
 export const lookStyle = (lk: any, channel: string): string => (lk && typeof lk.ps === 'string' && /^[\w-]{1,30}$/.test(lk.ps) ? lk.ps : channel);
+/**
+ * Live style change (site 28.10 fix/style-live, app.js siteRestyle → document 'lg-style'): re-resolve every walker's look in
+ * the new channel style from its raw site record (defaults come from the new MDDoodle bundle); a personal style (`lk.ps`)
+ * is kept. Records without `raw` keep their resolved look and only switch the style. Returns how many changed.
+ */
+export function restyleApps(list: Iterable<{ login: string; app: Appearance; raw?: any }>, make: AppearanceFn, channel: string): number {
+  let n = 0;
+  for (const w of list) {
+    const want = lookStyle(w.raw?.lk ?? w.app?.look, channel);
+    if (w.raw) { const a = make(w.login, w.raw, want); if (JSON.stringify(a) !== JSON.stringify(w.app)) { w.app = a; n++; } }
+    else if (w.app && w.app.styleId !== want) { w.app = { ...w.app, styleId: want }; n++; }
+  }
+  return n;
+}
 
 /* ------------------------------------------------------------------ layout */
 /** Current town id of the site's City (src/net/town.ts: DOM, picker, sessionStorage, hero flags). */
@@ -492,17 +506,39 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
 
   const art = (): ArtProvider | null => null;   // facades are rasterized by src/world from layout.art when present
 
+  /* ---------------- live style change (site 28.10 fix/style-live) ----------------
+     The site loads the new /doodle.js, MDDoodle.use(style), redraws, CLOSES and reopens its City (LGCity.close(); openCity():
+     leave → a new City instance in the new style → enter) and then dispatches 'lg-style'. The new instance draws the others
+     again and has its own quality: the /api/city/enter answer (bus 'city:enter' → onEnter) re-hides it; the timers below are
+     a safety net in case that answer is missed. Called by src/features/restyle.ts. */
+  const restyleTimers: number[] = [];
+  const restyle = (): boolean => {
+    const st = styleId();
+    restyleApps(sims.values(), appearanceFn, st);
+    if (store.hero) setMeApp(heroApp(store.hero));
+    store.emit('walkers');
+    refreshAll();   // the layout key has the style: same town, new style → a new layout → the 3D world is rebuilt
+    for (const t of restyleTimers.splice(0)) clearTimeout(t);
+    if (!classic) {
+      enter3d();
+      for (const ms of [400, 1500, 4000]) restyleTimers.push(window.setTimeout(() => { if (!classic) { enter3d(); refreshLayout(); } }, ms));
+    }
+    return true;
+  };
+
   const onVis = () => { /* site handles leave/enter on visibility itself */ };
   // which town the 3D world shows and how it was detected (debug panel, e2e/live.mjs, e2e/contract.mjs)
   const townInfo = () => ({ id: townNow, via: townVia, layout: mapRef?.id ?? null });
   W.__l3dTown = townInfo;
   document.addEventListener('visibilitychange', onVis);
 
-  return {
-    store: store as Store, actions, moveTo, pauseMoves, art, setClassic, tick, overlay, closeOverlay,
+  // `restyle` is an optional extra of the live session (src/features/restyle.ts calls it when present; fakes go without)
+  const session: SiteSession & { restyle(): boolean } = {
+    store: store as Store, actions, moveTo, pauseMoves, art, setClassic, tick, overlay, closeOverlay, restyle,
     selfPos: () => (store.me ? [store.me.x, store.me.y] : null),
     dispose() {
       for (const u of unsubs) u();
+      for (const t of restyleTimers.splice(0)) clearTimeout(t);
       townObs?.disconnect();
       clearInterval(hwTimer);
       if (W.__l3dTown === townInfo) delete W.__l3dTown;
@@ -510,6 +546,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
       setClassic(true); style.remove();
     },
   };
+  return session;
 }
 
 /* ------------------------------------------------------------------ overlay detection */

@@ -32,7 +32,11 @@ export class Frame {
   get face(): number { return this.ry; }
 }
 
-export interface StandOpts { w?: number; board?: string; trim?: string; sign?: { bg?: string; fg?: string }; b: string; lamp?: string; cloth?: string }
+export interface StandOpts {
+  w?: number; board?: string; trim?: string; sign?: { bg?: string; fg?: string }; b: string; lamp?: string; cloth?: string;
+  /** Cast iron instead of painted wood (cherts forge): iron board and shelves, a lava line along the shelf fronts, gold rivets. */
+  iron?: { lava: string; rivet: string };
+}
 
 /**
  * A stand like the site's (Кузня / Лавка звездочёта): title sign, top row of hanging goods (weapons), a shelf for the
@@ -42,20 +46,26 @@ export function stand(R: RoomBase, F: Frame, st: StockStand, o: StandOpts): void
   const P = R.pal, w = o.w ?? 2.5, hw = w / 2;
   const board = o.board || P.woodD, trim = o.trim || P.woodL;
   // back board + posts + crown
-  F.box(R, 'wood', board, -hw, hw, 0, 2.35, 0, 0.08);
-  F.box(R, 'wood', trim, -hw - 0.08, -hw + 0.04, 0, 2.5, 0, 0.14);
-  F.box(R, 'wood', trim, hw - 0.04, hw + 0.08, 0, 2.5, 0, 0.14);
-  F.box(R, 'wood', trim, -hw - 0.12, hw + 0.12, 2.36, 2.46, 0, 0.18);
+  const wm = o.iron ? 'metal' as const : 'wood' as const;
+  F.box(R, wm, board, -hw, hw, 0, 2.35, 0, 0.08);
+  F.box(R, wm, trim, -hw - 0.08, -hw + 0.04, 0, 2.5, 0, 0.14);
+  F.box(R, wm, trim, hw - 0.04, hw + 0.08, 0, 2.5, 0, 0.14);
+  F.box(R, wm, trim, -hw - 0.12, hw + 0.12, 2.36, 2.46, 0, 0.18);
   // pegboard rail for the top row + tag rail
   F.box(R, 'metal', P.metal, -hw + 0.1, hw - 0.1, 2.02, 2.05, 0.08, 0.13);
-  F.box(R, 'wood', trim, -hw + 0.05, hw - 0.05, 1.18, 1.24, 0.08, 0.16);
+  F.box(R, wm, trim, -hw + 0.05, hw - 0.05, 1.18, 1.24, 0.08, 0.16);
   // middle shelf
-  F.box(R, 'wood', trim, -hw + 0.04, hw - 0.04, 0.9, 0.96, 0.08, 0.46);
-  F.box(R, 'wood', board, -hw + 0.04, -hw + 0.1, 0.5, 0.9, 0.09, 0.45);   // brackets under the shelf (not flush with it)
-  F.box(R, 'wood', board, hw - 0.1, hw - 0.04, 0.5, 0.9, 0.09, 0.45);
+  F.box(R, wm, trim, -hw + 0.04, hw - 0.04, 0.9, 0.96, 0.08, 0.46);
+  F.box(R, wm, board, -hw + 0.04, -hw + 0.1, 0.5, 0.9, 0.09, 0.45);   // brackets under the shelf (not flush with it)
+  F.box(R, wm, board, hw - 0.1, hw - 0.04, 0.5, 0.9, 0.09, 0.45);
   // plinth for the case row
-  F.box(R, 'wood', P.woodD, -hw, hw, 0, 0.16, 0.5, 1.15);
-  F.box(R, 'wood', trim, -hw - 0.02, hw + 0.02, 0.16, 0.19, 0.48, 1.17);
+  F.box(R, wm, o.iron ? board : P.woodD, -hw, hw, 0, 0.16, 0.5, 1.15);
+  F.box(R, wm, trim, -hw - 0.02, hw + 0.02, 0.16, 0.19, 0.48, 1.17);
+  if (o.iron) {   // the site's iron shelf: a glowing lava line along the front edge, gold rivets
+    F.box(R, 'emit', o.iron.lava, -hw + 0.08, hw - 0.08, 0.915, 0.935, 0.46, 0.468);
+    F.box(R, 'emit', o.iron.lava, -hw + 0.02, hw - 0.02, 0.06, 0.08, 1.15, 1.158);
+    for (const lx of [-hw + 0.12, 0, hw - 0.12]) for (const [y, d] of [[2.41, 0.18], [0.93, 0.46]] as const) R.kit.ball('metal', o.iron.rivet, F.x(lx, d + 0.005), y, F.z(lx, d + 0.005), 0.025);
+  }
   // lamp over the stand: brass hood + a warm light strip under the crown, a pool of light on the back board and the
   // floor in front (splashes: lit at every quality), and a real light while the quality allows (prio 2)
   const lamp = o.lamp || '#ffcf6a';
@@ -103,13 +113,13 @@ export const COUNTER_TOP = 0.74;
 export const DAIS = 0.3;
 
 /** A counter (shop desk) along the frame's lx axis, at distance lz from the wall. Top at COUNTER_TOP, with a dais behind it. */
-export function counter(R: RoomBase, F: Frame, lx0: number, lx1: number, lz0: number, lz1: number, col?: string, top?: string): void {
+export function counter(R: RoomBase, F: Frame, lx0: number, lx1: number, lz0: number, lz1: number, col?: string, top?: string, mat: 'wood' | 'metal' = 'wood'): void {
   const P = R.pal;
-  F.box(R, 'wood', col || P.wood, lx0, lx1, 0, COUNTER_TOP - 0.06, lz0, lz1);
-  F.box(R, 'wood', top || P.woodL, lx0 - 0.05, lx1 + 0.05, COUNTER_TOP - 0.06, COUNTER_TOP, lz0 - 0.05, lz1 + 0.05);
+  F.box(R, mat, col || P.wood, lx0, lx1, 0, COUNTER_TOP - 0.06, lz0, lz1);
+  F.box(R, mat, top || P.woodL, lx0 - 0.05, lx1 + 0.05, COUNTER_TOP - 0.06, COUNTER_TOP, lz0 - 0.05, lz1 + 0.05);
   // panels
   const n = Math.max(1, Math.round((lx1 - lx0) / 0.8));
-  for (let i = 0; i < n; i++) { const a = lx0 + (lx1 - lx0) * (i + 0.15) / n, b = lx0 + (lx1 - lx0) * (i + 0.85) / n; F.box(R, 'wood', P.woodD, a, b, 0.1, COUNTER_TOP - 0.14, lz1, lz1 + 0.02); }
+  for (let i = 0; i < n; i++) { const a = lx0 + (lx1 - lx0) * (i + 0.15) / n, b = lx0 + (lx1 - lx0) * (i + 0.85) / n; F.box(R, mat, mat === 'metal' ? '#2a2028' : P.woodD, a, b, 0.1, COUNTER_TOP - 0.14, lz1, lz1 + 0.02); }
   F.solid(R, lx0 - 0.05, lx1 + 0.05, lz0 - 0.05, lz1 + 0.05, COUNTER_TOP);
   // keeper's dais behind the counter (so a ~1.35 m chibi shows above it)
   F.box(R, 'wood', P.woodD, lx0 + 0.1, lx1 - 0.1, 0, DAIS, lz0 - 0.9, lz0 - 0.05);
@@ -118,18 +128,20 @@ export function counter(R: RoomBase, F: Frame, lx0: number, lx1: number, lz0: nu
 }
 
 /** Wall shelves: n levels of planks with goods in a grid. Painted (col = back, side = posts/planks, lip = front edge). */
-export function shelves(R: RoomBase, F: Frame, items: StockItem[], b: string, o: { w: number; levels: number[]; depth?: number; fit?: number; col?: string; side?: string; lip?: string; mat?: 'wood' | 'plaster' }): void {
+export function shelves(R: RoomBase, F: Frame, items: StockItem[], b: string, o: { w: number; levels: number[]; depth?: number; fit?: number; col?: string; side?: string; lip?: string; mat?: 'wood' | 'plaster'; iron?: boolean }): void {
+  // iron: cast-iron sides and boards, the lip glows like lava (cherts)
+  const fm = o.iron ? 'metal' as const : 'wood' as const;
   const P = R.pal, hw = o.w / 2, d = o.depth ?? 0.4, per = Math.ceil(items.length / o.levels.length);
   const top = o.levels[o.levels.length - 1] + 0.5;
   const side = o.side || P.woodL;
   F.box(R, o.mat || 'wood', o.col || P.woodD, -hw, hw, 0, top, 0, 0.075);   // proud of the wainscot cap (6 cm)
-  F.box(R, 'wood', side, -hw - 0.06, -hw, 0, top, 0, d + 0.02);
-  F.box(R, 'wood', side, hw, hw + 0.06, 0, top, 0, d + 0.02);
-  F.box(R, 'wood', side, -hw - 0.1, hw + 0.1, top, top + 0.08, 0, d + 0.08);
+  F.box(R, fm, side, -hw - 0.06, -hw, 0, top, 0, d + 0.02);
+  F.box(R, fm, side, hw, hw + 0.06, 0, top, 0, d + 0.02);
+  F.box(R, fm, side, -hw - 0.1, hw + 0.1, top, top + 0.08, 0, d + 0.08);
   F.solid(R, -hw - 0.06, hw + 0.06, 0, d + 0.05, Infinity);
   o.levels.forEach((y, li) => {
-    F.box(R, 'wood', side, -hw, hw, y - 0.05, y, 0.06, d + 0.02);
-    if (o.lip) F.box(R, 'wood', o.lip, -hw, hw, y - 0.07, y + 0.015, d, d + 0.035);
+    F.box(R, fm, side, -hw, hw, y - 0.05, y, 0.06, d + 0.02);
+    if (o.lip) F.box(R, o.iron ? 'emit' : 'wood', o.lip, -hw, hw, y - 0.07, y + (o.iron ? -0.04 : 0.015), d, d + 0.035);
     const L = items.slice(li * per, li * per + per), n = L.length;
     L.forEach((it, i) => {
       const lx = n === 1 ? 0 : -hw + 0.3 + (o.w - 0.6) * (i / (n - 1));

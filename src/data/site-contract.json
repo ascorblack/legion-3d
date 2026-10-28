@@ -176,6 +176,50 @@
       "why": "district towns list (GET) for their layouts"
     },
     {
+      "id": "LGCity.town (travel)",
+      "kind": "keys",
+      "obj": "LGCity",
+      "file": "city.js",
+      "keys": [
+        "town"
+      ],
+      "when": "city",
+      "severity": "degrade",
+      "why": "«Путешествие» (src/features/travel.ts): switching a town calls LGCity.town(id), the function behind the site's town picker; without it the page shows the towns but cannot travel"
+    },
+    {
+      "id": "DOM .cy-town (town picker button)",
+      "kind": "dom",
+      "sel": "#tab-city .cy-town",
+      "re": "cy-town",
+      "when": "city",
+      "severity": "degrade",
+      "why": "the site's town picker button; the travel page lists the same towns (GET /api/city/towns) and is reported as drift when the picker is gone"
+    },
+    {
+      "id": "DOM .cy-tp (town picker window)",
+      "kind": "dom",
+      "sel": "#tab-city .cy-tp",
+      "re": "cy-tp",
+      "when": "city",
+      "severity": "degrade",
+      "why": "the site's town picker window (townPick); same reason as the button"
+    },
+    {
+      "id": "/api/find",
+      "re": "/api/find\\?q=",
+      "file": "start.js",
+      "severity": "degrade",
+      "why": "streamer search (GET, only while typing in «Путешествие → Каналы», src/net/travel.ts)"
+    },
+    {
+      "id": "/api/mylist",
+      "re": "/api/mylist",
+      "file": "start.js",
+      "severity": "degrade",
+      "why": "the player's own channel list (GET when «Каналы» opens; POST act 'open' only for a channel picked in the search, as the site does)"
+    },
+    {
       "id": "town hooks (data-town, lgCityTown)",
       "re": "dataset\\.town\\s*=[\\s\\S]*lgCityTown|lgCityTown[\\s\\S]*dataset\\.town\\s*=",
       "file": "city.js",

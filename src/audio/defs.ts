@@ -42,6 +42,13 @@ export const SFX = {
   'shop.buy': { files: v('coins', 2), bus: 'ui', db: -10, gainVar: 0.04, rateVar: 0.03, cooldown: 0.5 },
   'mine.hit': { files: v('pick', 5), bus: 'sfx', db: -9, gainVar: 0.06, rateVar: 0.05, cooldown: 0.2, ref: 2, maxDist: 18, lp: 5000 },
   'mine.break': { files: v('rock_break', 3), bus: 'sfx', db: -8, gainVar: 0.05, rateVar: 0.04, cooldown: 0.3, ref: 2.5, maxDist: 22 },
+  // the mine signal (src/rooms/mine/afk.ts): own stone finished — soft chimes on the ui bus, sent with { bg: true } so a
+  // hidden tab can wake for them («Сигнал шахты в фоне»). Existing recordings only: a double chime for ore / rock,
+  // the shimmer for a rare vein or a gem, coins for a petrified chest, a low falling chime when the daily cap is reached
+  'mine.done': { files: ['chime_0'], bus: 'ui', db: -16, gainVar: 0.03, rateVar: 0.01, rate: 1.05, cooldown: 0.1 },
+  'mine.rare': { files: v('shimmer', 2), bus: 'ui', db: -13, gainVar: 0.03, rateVar: 0.02, rate: 1.05, cooldown: 0.5 },
+  'mine.chest': { files: v('coins', 2), bus: 'ui', db: -12, gainVar: 0.03, rateVar: 0.02, rate: 0.95, cooldown: 0.5 },
+  'mine.cap': { files: ['chime_0'], bus: 'ui', db: -18, gainVar: 0.02, rateVar: 0.01, rate: 0.7, cooldown: 5, lp: 3000 },
   // interface
   'ui.tick': { files: v('tick', 3), bus: 'ui', db: -27, gainVar: 0.05, rateVar: 0.05, rate: 1.25, cooldown: 0.14, lp: 3000 },
   'ui.open': { files: v('paper', 3), bus: 'ui', db: -12, gainVar: 0.05, rateVar: 0.04, cooldown: 0.15, lp: 4500 },

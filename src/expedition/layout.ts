@@ -58,15 +58,34 @@ export function frontLine(spots: readonly Spot[]): { R: number; L: number; F: nu
 }
 
 /** Foe spots: per side three lanes in columns going away from the party; leaders a step back in the middle. */
-export function foeSpots(foes: readonly FoeState[], line: { R: number; L: number; F: number }, sp = 2.1, gap = 3.6): Spot[] {
-  const n: Record<Side, number> = { L: 0, R: 0, F: 0 };
-  return foes.map((f) => {
-    const k = n[f.side]++, col = Math.floor(k / 3), lane = middleOut(k % 3) * sp;
-    const d = gap + col * sp * 0.9 + (f.lead ? sp * 0.6 : 0);
-    if (f.side === 'L') return { x: line.L - d, z: lane, face: FACE_PX };
-    if (f.side === 'F') return { x: lane, z: line.F - d, face: FACE_PZ };
-    return { x: line.R + d, z: lane, face: FACE_NX };
-  });
+/**
+ * Foe spots beyond the front line, per side: the pack leader first (front centre), then staggered rows of three
+ * facing the party. Spacing follows the foes' size (`size(art)` → [length along the facing, width]): rows at least
+ * 1.3 × the body length apart and lanes 1.5 × the width, so long beasts (wolves) never melt into one mass.
+ */
+export function foeSpots(foes: readonly FoeState[], line: { R: number; L: number; F: number }, sp = 2.1, gap = 3.6,
+  size: (art: FoeState['art']) => [number, number] = () => [1, 1]): Spot[] {
+  const order = foes.map((_, i) => i).sort((a, b) => (foes[b].lead ? 1 : 0) - (foes[a].lead ? 1 : 0) || a - b);
+  const n: Record<Side, number> = { L: 0, R: 0, F: 0 }, out: Spot[] = new Array(foes.length);
+  const big: Record<Side, [number, number]> = { L: [1, 1], R: [1, 1], F: [1, 1] };
+  const lead: Record<Side, boolean> = { L: false, R: false, F: false };
+  for (const f of foes) { const [l, w] = size(f.art); big[f.side] = [Math.max(big[f.side][0], l), Math.max(big[f.side][1], w)]; if (f.lead) lead[f.side] = true; }
+  for (const i of order) {
+    const f = foes[i], [len, wid] = big[f.side];
+    const lsp = Math.max(sp, wid * 1.5, len * 1.3), dsp = Math.max(sp * 0.9, len * 1.3);
+    // the leader stands alone in front of its pack; the pack fills staggered rows of three behind it
+    let d: number, lane: number;
+    if (f.lead && lead[f.side]) { lead[f.side] = false; d = gap + len * 0.3; lane = 0; }
+    else {
+      const k = n[f.side]++, col = Math.floor(k / 3), front = foes.some((g) => g.lead && g.side === f.side) ? 1 : 0;
+      lane = (middleOut(k % 3) + ((col + front) % 2 ? 0.5 : 0)) * lsp;
+      d = gap + len * 0.3 + (col + front * 0.85) * dsp + (k % 3) * len * 0.4;   // echelon: lanes also step back, so a pitched camera never stacks them
+    }
+    if (f.side === 'L') out[i] = { x: line.L - d, z: lane, face: FACE_PX };
+    else if (f.side === 'F') out[i] = { x: lane, z: line.F - d, face: FACE_PZ };
+    else out[i] = { x: line.R + d, z: lane, face: FACE_NX };
+  }
+  return out;
 }
 
 /** Spots on a circle (camp / rest / loot): cats around a centre facing it. */

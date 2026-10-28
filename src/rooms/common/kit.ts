@@ -258,7 +258,7 @@ export class RoomKit {
   /** Every sign placed (text, centre, facing yaw rotY: 0 = +Z) — facing audits (test/rooms-facing.test.ts). */
   readonly signSpots: { text: string; x: number; y: number; z: number; ry: number }[] = [];
   /** Sign from the atlas, facing direction rotY (0 = facing +Z). Returns its height. */
-  sign(text: string, x: number, y: number, z: number, w: number, rotY = 0, opts: { bg?: string; fg?: string; sub?: string; plate?: boolean } = {}): number {
+  sign(text: string, x: number, y: number, z: number, w: number, rotY = 0, opts: { bg?: string; fg?: string; sub?: string; plate?: boolean; rim?: string } = {}): number {
     this.signSpots.push({ text, x, y, z, ry: rotY });
     const s = this.signs.add(text, opts);
     const h = w / s.aspect;
@@ -268,7 +268,8 @@ export class RoomKit {
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) ? u1 : u0, uv.getY(i) ? v1 : v0);
     const sn = Math.sin(rotY), cs = Math.cos(rotY);
     this.b.add('sign', g, M(x + sn * 0.035, y, z + cs * 0.035, w, h, 1, 0, rotY, 0), '#ffffff', 'keep');
-    if (opts.plate !== false) this.b.add('wood', GEO.box, M(x, y, z, w + 0.06, h + 0.06, 0.05, 0, rotY, 0), this.pal.line, 1);
+    // the backing plate: dark wood, or a polished metal rim in `rim` (gold-rimmed signs)
+    if (opts.plate !== false) this.b.add(opts.rim ? 'metal' : 'wood', GEO.box, M(x, y, z, w + (opts.rim ? 0.1 : 0.06), h + (opts.rim ? 0.1 : 0.06), 0.05, 0, rotY, 0), opts.rim || this.pal.line, 1);
     g.dispose();
     return h;
   }

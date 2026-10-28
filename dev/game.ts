@@ -16,6 +16,10 @@ import { FakeMine, makeBus } from '../src/rooms/mine/fake';
 import mineEnter from '../test/fixtures/mine-enter.json';
 import { FakeQuest } from '../src/quest/fake';
 import { npcPlaces, npcBlocks } from '../src/events/halloween/hwnpc';
+import { MineClient } from '../src/rooms/mine/net';
+import { createMineRoom } from '../src/rooms/mine';
+import type { DemoData } from '../src/debug/places';
+import { QUEST_MOCKS } from '../src/debug/questMocks';
 
 // ?town=camp: the start camp «Перепутье» (test/fixtures/camp-map.json), otherwise the fair
 const TOWN = new URLSearchParams(location.search).get('town');
@@ -33,8 +37,10 @@ const hwcOf = (v: string | null) => (v === 'look' ? { look: true, portal: false 
 (hero as any).hw = { c: 42, p: Math.max(0, Math.min(20, +(new URLSearchParams(location.search).get('hwlv') ?? 7) || 0)), x: 0 };
 if (layout.id === 'fair') { const free0 = layout.free, NPCS = npcPlaces({}); layout.free = (x, y) => free0(x, y) && !((hero as any).hwc?.look && npcBlocks(NPCS, x, y)); }
 store.setHero(hero);
+// ?style=cherts|legion|monkeys…: the channel's art style (live: MDDoodle.active) — looks, camp theme, shop interiors
+const STYLE = new URLSearchParams(location.search).get('style') || 'cats';
+layout.styleId = STYLE;
 store.setLayout(layout);
-const STYLE = 'cats';
 const heroRaw = (h: Hero) => ({ ...h, n: h.name, lv: h.level, lk: (h as any).wardrobe?.cur || h.look, g: h.gear });
 store.setMe({ login: hero.login, app: appearanceFrom(hero.login, heroRaw(hero), STYLE), x: SPAWN[0], y: SPAWN[1], face: 0, speed: 0, alpha: 1, me: true });
 
@@ -101,8 +107,62 @@ actions.get = ((g) => (p: string) => (isMine(p) ? mine().api(p) : g(p)))(actions
 actions.post = ((g) => (p: string, b?: unknown) => (isMine(p) ? mine().api(p, b) : g(p, b)))(actions.post) as Actions['post'];
 let toastDemo = (t: string) => console.log(t);
 
+/* ---- «Путешествие» (L): offline stand-ins for the site's town picker and streamer search ---- */
+// /api/city/towns, /api/mylist, /api/find and LGCity.town(id) — enough for the travel page and a real world swap (camp ⇄ fair ⇄ a town)
+{
+  (hero as any).cp ??= 1; (hero as any).tw ??= 1;
+  const TOWNS = { ok: true, quest: false, list: [
+    { id: 'd3', town: 'Медовая Падь', biome: 'meadow', danger: 1, kind: 'village', own: true, k: 1, why: 'owned' },
+    { id: 'd7', town: 'Сосновый Брод', biome: 'taiga', danger: 2, kind: 'town', own: false, k: 1.5 },
+    { id: 'd12', town: 'Ледяная Гавань', biome: 'ice', danger: 3, kind: 'capital', own: false, home: true, k: 2, why: 'party' },
+  ] };
+  const MY = { ok: true, list: [
+    { login: 'mur_cat', name: 'Мур_Кот', live: true, pinned: true, hero: true },
+    { login: 'rybka_tv', name: 'Рыбка ТВ', live: false, pinned: false, hero: true },
+    { login: 'seryi_hvost', name: 'Серый Хвост', live: false, pinned: false, hero: false },
+  ] };
+  const FIND = [{ login: 'pushok_live', name: 'Пушок', live: true }, { login: 'pushistaya_gavan', name: 'Пушистая Гавань', live: false }, { login: 'tikhiy_kot', name: 'Тихий кот', live: true }, { login: 'mur_cat', name: 'Мур_Кот', live: true }];
+  const q0 = actions.get;
+  actions.get = ((p: string) => (p === '/api/city/towns' ? Promise.resolve(structuredClone(TOWNS)) : p === '/api/mylist' ? Promise.resolve(structuredClone(MY)) : q0(p))) as Actions['get'];
+  const f0 = window.fetch.bind(window);
+  window.fetch = ((u: any, i?: any) => {
+    const m = /\/api\/find\?q=(.*)$/.exec(String(u?.url || u));
+    if (!m) return f0(u, i);
+    const q = decodeURIComponent(m[1]).toLowerCase();
+    return new Promise((ok) => setTimeout(() => ok(new Response(JSON.stringify({ ok: true, list: FIND.filter((c) => c.login.includes(q) || c.name.toLowerCase().includes(q)) }), { status: 200 })), 250));
+  }) as typeof fetch;
+  (window as any).__travelLog = [] as string[];
+  (window as any).LGCity = {
+    debug: () => ({}),
+    town: (id: string) => {   // the site rebuilds the City asynchronously; the 3D world follows the new layout
+      (window as any).__travelLog.push('town:' + id);
+      setTimeout(() => {
+        const L = id === 'camp' ? campFixtureLayout() : { ...fixtureLayout(), id };
+        store.setLayout(L as any);
+      }, 700);
+    },
+  };
+}
+
 /* ---- expedition (dev toggle): ?quest=1 feeds the offline FakeQuest into store.quest (?quest=2 = double speed); Q opens it in 3D ---- */
 const QS = new URLSearchParams(location.search).get('quest'); if (QS) new FakeQuest({ login: String(hero.login).toLowerCase(), role: ((hero as any).role || 'archer'), speed: +QS || 1 }).run({ emit: (_t: string, d: unknown) => store.setQuest(d as any) });
+
+/* ---- debug mode (Settings → Отладка): ?debug=1 switches it on; recorded data for the test dimension's demo places ---- */
+if (new URLSearchParams(location.search).get('debug') === '1') { try { localStorage.setItem('l3d.debug', 'on'); } catch { /* */ } }
+(window as any).__l3dDebugDemo = {
+  stock: structuredClone(stock) as any,
+  campLayout: () => campFixtureLayout(),
+  fairLayout: () => fixtureLayout(),
+  mine: async (rctx) => {
+    const bus = makeBus(), fh = structuredClone(hero) as any, login = String(hero.login).toLowerCase();
+    const fm = new FakeMine({ login, enter: structuredClone(mineEnter) as any, hero: fh, bus, digSec: 8 });
+    const client = new MineClient({ api: (p, b) => fm.api(p, b), login, c: 'home', bus, hero: () => fh, hidden: () => document.hidden });
+    const sc = await createMineRoom(rctx, { client });
+    const d = sc.dispose.bind(sc); sc.dispose = () => { d(); fm.dispose(); };
+    return sc;
+  },
+} satisfies DemoData;
+(window as any).__l3dDebugMocks = { QUEST_MOCKS };   // dev/debug-check.mjs
 
 const site: SiteSession = {
   store, actions,

@@ -8,14 +8,18 @@
  * light-pool and point-light candidates for the fire and torches. No three.js objects of its own, no per-frame work.
  */
 import type { CityLayout } from '../contracts';
-import type { CampScene } from '../net/town';
+import { campName, type CampScene } from '../net/town';
 import { toX, toZ, SX, SZ } from './coords';
 import { GEO, GEO2, M } from './batch';
-import { type Ctx, box, rbox, cyl, cone, ball, shade } from './kit';
+import { type Ctx, box, rbox, cyl, cone, ball, shade, signZ } from './kit';
 import type { Placed } from './place';
 import * as THREE from 'three';
+import { campThemeOf, type CampParts } from './camp-themes';
 
-export type CampLayout = CityLayout & { camp?: CampScene; spawn?: [number, number] };
+/** unit disc (diameter 1) facing up, for the water in the tub */
+const TUB_WATER = new THREE.CircleGeometry(0.5, 24).rotateX(-Math.PI / 2);
+
+export type CampLayout = CityLayout & { camp?: CampScene; spawn?: [number, number]; campName?: { name: string; sub: string } };
 export const campOf = (L: CityLayout): CampScene | null => (L as CampLayout).camp ?? null;
 
 const CANVAS = ['#e8dcc0', '#d6c49a', '#a9b582', '#d98c6a', '#c9b8d8', '#e8dcc0', '#b8a47a', '#9fb07a', '#e3c9a0'];
@@ -65,6 +69,19 @@ function palisade(k: Ctx, along: 'x' | 'z', a: number, b: number, at: number, in
   }
 }
 
+/** Name of the camp as the 3D world writes it: «Кошачий привал» in the cat style, «Перепутье» otherwise (src/net/town.ts campName). */
+export const campTitle = (L: Pick<CityLayout, 'styleId'> & { campName?: { name: string; sub: string } }) => L.campName ?? campName(L.styleId);
+
+/** The camp's name board: on the back palisade, facing the clearing, in the widest gap between the buildings (none wide enough: no board). */
+function campBoard(k: Ctx, L: CityLayout, gaps: [number, number][]): void {
+  const t = campTitle(L as CampLayout);
+  let best: [number, number] | null = null;
+  for (const g of gaps) if (!best || g[1] - g[0] > best[1] - best[0]) best = g;
+  if (!best || best[1] - best[0] < 2.6) return;   // no room: the name stays in the menu and the toast
+  const w = Math.min(3.8, best[1] - best[0] - 0.8), cx = (best[0] + best[1]) / 2;
+  signZ(k, t.name, cx, 0.95, -0.39, w, { hang: true });   // no subtitle: at this size it would be unreadable
+}
+
 /** Ground (grass), dirt trails and the clearing round the fire, palisades, trees and hills round the camp. */
 export function buildCampTerrain(k: Ctx, L: CityLayout, c: CampScene): void {
   const P = k.pal, W = toX(L.W), fz = toZ(c.fence.y), zEnd = fz + 14;
@@ -89,9 +106,13 @@ export function buildCampTerrain(k: Ctx, L: CityLayout, c: CampScene): void {
   palisade(k, 'z', -0.4, fz, x1, -1);
   const blds = L.buildings.map((b) => [toX(b.hit[0]), toX(b.hit[1])] as [number, number]).sort((a, b) => a[0] - b[0]);
   let x = x0;
-  for (const [a, b] of blds) { if (a - x > 0.6) palisade(k, 'x', x + 0.15, a - 0.15, -0.55, 1); x = Math.max(x, b); }
-  if (x1 - x > 0.6) palisade(k, 'x', x + 0.15, x1, -0.55, 1);
+  const gaps: [number, number][] = [];   // stretches of the back palisade between the buildings (the camp's name board hangs on the widest)
+  for (const [a, b] of blds) { if (a - x > 0.6) { palisade(k, 'x', x + 0.15, a - 0.15, -0.55, 1); gaps.push([x + 0.15, a - 0.15]); } x = Math.max(x, b); }
+  if (x1 - x > 0.6) { palisade(k, 'x', x + 0.15, x1, -0.55, 1); gaps.push([x + 0.15, x1]); }
+  campBoard(k, L, gaps);
   // a gentle glow over the gate opening is the gate model's; the camp is lit by the fire and the torches
+  const T = campThemeOf(L.styleId);   // per-style camp (camp-themes.ts): its own backdrop + ground decor
+  if (T) { T.far(k, L, c, W / 2, fz / 2); T.ground(k, c); return; }
   // forest round the camp (instanced placeholder trees) + far dark firs and the hills ring
   let s = 77;
   const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
@@ -250,7 +271,8 @@ function prop(k: Ctx, p: CampScene['props'][number], poles: [number, number][]):
     case 'well': {   // big wooden water tub (oval): staves + hoops + water
       k.b.add('wood', GEO.cyl16, M(X, 0.33, Z, ex * 2, 0.66, ez * 2), shade(P.wood, -0.05), 0.7);
       for (const y of [0.12, 0.52]) k.b.add('metal', GEO.cyl16, M(X, y, Z, ex * 2 + 0.03, 0.05, ez * 2 + 0.03), '#4a4456', 1);
-      k.b.add('water', GEO.plane, M(X, 0.6, Z, ex * 1.75, ez * 1.75, 1, -Math.PI / 2, 0, 0), '#ffffff', 1);
+      // water: an oval disc just above the tub's top cap, inside the staves (a square plane poked its corners out)
+      k.b.add('water', TUB_WATER, M(X, 0.665, Z, ex * 1.84, 1, ez * 1.84), '#ffffff', 1);
       k.colliders.push(X - ex, X + ex, 0, 0.7, Z - ez, Z + ez);
       solid(k, X - ex, X + ex, Z - ez, Z + ez, Infinity); break;
     }
@@ -292,14 +314,15 @@ function prop(k: Ctx, p: CampScene['props'][number], poles: [number, number][]):
 }
 
 /** Every camp prop + washing lines + fire + tents. Returns the Placed of the camp (garlands only from building wires). */
-export function buildCampProps(k: Ctx, c: CampScene): Placed {
+export function buildCampProps(k: Ctx, c: CampScene, styleId = ''): Placed {
   const garlands: Placed['garlands'] = [];
-  campfire(k, c.fire);
-  c.tents.forEach((t, i) => tent(k, t, i));
+  const T = campThemeOf(styleId), CP: CampParts = { flame, solid, tentH: TENT_H };
+  if (T) T.campfire(k, c.fire, CP); else campfire(k, c.fire);
+  c.tents.forEach((t, i) => (T ? T.tent(k, t, i, CP) : tent(k, t, i)));
   const poles: [number, number][] = [];
-  for (const p of c.props) prop(k, p, poles);
+  for (const p of c.props) if (!(T && T.prop(k, p, CP))) prop(k, p, poles);
   // washing lines between pole pairs (indices among the poles), with a few hanging clothes
-  const CLOTH = ['#e8e0f0', '#7fb0e8', '#ff9fb2', '#ffe27a', '#9fe39a'];
+  const CLOTH = T ? T.cloth : ['#e8e0f0', '#7fb0e8', '#ff9fb2', '#ffe27a', '#9fe39a'];
   for (const [i, j] of c.lines) {
     const a = poles[i], b = poles[j]; if (!a || !b) continue;
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = -Math.atan2(b[1] - a[1], b[0] - a[0]);

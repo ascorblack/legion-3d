@@ -1,6 +1,6 @@
 # Expedition («Поход») — data contract, UI logic, 3D plan
 
-Status: v1 research (2026-10-27), no live capture yet. Audience: whoever builds the 3D expedition and whoever records a live one.
+Status: v2 reader + live replay audit (2026-10-28); see §11 for evidence and remaining unknowns. Audience: whoever builds the 3D expedition and whoever records a live one.
 Types: `src/quest/model.ts`. Fake: `src/quest/fake.ts`. Tests: `test/quest-model.test.ts`.
 
 **Sources** (read-only, kept out of git in `.local/`):
@@ -162,7 +162,7 @@ the overlay's battle state; whether any of it reaches the site view is [unknown]
 
 **Enemy attack kinds** (battle.js) **[code, overlay]**: `shield` (frontal), `duck` (from above), `scatter` (area); moves
 `lunge charge leap swoop throw spit wave burst`; per pack: wolf, skeleton, bandit, boar, drowner, spider, bat. Whether the
-site view tells which kind (`tele.k`?) is **[unknown]**; the word (`tele.word`) is what counts for the player.
+site view tells the kind as `tele.kind` (**[live]**, shield observed in fixture 1); the word (`tele.word`) is what counts for the player.
 
 ## 6. Generated boss (`v.bg`, with or without `v.b.gb`)
 
@@ -290,3 +290,43 @@ spectator (and a tester account with `qa`). Then answer:
 15. `lair`, `dgn`, `ev.dice/well/priest`, trap types `ropes/plates/greed` — shapes are code-derived only; capture each once.
 16. `party` values beyond `in|q|ghost` (e.g. `out`, `''`), `cm` in each stage.
 17. `late` format confirmation (`[ms, what, s]`).
+
+## 11. Live evidence audit (2026-10-28)
+
+Sources: sanitized `test/fixtures/quest-live-1.json` (**111 q frames**, spectator) and `quest-live-2.json` (**83 q frames**, queue snapshot; source may still grow). The first raw file's 178 lines are **all transport events**, not 178 expedition payloads. Sanitizer keeps only q envelopes, substitutes every known identity with playerN (also inside result prose), drops chat/feed and test/debug blocks. No account action was taken. Regression: `test/quest-live-replay.test.ts` replays every saved q through guard, buffer, card and adapter.
+
+### Each former recorder unknown (§10) revisited
+
+| # | Status and evidence (fixture 1 unless stated) |
+|---|---|
+| 1 | **Observed:** k=battle (27), map (20), treasure (11), lair (5), rest (4), travel (1), then 43 off frames. b belongs to battle; no bg/boss/dgn in either fixture. General boss routing remains code-derived. |
+| 2 | **Resolved for captured battle:** party → hit → tele → tele2 → party, eventually end; another battle intro occurs later. until is present in intro/hit/tele2/end and may be the **old action window**, not a transition deadline. Never infer animations or fight end from until alone. |
+| 3 | **Partial:** every form tuple has index 3 = 0 and index 5 = 2 here. Meaning/range still unknown; do not infer HP from index 3. |
+| 4 | **Observed absence:** no ev.hits/heals/acts nor full other-hero HP block in recorded b. No overlay-level information can be reconstructed from absent data. |
+| 5 | **Resolved:** foes HP spans 0..1; dead foes remain in array; largest observed group = 6. Greater population caps remain code-derived. |
+| 6 | **Resolved discriminator:** tele keys word/kind/text/need/got/ok; kind=shield observed. mine keys r/k/at/tk/ok/me; spectator me is null. Own successful action subshape and other tele kinds still need an in-party recording. |
+| 7 | **Partial:** opts=[n,label,'',votes,extra] (5 slots); index 2 is empty here. Done votes carry win=0, so **do not reinterpret zero as option 1** or claim a chosen winner. Meaning of extra / nonempty index 2 unresolved. |
+| 8 | **Important negative evidence:** b.res={how:'away',xp:8,coins:0}, four frames; tr.res has win/text/okN/me/sv, including numeric sv=1. No top-level res, no loot, no post-boss summary in either fixture. The spectator stream later goes off, but this is NOT proof of a completed boss kill or reward path. Fake boss/loot remains synthetic demonstration only. |
+| 9 | **Observed:** irregular updates (fixture 1 receipt gaps 169..53602 ms); queue fixture also sends repeated unchanged map views. Do not assume a fixed SSE frame rate, nor treat receipt gaps as exact server stage durations. |
+| 10 | **Resolved:** dl=4 throughout both fixtures; now present on every frame; at present on all on frames, omitted on off. Buffer retains receive-time fallback. |
+| 11 | **Observed:** Мельница, Пещера, Врата башни, Чёрная башня, and empty ter. No bio/season/progress field. This is not an exhaustive terrain list. |
+| 12 | **Resolved within captures:** only n outside b; form is battle-only. Roster reuses known cats and fills anonymous silhouettes, never claims unknown cats are identified. |
+| 13 | **Unresolved:** no bg/b.gb/zn frames. Existing coordinate interpretation remains explicitly code-derived/inferred. |
+| 14 | **Partial:** exactly one travel q, with ordinary on/k/t/ter/dl/at/n/roll/party/late/cm/now fields; no route progress. Duration cannot be recovered from a single transition sample. |
+| 15 | **Resolved lair basic shape:** phase/st/round/hp/acted plus optional rt. st intro→party→hits→boss; hp=null means spectator's own HP, **not boss HP**. No islands block in this encounter. dgn, ordinary events and other trap families remain uncaptured. |
+| 16 | **Resolved:** spectator party=null (or absent on off), queued participant party='q' throughout fixture 2 (83 map frames); cm can be false/true. Queue is not membership, and no late-join transition was captured. |
+| 17 | **Unresolved:** every late=[]; tuple format is still code-derived. Do not equate party='q' with a late-command notice. |
+
+Additional live fields formerly lost: roll.tier is a **string** (bad/mid/good observed; n=7/bad and n=8/mid prove tier cannot simply be inferred from the two-front n≤9 threshold); b.ambush/more/press/drop retained in SceneState.battle; tele.kind retained. q.tr may omit name entirely; type=code identifies the treasure. Actual rune code has len=4/max=6/per=3, **duplicates allowed**; rd2 contains door/dbl/ep/ang/ph/vote/left/my. tr stages intro→act→fire→done, best rows are [code,colour pattern,playerN], result prose also has playerN. The fake now uses four runes with repeats allowed and tele2 enemy-resolution stages. Battle feed is intentionally excluded from sanitized fixtures because it is player/chat-derived prose; live runtime still supports the feed.
+
+### Exact current reader: puzzles, Halloween and goblin fair
+
+Authoritative source now: `.local/site-1028-1307/quest.js`, functions pzHtml/qaPz/hwEvHtml/hwView/gobHtml/gobView. No Halloween/goblin/puzzle q occurs in these recordings, so the following are **[code], not live-confirmed**.
+
+- Puzzle kinds are riddle/count/runes/cups/changed/letter/scales. «Загадка старого камня»=riddle; «Равенство рун»=runes; «Кубики с надписями»=cups; «Пропавший предмет»=changed; «Весы отряда»=scales. Titles are server-provided, never discriminators. heal/gone are not additional pz kinds in this reader. Do not invent a healing puzzle.
+- «Повтори последовательность» belongs to ev.look=skeldance (Halloween), not a missing pz kind. ev.hw identifies Halloween; look=trick/fortune/cauldron/lostghost/skeldance. Public stages vote/on/pay/ingr/brew/riddle/pause/show/input/done are reflected as instructions, not buttons that send account actions. ev.bt is [label,chat line,optional style], **unlike ordinary ev.cmds**. how/q/price/pool/picked and public counters are displayed.
+- Dance sq entries are [l|r|j|c, shownAt]. Reveal each additional step only at shownAt + stream delay; steps already present in the delayed view stay visible. Latest own my merges immediately for the same event id; seq is only displayed on done. Input is one message chain, using words влево/вправо/прыг/хлоп (abbreviations л/п/в/х). Never show a solved chain during input.
+- Goblin fair is ev.gob + look=goblin, game gk=shell/coin/hilo, stages ask/bet/shuffle/guess/reveal/next/done. me tuple=[vote,bet,answer,result,delta,total,played]. Only own vote and same-game bet/answer merge immediately; payout/result stays delayed. Betting instruction is ставка N with server min/cap; guesses use ev.bt exact lines. Shell cups animate only while shuffle; hilo first card appears only in guess. rv public result appears only reveal/next. Fair participation requires party=in (Halloween also allows ghost per reader).
+- Test/debug demos: pz-* (all seven), hw-trick/fortune/cauldron/lostghost/skeldance-show/skeldance-input, gob-shell/coin/hilo plus gob-ask/bet/shuffle/reveal/next/done. All are synthetic source-contract examples, not fabricated live captures.
+
+Rune door 2 own-state overlay is now merged like the reader: only rd2.left/my update immediately, public door/anger/vote/result remain delayed. Acted does not lock further rune attempts; exhausted attempts show a waiting notice. Public rd2.ph=vote shows «забрать / дальше» and the shared-attempt ×2 risk. SceneState retains rd2/per. `pb.b` place-action descriptors (including warning flee/pay commands) are retained as `placeActions` metadata but intentionally not promoted to primary command chips: 3D does not execute dangerous actions or emulate the site's double-confirmation UI.

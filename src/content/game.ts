@@ -13,6 +13,11 @@
  *   7. world      world.update (city) or rooms.update (active room)
  *   8. interact   crosshair/proximity target → HUD prompt; ui.update
  * Used by the extension (src/content/main.ts) and by the offline demo (dev/game.ts, fake SiteSession).
+ *
+ * Expedition-only mode (opts.expeditionOnly, src/net/expedition-site.ts): the hero is in an expedition party and the
+ * site's City is locked — no city world is built (an empty stand-in World3D), only the features of
+ * EXP_ONLY_FEATURES run, and src/features/expedition-only.ts opens the 3D expedition at once. Game.dispose() tears the
+ * whole game down so the launcher can boot the city in place afterwards («Вернуться в город»).
  */
 import * as THREE from 'three';
 import type { World3D, Unsub, Appearance } from '../contracts';
@@ -30,15 +35,22 @@ import { createInteractSystem } from '../core/interact';
 import { createRoomManager, type RoomHost } from '../core/rooms';
 import { reportDrift } from '../core/drift';
 import { SET } from '../core/settings';
-import { runFeatures } from '../features';
+import { runFeatures, FEATURES } from '../features';
+import { EXP_ONLY_FEATURES } from '../features/expedition-only';
 
 declare const __DEV__: boolean;
 const W = window as any;
 
 export type { Game };
 
-export async function startGame(site: SiteSession, status: (s: string) => void): Promise<Game> {
+export interface StartOpts {
+  /** Hero in an expedition party, City locked: no city world, only EXP_ONLY_FEATURES (src/net/expedition-site.ts). */
+  expeditionOnly?: boolean;
+}
+
+export async function startGame(site: SiteSession, status: (s: string) => void, opts: StartOpts = {}): Promise<Game> {
   const store = site.store;
+  const expOnly = !!opts.expeditionOnly;
   setAppearanceFn((login, raw, styleId) => appearanceFrom(login, raw, styleId, (l: string) => siteDefaults(l) as any));
   // re-resolve looks for walkers created before the hook
   for (const w of store.walkers.values()) w.app = appearanceFrom(w.login, (w as any).raw || {}, w.app.styleId, (l: string) => siteDefaults(l) as any);
@@ -68,8 +80,9 @@ export async function startGame(site: SiteSession, status: (s: string) => void):
     const rig = createCameraRig(engine.camera);
     const layout = store.layout!;
 
-    status('Строим улицы…');
-    let world: World3D = await buildCity(layout, { quality: engine.quality, renderer: engine.renderer, art: createSvgArt(layout) ?? undefined });
+    status(expOnly ? 'Собираем поход…' : 'Строим улицы…');
+    let world: World3D = expOnly ? emptyWorld()
+      : await buildCity(layout, { quality: engine.quality, renderer: engine.renderer, art: createSvgArt(layout) ?? undefined });
     engine.scene.add(world.root);
     engine.onQuality((q) => world.setQuality(q));
     const worldFns = new Set<(w: World3D) => void>();
@@ -111,7 +124,7 @@ export async function startGame(site: SiteSession, status: (s: string) => void):
     rig.setDragElement(engine.renderer.domElement);
     rig.yaw = 0; rig.pitch = -0.05;
 
-    const state: GameState = { mode: 'fp', menu: null, menuOrbit: false, overlay: null, overlayOver3d: false, classic: false, inRoom: false };
+    const state: GameState = { mode: 'fp', menu: null, menuOrbit: false, overlay: null, overlayOver3d: false, classic: false, inRoom: false, expeditionOnly: expOnly };
     const registries = createRegistries();
     const interact = createInteractSystem({ scene: engine.scene });
     const frameFns: ((dt: number, t: number) => void)[] = [];
@@ -209,7 +222,8 @@ export async function startGame(site: SiteSession, status: (s: string) => void):
       state.menu = id; state.menuOrbit = o;
       for (const f of [...menuFns]) { try { f(id); } catch (e) { console.error('[l3d] menu listener', e); } }
     };
-    W.addEventListener('l3d:menu', (e: CustomEvent) => onMenuChanged(e.detail?.open ?? null, typeof e.detail?.orbit === 'boolean' ? e.detail.orbit : undefined));
+    const onMenuEv = (e: CustomEvent) => onMenuChanged(e.detail?.open ?? null, typeof e.detail?.orbit === 'boolean' ? e.detail.orbit : undefined);
+    W.addEventListener('l3d:menu', onMenuEv);
 
     /* ---- rooms ---- */
     const roomHost: RoomHost = {
@@ -283,7 +297,7 @@ export async function startGame(site: SiteSession, status: (s: string) => void):
 
     // layout changes (town switch, buildings opened) → rebuild the city world
     store.on('layout', async () => {
-      const L = store.layout; if (!L) return;
+      const L = store.layout; if (!L || expOnly) return;
       const nw = await buildCity(L, { quality: engine.quality, renderer: engine.renderer, art: createSvgArt(L) ?? undefined });
       engine.scene.remove(world.root); world.dispose(); world = nw; engine.scene.add(world.root);
       world.root.visible = !state.inRoom;
@@ -293,7 +307,7 @@ export async function startGame(site: SiteSession, status: (s: string) => void):
 
     /* ---- features ---- */
     status('Готовим мир…');
-    await runFeatures(ctx);
+    const offFeatures = await runFeatures(ctx, expOnly ? FEATURES.filter((f) => EXP_ONLY_FEATURES.has(f.id)) : FEATURES);
 
     /* ---- crosshair prompt: «[E] Войти: Кузня», «[E] Купить: … · [F] Осмотреть», «!… — скоро откроется» (muted) ---- */
     let pTarget: Interactable | null = null, pLabel = '', pOverride: string | null = null;
@@ -343,7 +357,7 @@ export async function startGame(site: SiteSession, status: (s: string) => void):
       rig.update(dt);
       const fpNow = rig.distance < 0.9 && !rooms.stage;   // scene mode: the hero is always shown
       if (fpNow !== fpShown) { fpShown = fpNow; meAv.setFirstPerson(fpNow); }
-      const vmOn = fpNow && !state.menu && (!state.overlay || state.overlayOver3d);
+      const vmOn = fpNow && !state.menu && !state.toolInHand && (!state.overlay || state.overlayOver3d);
       if (vmOn !== vmShown) { vmShown = vmOn; vm.setVisible(vmOn); }
       // 6. features
       for (let i = 0; i < frameFns.length; i++) frameFns[i](dt, t);
@@ -360,6 +374,21 @@ export async function startGame(site: SiteSession, status: (s: string) => void):
       ui.update(dt);
     });
 
+    // full teardown (the expedition-only game before the city boots in place; safe to call once)
+    let disposed = false;
+    ctx.game.dispose = () => {
+      if (disposed) return; disposed = true;
+      try { offFeatures(); } catch (e) { console.error('[l3d] dispose features', e); }
+      W.removeEventListener('l3d:menu', onMenuEv);
+      try { (ui as { dispose?: () => void }).dispose?.(); } catch (e) { console.error('[l3d] dispose ui', e); }
+      try { input.dispose(); } catch { /* */ }
+      try { world.dispose(); } catch { /* */ }
+      try { engine.dispose(); } catch { /* */ }
+      veilEl.remove(); cleanupDom();
+      try { site.dispose(); } catch (e) { console.error('[l3d] dispose site', e); }
+      if (__DEV__ && W.__l3dGame?.ctx === ctx) delete W.__l3dGame;
+    };
+
     document.getElementById('l3d-launch')?.classList.add('hide');
     if (__DEV__) {
       W.__l3dGame = {
@@ -370,6 +399,14 @@ export async function startGame(site: SiteSession, status: (s: string) => void):
     }
     return ctx.game;
   }
+}
+
+/** The stand-in world of the expedition-only mode: nothing to draw, flat ground, no doors. */
+function emptyWorld(): World3D {
+  return {
+    root: new THREE.Group(), groundAt: () => 0, doors: [], spawn: [200, 200],
+    update: () => { /* */ }, setQuality: () => { /* */ }, dispose: () => { /* */ },
+  };
 }
 
 /** Menus that orbit the camera when the UI does not say (older UI without detail.orbit). */

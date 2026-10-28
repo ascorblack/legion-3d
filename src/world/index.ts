@@ -25,6 +25,7 @@ import { getTexture, setTexAnisotropy, disposeTextures } from './tex';
 import { PropKit, PROP_KINDS, disposePropKit, type PropKind } from './props';
 import { PoolLights } from './lightPools';
 import { campOf, type CampLayout } from './camp';
+import { campThemeOf } from './camp-themes';
 
 export { createSvgArt } from './svgArt';
 export { groundSpec, makeGroundAt } from './ground';
@@ -57,7 +58,7 @@ function buildGarlands(spans: THREE.Vector3[][], glowTex: THREE.Texture): THREE.
 }
 
 function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.Material> {
-  const P = paletteOf(L.styleId), camp = !!campOf(L);
+  const P = paletteOf(L.styleId), camp = !!campOf(L), CT = camp ? campThemeOf(L.styleId) : null;
   const std = (kind: Parameters<typeof getTexture>[0], o: { rough?: number; ns?: number; colors?: string[]; neutral?: boolean; seed?: number; side?: THREE.Side; size?: number } = {}) => {
     const t = getTexture(kind, { neutral: o.neutral ?? true, colors: o.colors, seed: o.seed, size: o.size });
     const m = new THREE.MeshStandardMaterial({
@@ -84,9 +85,9 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
     metal: Object.assign(std('metal', { rough: 0.6, ns: 0.4 }), { metalness: 0.35 }),
     canvas: std('canvas', { colors: ['#ffffff', '#f2f2f2'], rough: 0.95, ns: 0.4, side: THREE.DoubleSide }),
     // the camp: 'paving' = night grass, 'lowPaving' = trodden soil of the trails
-    paving: camp ? std('grass', { neutral: false, colors: ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.35 })
+    paving: camp ? std('grass', { neutral: false, colors: CT ? [...CT.grass] : ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.35 })
       : std('cobble', { neutral: false, colors: [P.ground, shade(P.ground, 0.08), P.mortar, P.groundL], rough: 1, ns: 0.7, size: 1024 }),
-    lowPaving: camp ? std('soil', { neutral: false, colors: ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.7, seed: 3 })
+    lowPaving: camp ? std('soil', { neutral: false, colors: CT ? [...CT.soil] : ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.7, seed: 3 })
       : std('cobble', { neutral: false, colors: [P.lowA, P.lowB, P.lowMortar, P.groundL], rough: 1, ns: 0.7, seed: 3, size: 1024 }),
     leaf: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),
     flat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
@@ -239,7 +240,9 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const glows = glowPoints(k.glows, 7, glowTex, { flicker: 0.1, intensity: 0.55 });   // halos stay under the bloom threshold
   root.add(glows);
 
-  const sky = skyDome(L.sky || P.sky);
+  const CTh = campOf(L) ? campThemeOf(L.styleId) : null;   // a per-style camp has its own sky and light mood
+  const skyCss = CTh?.sky || L.sky || P.sky;
+  const sky = skyDome(skyCss);
   root.add(sky);
   const starPts = stars(opts.quality >= 1 ? 900 : 350, dot);
   root.add(starPts);
@@ -249,7 +252,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const moonDir = new THREE.Vector3(-0.45, 0.55, -0.7).normalize();
   root.add(moon);
 
-  const grad = parseGradient(L.sky || P.sky);
+  const grad = parseGradient(skyCss);
   const horizon = new THREE.Color(grad[grad.length - 1].c), zenith = new THREE.Color(grad[0].c);
   // fog = the sky's (brightened) horizon band, so distant structures fade into the glow, nearer ones silhouette
   const fogCol = (sky.userData.horizon as THREE.Color | undefined)?.clone() ?? horizon.clone();
@@ -257,9 +260,9 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
 
   // the camp has only the fire, torches and tent lanterns (no street lamps): a little more moonlight on the meadow
   const campLit = !!campOf(L);
-  const hemi = new THREE.HemisphereLight(new THREE.Color('#8f9cff'), new THREE.Color('#4a2c30'), campLit ? 1.45 : 1.15);
+  const hemi = new THREE.HemisphereLight(new THREE.Color(CTh ? CTh.hemi[0] : '#8f9cff'), new THREE.Color(CTh ? CTh.hemi[1] : '#4a2c30'), campLit ? 1.45 : 1.15);
   root.add(hemi);
-  const amb = new THREE.AmbientLight(new THREE.Color('#5a5490'), campLit ? 0.42 : 0.3);
+  const amb = new THREE.AmbientLight(new THREE.Color(CTh ? CTh.ambient : '#5a5490'), campLit ? 0.42 : 0.3);
   root.add(amb);
   const sun = new THREE.DirectionalLight(new THREE.Color('#bcc8ff'), 1.7);
   sun.shadow.mapSize.set(2048, 2048);

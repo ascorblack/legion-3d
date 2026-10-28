@@ -74,7 +74,7 @@ describe('map puzzles (quest kind puzzle)', () => {
     const me = { login: 'murka', role: 'archer' }, base = () => 'удар';
     const c = cardOf(pz({}) as any, me, base)!;
     expect(c.title).toBe('Головоломка · Рунный камень');
-    expect(c.urge).toEqual({ kind: 'say', text: 'Напиши число' });
+    expect(c.urge).toEqual({ kind: 'info', text: 'Напиши число' });   // typed answer: `how` is an instruction, not a chat line (no «»)
     expect(c.note).toContain('ᚱ + ᚱ = 8');
     expect(cardOf(pz({ my: 'a:4' }) as any, me, base)!.urge).toEqual({ kind: 'ok', text: 'твой ответ: «4»' });
     expect(cardOf(pz({ st: 'show', showUntil: T }) as any, me, base)!.urge!.kind).toBe('info');
@@ -86,7 +86,8 @@ describe('map puzzles (quest kind puzzle)', () => {
     const s = adapt(pz({}), ctx);
     expect(s.kind).toBe('puzzle');
     expect(s.puzzle).toMatchObject({ kind: 'runes', st: 'answer', name: 'Рунный камень', line: 'ᚱ + ᚱ = 8' });
-    expect(s.cmds[0]).toMatchObject({ kind: 'say', text: 'Напиши число' });
+    expect(s.cmds[0]).toMatchObject({ kind: 'info', text: 'Напиши число' });
+    expect(adapt(pz({ kind: 'letter', how: 'Слово на «К»', letter: 'к', got: 3, goal: 10 }), ctx).puzzle).toMatchObject({ letter: 'К', got: 3, goal: 10 });
     expect(s.setKey).toContain('puzzle');
     const cups = adapt(pz({ kind: 'cups', bt: [['Кубок 1', '1'], ['Кубок 2', '2'], ['Кубок 3', '3']], signs: ['a', 'b', 'c'] }), ctx);
     expect(cups.cmds.map((c) => c.text)).toEqual(['1', '2', '3']);

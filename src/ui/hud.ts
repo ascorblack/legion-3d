@@ -2,7 +2,7 @@
 import type { Hero } from '../contracts';
 import { toX, toZ } from '../world/coords';
 import { type Ctx, h, extras } from './ctx';
-import { esc, hpInfo, xpInfo, plainCountdown, coinStyle } from './data';
+import { esc, hpInfo, xpInfo, plainCountdown, coinStyle, roleTitle } from './data';
 import { moneyCompact } from './money';
 import { statIcon } from './icons';
 import { promptView } from './prompt';
@@ -113,7 +113,7 @@ export class Hud {
     if (!H) return;
     this.lv.textContent = String(H.level);
     this.nm.textContent = H.name;
-    this.cls.textContent = H.roleName || '';
+    this.cls.textContent = roleTitle(H);
     const hp = hpInfo(H), xp = xpInfo(H);
     const dead = !!H.ghost;
     this.hpBar.classList.toggle('dead', dead);

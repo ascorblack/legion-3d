@@ -214,18 +214,25 @@ const anvil: BuildFn = (k, b, x0, x1, zf, h) => {
 };
 
 const forge: BuildFn = (k, b, x0, x1, zf, h) => {
-  const P = k.pal, bh = h * 0.55, w = x1 - x0;
+  // small forges (camp «Перепутье»: 4 m wide, low hit box) keep a wall tall enough for the door + sign above it
+  const P = k.pal, bh = Math.max(3.25, h * 0.55), w = x1 - x0;
+  h = Math.max(h, bh + 1.3);
   box(k, 'wood', P.woodL, x0, x1, 0, bh, zf - 5, zf, 1.0);
   box(k, 'stone', shade(P.stone, -0.25), x0 - 0.05, x1 + 0.05, -0.3, 0.4, zf - 5.05, zf + 0.045, 0.8);
   timberZ(k, x0 + 0.05, x1 - 0.05, 0.4, bh - 0.05, zf, 3, P.woodD);
   // big asymmetric roof (two tones), ridge along Z
   gableRoofZ(k, '#e3b07a', 'wood', P.woodL, x0, x1, zf - 5, zf, bh, h - bh, 0.45);
   // two arched openings: glowing forge mouth + door
-  doorZ(k, x0 + w * 0.3, 0, zf, 1.1, 1.9, { arch: true, open: true, glow: '#c84a1a' });
-  doorZ(k, toX(b.door.x), 0, zf, 0.9, 1.8, { arch: true, color: '#4a2c1e' });
-  k.lights.push(x0 + w * 0.3, 1.0, zf + 0.8);
+  // the forge mouth goes on the side of the door with more room, never overlapping it (narrow camp forge)
+  const dx = toX(b.door.x), leftRoom = dx - x0, rightRoom = x1 - dx;
+  let mx = x0 + w * 0.3;
+  if (Math.abs(mx - dx) < 1.25) mx = leftRoom >= rightRoom ? Math.max(x0 + 0.7, dx - 1.3) : Math.min(x1 - 0.7, dx + 1.3);
+  const mouth = Math.abs(mx - dx) >= 1.15;
+  if (mouth) doorZ(k, mx, 0, zf, 1.1, 1.9, { arch: true, open: true, glow: '#c84a1a' });
+  doorZ(k, dx, 0, zf, 0.9, 1.8, { arch: true, color: '#4a2c1e' });
+  if (mouth) k.lights.push(mx, 1.0, zf + 0.8);
   windowZ(k, (x0 + x1) / 2, bh + 0.6, zf + 0.0, 0.7, 0.8, true, { arch: true });
-  signZ(k, b.title, (x0 + x1) / 2, bh - 1.15, zf + 0.02, Math.min(3.0, w - 0.5));
+  signZ(k, b.title, (x0 + x1) / 2, Math.max(bh - 1.15, 2.35), zf + 0.02, Math.min(3.0, w - 0.5));   // always above the arched door (≈2.3 m)
   // «ХРУПКОЕ» stamp and paw emblem
   rbox(k, 'flat', '#c83a3a', x0 + w * 0.62, bh * 0.82, zf + 0.04, 0.7, 0.24, 0.02, 0, 0, -0.15);
   // chimney with glow

@@ -34,7 +34,7 @@ export type LowEntry = [login: string, name: string, hp: number];
 export type SkillEntry = [word: string, cd: number, kind?: string];
 
 /** Battle stages, quest.js battleHtml(): intro → party (we type) → hit (blows) → tele (enemy telegraph: type the word) → … → end. mech/trans: boss-only. */
-export type BattleStage = 'intro' | 'party' | 'hit' | 'tele' | 'mech' | 'trans' | 'end';
+export type BattleStage = 'intro' | 'party' | 'hit' | 'tele' | 'tele2' | 'mech' | 'trans' | 'end';
 
 /** Result of my last action, `b.mine.me` (quest.js lastLine()). */
 export interface MineResult {
@@ -44,8 +44,8 @@ export interface MineResult {
   /** enemy-turn result */
   hurt?: number; by?: string;
 }
-export interface BattleMine { k: 'tele' | 'party' | string; r?: number; ok?: boolean; me?: MineResult }
-export interface BattleTele { word: string; text?: string; ok?: boolean; got?: number; need?: number }
+export interface BattleMine { at?: number; tk?: unknown; k: 'tele' | 'party' | string; r?: number; ok?: boolean; me?: MineResult }
+export interface BattleTele { word: string; kind?: 'shield' | 'duck' | 'scatter' | string; text?: string; ok?: boolean; got?: number; need?: number }
 export interface BattleRes { how: 'win' | 'away' | 'lose' | 'retreat' | string; xp?: number; coins?: number }
 export interface Crowd { fr: Side[]; cam?: number; chaos?: boolean }
 /** Generated boss embedded in a battle (`b.gb`, quest.js qaBoss()). */
@@ -85,6 +85,7 @@ export interface QuestBattle {
   /** two-front gate battle («Врата башни») */
   two?: boolean;
   gb?: BattleBoss;
+  ambush?: boolean; more?: number; press?: number; drop?: number;
 }
 
 /* ------------------------------------------------------------------ generated boss (v.bg) */
@@ -119,25 +120,40 @@ export interface LairIsles {
   gone?: number[]; nb?: Record<string, number[]>; sil?: { n: number };
 }
 export interface QuestLair {
-  is?: LairIsles; hp?: number | null; st?: string; phase?: number; round?: number; acted?: boolean;
+  is?: LairIsles; hp?: number | null; st?: string; phase?: number; round?: number; acted?: boolean; rt?: number;
   tele?: BattleTele; spell?: { words: string[]; until?: number }; mass?: { words: string[] }; deal?: boolean | object;
 }
 export type TrapType = 'react' | 'gas' | 'ropes' | 'ceiling' | 'plates' | 'bait' | 'greed' | 'code' | 'share' | string;
 export interface TrapResMe { dmg?: number | 'dead'; gain?: number; xp?: number; it?: string[]; st?: string }
 export interface QuestTrap {
-  name: string; icon?: string; type?: TrapType; st?: 'intro' | 'act' | 'wait' | 'done' | string;
+  name?: string; icon?: string; type?: TrapType; st?: 'intro' | 'act' | 'wait' | 'done' | string;
   until?: number; word?: string; gas?: boolean; how?: string; intro?: string;
   acted?: boolean; actedN?: number; total?: number;
-  n?: number; len?: number; max?: number; best?: [guess: string, marks: string | string[], name: string][]; taker?: string | boolean;
+  n?: number; len?: number; max?: number; best?: [guess: string, marks: string | string[], name: string, old?: boolean | number][]; taker?: string | boolean;
   /** treasury instead of trap */
-  tre?: boolean;
-  res?: { me?: TrapResMe; text?: string; sv?: boolean; win?: boolean };
+  tre?: boolean | 0 | 1;
+  per?: number; rd2?: { door?: number; dbl?: number; ep?: number; ang?: { at: number; ev: number; fl: number }; ph?: string; vote?: unknown; left?: number; my?: string };
+  res?: { me?: TrapResMe; text?: string; sv?: boolean | 0 | 1; win?: boolean; okN?: number };
 }
 export interface QuestEvent {
+  id?: string | number; hw?: boolean | number; gob?: boolean | number;
+  how?: string; intro?: string; npc?: string;
+  bt?: [label: string, line: string, style?: string][];
+  vt?: { sweet: number; trick: number }; price?: number; bn?: number; hint?: string; pr?: { text: string; by: string };
+  payN?: number; mp?: number; picked?: string[]; ing?: Record<string, number>;
+  q?: string; qi?: number; qn?: number; solved?: [number, string, string][];
+  len?: number; sq?: [step: string, at: number][]; seq?: string[]; okN?: number; badN?: number; fight?: boolean; got?: number;
+  g?: number; gk?: 'shell' | 'coin' | 'hilo'; min?: number; cap?: number;
+  games?: [string, string][]; me?: [vote: string, bet: number, answer: string, result: string, delta: number, total: number, played: number];
+  round?: { n: number; pot: number; pay?: number; ans?: number };
+  hl?: { c1: string | number; hp: number; lp: number };
+  rv?: { gk?: string; text: string; cheat?: boolean; win?: number; lose?: number }; next?: string;
+  board?: { top: [string, number][] };
+
   look: 'traveler' | 'dice' | 'well' | 'priest' | string; name: string; icon?: string;
   st?: 'vote' | 'on' | 'done' | string; until?: number; my?: 'help' | 'rob' | string; used?: number; said?: { text: string };
   cmds?: [word: string, desc?: string][]; last?: { name: string; me?: number; him?: number; d?: number };
-  res?: { text: string }; votes?: { help: number; rob: number };
+  res?: { text: string; kind?: string }; votes?: { help?: number; rob?: number; yes?: number; no?: number };
   purse?: number; gm?: [me: number, him: number, r: 'win' | 'tie' | 'lose' | string, n: number][];
   thrown?: number; need?: number; filled?: boolean;
   pool?: number; prices?: { heal?: number; cleanse?: number; bless?: number; revive?: number };
@@ -178,8 +194,8 @@ export interface QuestPayload {
   /** party size */
   n?: number;
   /** entry roll: who rolled and the number (1 → surrounded on 3 sides, 2–9 → 2 sides, ≥10 → front only) */
-  roll?: { by: string; n: number };
-  party?: PartyState;
+  roll?: { by: string; n: number; tier?: number | string } | null;
+  party?: PartyState | null;
   /** false → the party is moving: joining = queue until the next stop */
   cm?: boolean;
   /** hw: the Halloween gather at the portal (site 28.10, «🎃 Сбор у портала», join word «портал») */
@@ -199,11 +215,43 @@ export interface QuestPayload {
   dgn?: QuestDungeon;
   loot?: QuestLoot;
   sh?: QuestShop;
-  pb?: { b: PlaceButton[] };
+  pb?: { k?: string[]; b: PlaceButton[] };
   /** map puzzle (site 28.10, quest/mappuzzles.js siteView; kind `puzzle`) */
   pz?: QuestPuzzle;
+  /** empty party (site 28.10, quest.js `v.nb`): the gather ended with nobody in the squad — «В отряд никто не присоединился :(»,
+   *  the squad goes back to town. The site shows only that (banner + tab) and nothing else of the view. */
+  nb?: boolean | 0 | 1;
+  /** the channel's Prologue boss name in cases (site 28.10, questlive `bn`; absent → «Закхуэль», quest.js BNZ) */
+  bn?: Partial<BossName>;
   [k: string]: unknown;
 }
+
+/* ------------------------------------------------------------------ empty party & the Prologue boss name (site 28.10) */
+
+/** Russian cases of the Prologue boss name: n(ominative) g(enitive) d(ative) a(ccusative) i(nstrumental) p(repositional). */
+export interface BossName { n: string; g: string; d: string; a: string; i: string; p: string }
+/** quest.js BNZ: the default Prologue boss (zakvielchannel). */
+export const BOSS_NAME_DEFAULT: Readonly<BossName> = Object.freeze({ n: 'Закхуэль', g: 'Закхуэля', d: 'Закхуэлю', a: 'Закхуэля', i: 'Закхуэлем', p: 'Закхуэле' });
+const BN_KEYS = ['n', 'g', 'd', 'a', 'i', 'p'] as const;
+const bnOk = (x: unknown): x is Partial<BossName> => !!x && typeof x === 'object' && typeof (x as any).n === 'string' && !!(x as any).n.trim();
+/**
+ * quest.js bn(): the boss name of the first view that has one (`views` newest first — the site takes NEW, then CUR), each case
+ * cleaned (no markup, ≤ 40 chars); a missing case falls back to the nominative, no name at all → «Закхуэль».
+ */
+export function bossName(...views: (({ bn?: unknown } & object) | null | undefined)[]): BossName {
+  let src: Partial<BossName> | null = null;
+  for (const v of views) { const b = v && (v as any).bn; if (bnOk(b)) { src = b; break; } }
+  if (!src) return { ...BOSS_NAME_DEFAULT };
+  const clean = (s: unknown) => (typeof s === 'string' ? s.replace(/[<>]/g, '').trim().slice(0, 40) : '');
+  const n = clean(src.n) || BOSS_NAME_DEFAULT.n;
+  const out = { n } as BossName;
+  for (const k of BN_KEYS) if (k !== 'n') out[k] = clean(src[k]) || n;
+  return out;
+}
+/** The empty-party screen (quest.js v.nb): the site's own words. */
+export const EMPTY_PARTY = { title: 'В отряд никто не присоединился :(', back: 'Отряд возвращается в город…', note: 'Стример объявит новый сбор — пиши «поход» в чат.' } as const;
+/** The gather ended with nobody: the view says so (`nb`) and the site shows nothing else of it. */
+export const emptyParty = (v: { on?: unknown; nb?: unknown } | null | undefined): boolean => !!(v && v.on && v.nb);
 
 /* ------------------------------------------------------------------ map puzzles (site 28.10, quest.js pzHtml) */
 
@@ -310,7 +358,7 @@ export function isQuestPayload(x: unknown): x is QuestPayload {
   if (x.b != null && !isBattle(x.b)) return false;
   if (x.bg != null && !isBossGen(x.bg)) return false;
   if (x.vote != null && !isVote(x.vote)) return false;
-  if (x.tr != null && !(isObj(x.tr) && isStr(x.tr.name))) return false;
+  if (x.tr != null && !(isObj(x.tr) && (x.tr.name == null || isStr(x.tr.name)) && isStr(x.tr.type))) return false;
   if (x.ev != null && !(isObj(x.ev) && isStr(x.ev.look) && isStr(x.ev.name))) return false;
   if (x.pz != null && !(isObj(x.pz) && isStr(x.pz.name) && isStr(x.pz.kind))) return false;
   if (x.loot != null && !(isObj(x.loot) && isStr(x.loot.name) && isNum(x.loot.until))) return false;
@@ -388,7 +436,7 @@ export const windowProgress = (from: number, until: number, dlS: number, now: nu
  * Own state is shown at once (it is already visible in chat), everything else with the stream delay.
  * Pure port of quest.js view(): merge "my" fields of the newest view into the delayed one.
  */
-export function mergeOwn(cur: QuestPayload, newest: QuestPayload): QuestPayload {
+export function mergeOwn(cur: QuestPayload, newest: QuestPayload, now = 0, adj = 0, history: QuestPayload[] = []): QuestPayload {
   if (!cur.on || !newest.on) return cur;
   const v: QuestPayload = { ...cur };
   const c = cur, n = newest;
@@ -397,7 +445,7 @@ export function mergeOwn(cur: QuestPayload, newest: QuestPayload): QuestPayload 
     if (n.b.round === c.b.round) { v.b.turn = n.b.turn; v.b.tg = n.b.tg; }
     if (c.b.tele && n.b.tele && c.b.tele.word === n.b.tele.word) v.b.tele = { ...c.b.tele, ok: n.b.tele.ok };
   }
-  if (c.tr && n.tr && c.tr.name === n.tr.name && !c.tr.res) v.tr = { ...c.tr, acted: n.tr.acted };
+  if (c.tr && n.tr && c.tr.name === n.tr.name && !c.tr.res) v.tr = { ...c.tr, acted: n.tr.acted, ...(c.tr.rd2 && n.tr.rd2 ? { rd2: { ...c.tr.rd2, left: n.tr.rd2.left, my: n.tr.rd2.my } } : {}) };
   if (c.bg && n.bg && c.bg.round === n.bg.round) v.bg = { ...c.bg, acted: n.bg.acted };
   if (c.lair?.is && n.lair?.is) {
     const is = { ...c.lair.is };
@@ -408,7 +456,20 @@ export function mergeOwn(cur: QuestPayload, newest: QuestPayload): QuestPayload 
   if (c.vote && n.vote && c.vote.id === n.vote.id) v.vote = { ...c.vote, my: n.vote.my };
   if (c.dgn?.vote && n.dgn?.vote && c.dgn.vote.id === n.dgn.vote.id) v.dgn = { ...c.dgn, vote: { ...c.dgn.vote, my: n.dgn.vote.my } };
   if (c.loot && n.loot && c.loot.name === n.loot.name) v.loot = { ...c.loot, my: n.loot.my };
-  if (c.ev && n.ev && c.ev.look === n.ev.look) v.ev = { ...c.ev, my: n.ev.my, used: n.ev.used, said: n.ev.said };
+  if (c.ev?.gob && n.ev?.gob && c.ev.id === n.ev.id && n.ev.me) {
+    const me = [...(c.ev.me || ['', 0, '', '', 0, 0, 0])] as NonNullable<QuestEvent['me']>;
+    me[0] = n.ev.me[0];
+    if (c.ev.g === n.ev.g) { me[1] = n.ev.me[1]; me[2] = n.ev.me[2]; }
+    v.ev = { ...c.ev, me };
+  } else if (c.ev?.hw) {
+    v.ev = { ...c.ev };
+    if (n.ev?.hw && c.ev.id === n.ev.id) v.ev.my = n.ev.my;
+    if (c.ev.look === 'skeldance' && c.ev.st === 'show') {
+      let best = c.ev.sq || [];
+      for (const q of [newest, ...history]) if (q.ev?.hw && q.ev.id === c.ev.id && (q.ev.sq?.length || 0) > best.length) best = q.ev.sq!;
+      v.ev.sq = best.filter((p, i) => i < (c.ev!.sq || []).length || (p[1] && p[1] + delayS(newest, adj) * 1000 <= now));
+    }
+  } else if (c.ev && n.ev && c.ev.look === n.ev.look) v.ev = { ...c.ev, my: n.ev.my, used: n.ev.used, said: n.ev.said };
   // 28.10 (map-puzzles): own answer at once, the result with the stream
   if (c.pz && n.pz && n.pz.id === c.pz.id && n.pz.st === c.pz.st) v.pz = { ...c.pz, my: n.pz.my };
   return v;
@@ -434,7 +495,7 @@ export class DelayBuffer {
     for (let i = 0; i < this.raw.length; i++) { const r = this.raw[i]; if ((r.v.at || r.rx) + delayS(r.v, adj) * 1000 <= now) pick = i; }
     if (pick >= 0) { this.cur = this.raw[pick].v; if (pick > 0) this.raw.splice(0, pick); }
     else if (!this.cur || !this.cur.on) this.cur = this.raw[0]?.v || this.newest;
-    return this.cur && this.newest ? mergeOwn(this.cur, this.newest) : this.cur;
+    return this.cur && this.newest ? mergeOwn(this.cur, this.newest, now, adj, this.raw.map(r => r.v)) : this.cur;
   }
   get size(): number { return this.raw.length; }
 }
@@ -568,4 +629,64 @@ export function arenaFoes(foes: readonly FoeSlot[], spacing = 1.6): { x: number;
     if (f.side === 'F') return { x: lane * spacing + col * 0.5, z: -d, face: Math.PI / 2 };
     return { x: d, z: lane * spacing, face: Math.PI };
   });
+}
+
+/** Display-only event instructions from quest.js hwEvHtml/gobHtml. Never invent or solve an answer. */
+export const DANCE_STEPS: Record<string, string> = { l: 'влево', r: 'вправо', j: 'прыг', c: 'хлоп' };
+export const EVENT_ST: Record<string, string> = { vote: 'чат решает', on: 'шатёр открыт', pay: 'сбор монет', ingr: 'пишите ингредиенты', brew: 'ведьма варит', riddle: 'загадка', pause: 'отгадали', show: 'смотри па', input: 'повтори цепочку', ask: 'сыграем?', bet: 'ставки', shuffle: 'перестановка стаканов', guess: 'ответы', reveal: 'итог игры', next: 'следующая игра', done: 'итог' };
+/** Cauldron ingredients (quest.js HW_ING, as INGR in quest/client/hollow-data.js): key → [icon, Russian name the site shows]. */
+export const HW_ING: Record<string, [string, string]> = { mushroom: ['🍄', 'мухомор'], eye: ['👁', 'глаз'], wing: ['🦇', 'крыло'], pumpkin: ['🎃', 'тыква'], tooth: ['🦷', 'зуб'], web: ['🕸', 'паутина'], bone: ['🦴', 'кость'], frog: ['🐸', 'лягушка'], candle: ['🕯', 'свеча'], herb: ['🌿', 'полынь'], tail: ['🐀', 'хвост'] };
+/** Ingredient key → its Russian name (unknown keys as they are). */
+export const ingName = (k: string): string => (HW_ING[k] ? HW_ING[k][1] : String(k));
+export interface EventInstruction { kind: 'say' | 'info' | 'ok'; text: string; note?: string }
+export function eventInstructions(E: QuestEvent, party: unknown): { status: string; text: string; cmds: EventInstruction[] } {
+  const st = E.st || 'on', cmds: EventInstruction[] = [];
+  const notes = [E.intro, E.q, E.said?.text];
+  const done = st === 'done' || !!E.res;
+  if (E.gob) {
+    const me = E.me || ['', 0, '', '', 0, 0, 0];
+    if (E.gk) notes.unshift(({ shell: 'Напёрстки', coin: 'Орёл или решка', hilo: 'Больше или меньше' })[E.gk]);
+    if (E.hl && st === 'guess' && E.gk === 'hilo') notes.push(`Карта ${E.hl.c1} · больше ×${E.hl.hp} · меньше ×${E.hl.lp} · равная — гоблину`);
+    if (E.round) notes.push(`Ставок ${E.round.n} · банк ${E.round.pot}${E.round.pay ? ` · выплата ×${E.round.pay}` : ''}`);
+    if (E.rv && (st === 'reveal' || st === 'next')) notes.push(E.rv.text + (E.rv.cheat ? ' · ловкость рук!' : ''));
+    if (me[1]) notes.push(`Твоя ставка ${me[1]}${me[2] ? ` · ответ ${me[2]}` : ''}`);
+    if (me[6]) notes.push(`Твой итог ${me[5]} · игр ${me[6]}`);
+    if (st === 'shuffle') cmds.push({ kind: 'info', text: 'Смотри на стрим — где шарик?' });
+    else if (!done && party !== 'in') cmds.push({ kind: 'info', text: 'Играет только отряд — можно смотреть' });
+    else if (st === 'bet') cmds.push(me[1] ? { kind: 'ok', text: `ставка принята: ${me[1]}` } : { kind: 'say', text: `ставка N`, note: `от ${E.min || 0} до ${E.cap || 0}` });
+    else if (st === 'guess' && !me[1]) cmds.push({ kind: 'info', text: 'Ты не ставил — смотришь' });
+    else if (st === 'ask' || st === 'guess') for (const b of E.bt || []) cmds.push({ kind: 'say', text: b[1], note: b[0] });
+  } else if (E.hw) {
+    if (E.look === 'trick' && E.vt) notes.push(`сладость ${E.vt.sweet} · гадость ${E.vt.trick}`);
+    if (E.look === 'fortune') notes.push(`Благословлено ${E.bn || 0} · цена ${E.price || 0}`, E.pr?.text, E.hint);
+    if (E.look === 'cauldron' && E.my?.split(',').includes('pot')) notes.push('Загадочное зелье в сумке · выпить зелье · сгорит на выходе из Изнанки');
+    if (E.look === 'cauldron') notes.push(st === 'pay' ? `Собрано ${E.pool || 0} из ${E.price || 2500} · твой взнос ${E.mp || 0}` : `В котле: ${(E.picked || []).length ? (E.picked || []).map(ingName).join(', ') : 'пусто'}`);
+    if (E.look === 'lostghost' && E.solved?.length) notes.push(E.solved.map(r => `${r[0]}. ${r[1]}: ${r[2]}`).join(' · '));
+    if (E.look === 'lostghost' && E.qn) notes.push(`Загадка ${E.qi || 1} из ${E.qn}`);
+    if (E.look === 'skeldance') {
+      if (st === 'show') notes.push((E.sq || []).map(([k]) => DANCE_STEPS[k] || '?').join(' · '));
+      if (st === 'input') notes.push(`Все ${E.len || 0} па одним сообщением через пробел. л — влево, п — вправо, в — прыг, х — хлоп. Верно ${E.okN || 0} · мимо ${E.badN || 0}`);
+      if (done) notes.push((E.seq || []).map(k => DANCE_STEPS[k] || '?').join(' '));
+    }
+    if (!done && party !== 'in' && party !== 'ghost') cmds.push({ kind: 'info', text: 'Участвует только отряд Изнанки' });
+    else if (st === 'show' || st === 'brew' || st === 'pause') cmds.push({ kind: 'info', text: E.how || EVENT_ST[st] });
+    else if (E.my && (E.look === 'trick' || E.look === 'skeldance' || (E.look === 'fortune' && E.my === 'done') || (E.look === 'lostghost' && E.my === 'ok'))) cmds.push({ kind: 'ok', text: E.my === 'bad' ? 'твоя цепочка — мимо; жди итог' : 'твой ответ принят' });
+    else if (!done) {
+      if (E.how) cmds.push({ kind: 'info', text: E.how });
+      if (E.look !== 'skeldance') for (const b of E.bt || []) cmds.push({ kind: 'say', text: b[1], note: b[0] });
+    }
+  } else {
+    if (E.look === 'traveler' && st === 'vote') cmds.push(E.my ? { kind: 'ok', text: `твой выбор: ${E.my === 'rob' ? 'обобрать' : 'помочь'}` } : { kind: 'say', text: 'помочь / обобрать' });
+    else for (const b of E.cmds || []) cmds.push({ kind: 'say', text: b[0], note: b[1] });
+    if (!cmds.length && !done) {
+      const fallback: Record<string, string> = { dice: 'ставка 10', well: 'монетка', priest: 'пожертвовать 10' };
+      if (fallback[E.look]) cmds.push({ kind: 'say', text: fallback[E.look] });
+    }
+  }
+  if (done) { cmds.length = 0; cmds.push({ kind: 'info', text: E.res?.text || 'итог' }); }
+  if (!cmds.length && E.gob && (st === 'reveal' || st === 'next')) cmds.push({ kind: 'info', text: E.rv?.text || (st === 'next' ? 'Гоблин выбирает следующую игру' : 'Итог игры') });
+  if (!cmds.length && E.how && !done) cmds.push({ kind: 'info', text: E.how });
+  const text = notes.filter(Boolean).join(' · ');
+  if (cmds[0] && text) cmds[0].note = [cmds[0].note, text].filter(Boolean).join(' · ');
+  return { status: EVENT_ST[st] || st, text, cmds };
 }

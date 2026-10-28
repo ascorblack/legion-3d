@@ -8,6 +8,7 @@
  * ?cs=0 (no coin purchases → «на стриме»)  ?ms=0 (no magic shop)  ?money=N  ?ghost=1  ?fail=1 (actions fail)
  * ?aim=<goodIndex>  aim at a good and open its card (?card=1) — for screenshots of the buy flow
  * ?tp=1  third person: your hero + a shoulder camera that collides with the room's camera colliders (like the game rig)
+ * ?models=1  shop goods from the game's item-model registry (src/avatar/items.ts, per-style goods) instead of the rooms' local models
  * ?yaw=a&pitch=p  initial view direction   ?at=x,z  start position   ?forge=up|broken|down|fail  run a fake enchant (anvil)
  * window.__rooms = { scene, room, renderer, stats(), open(i), goods() }
  */
@@ -24,6 +25,8 @@ import me from '../test/fixtures/me.json';
 import stockJson from '../test/fixtures/stock.json';
 import map from '../test/fixtures/fair-map.json';
 import { outlineFrame } from '../src/engine/outline';
+import { createRegistries } from '../src/core/registries';
+import { registerItemModels } from '../src/avatar/items';
 
 const q = new URLSearchParams(location.search);
 const roomId = q.get('room') || 'forge';
@@ -119,8 +122,10 @@ void (async () => {
 /* ---------------------------------------------------------------- build the room */
 const B = ((map as any).BUILDINGS as Building[]).find((b) => b.id === roomId) || { id: roomId, title: roomId, hit: [0, 0, 0, 0], door: { x: 0, y: 0 } } as Building;
 const player = { x: 0, z: 0, y: 0 };
+const REG = q.get('models') === '1' ? createRegistries() : null;
+if (REG) registerItemModels(REG.itemModels, () => q.get('style') || 'cats');
 const env: RoomEnv = {
-  building: B, styleId: 'cats', quality, store, actions, input, interact, scene, itemModels: null,
+  building: B, styleId: q.get('style') || 'cats', quality, store, actions, input, interact, scene, itemModels: REG ? REG.itemModels : null,
   toast, exit: () => toast('→ выход на улицу'), showSitePanel: (o) => { document.body.dataset.panel = o?.side || 'left'; }, hideSitePanel: () => { delete document.body.dataset.panel; },
   player: () => player,
 };

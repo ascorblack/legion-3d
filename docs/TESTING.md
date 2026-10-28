@@ -49,6 +49,22 @@ node scripts/shot.mjs dist-dev/world.html .local/shots/world.png --wait=6000
 In the dev build `window.__l3dGame` exposes `{engine, world, store, rig, player, site, ui, qhud, meAv, vm, labels}`
 for scripted checks (e.g. `__l3dGame.player.teleport(x, y)`, `__l3dGame.engine.stats()`).
 
+### Scripted offline checks (0.5.0)
+
+All on the dev build (`npm run build`, not `--prod`: they need the `__DEV__` hooks), `CHROMIUM=/usr/bin/google-chrome`:
+
+| script | checks | exit 0 = |
+|---|---|---|
+| `node dev/debug-check.mjs` | debug mode off by default (no F10, no panel), F10 / Esc open-close, test dimension enter → exit at the same point with no `go` sent, every expedition mock opens its 3D scene, auto-play, shop portal | `ALL OK` |
+| `node e2e/expboot.mjs [out]` | expedition-only boot on `dist-dev/expboot.html` (City tab locked): 3D expedition starts without the city, no `/api/city/*`, end card, «Вернуться в город» → normal city boot | all assertions pass |
+| `node dev/travel-shots.mjs [out]` | «Путешествие» (`L`): towns page, channel list / search (fake `/api/find`, debounce), camp names by style; screenshots | all assertions pass |
+| `node dev/debug-shots.mjs`, `node dev/camp-shots.mjs`, `node dev/hw-shots.mjs` | screenshots only (debug panel, camps per style, Halloween) | — |
+| `dist-dev/goods.html?style=cherts` | gallery of every consumable model per style (`window.__goods.tris`) | visual |
+| `dist-dev/mine.html?econ=1` | stone signs with the economy estimates; `?dig=20` for the AFK signals (tab title, chime, guard) | visual |
+
+Mine sprint checks (AFK signals, sign / queue / HUD cards, the city chip) are screenshot scripts kept out of the repo
+(`.local/`, git-ignored); the logic behind them is unit-tested (`test/mine-*.test.ts`).
+
 ## 3. Live end-to-end (real site)
 
 Needs a Netscape-format `cookies.txt` exported from a browser where you are logged in to the site (the `lsid`

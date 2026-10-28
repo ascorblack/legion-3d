@@ -6,8 +6,11 @@
  *
  * create(ctx): closes the site's own mine if open (one presence per tab), POST /api/mine/enter, builds the cave,
  * registers interactables (front stones, lift, buyer, supplier, board, way down), mounts the HUD and returns the
- * RoomScene (free/groundAt over the cleared cells + entrance area). Keys: E dig / use, L journal,
- * Esc closes a card / the journal. Mine chat lines become bubbles over the miners and lines in the «⛏ Шахта» tab of the
+ * RoomScene (free/groundAt over the cleared cells + entrance area). Keys: E dig / use, Shift+E queue the stone after the
+ * current one (only with the game's fx.q flag; same /api/mineDig {…, q} as the site's Shift+click), L journal,
+ * Esc closes a card / the journal. AFK comfort (afk.ts): tab title / favicon / optional notification, a soft chime on
+ * the own finished stone (also in a hidden tab), the reach ring and the first-step guard after a long idle, fewer
+ * frames while visible without focus, and the window event 'l3d:mine-status' (state, own burst, dispose). Mine chat lines become bubbles over the miners and lines in the «⛏ Шахта» tab of the
  * bottom-left chat dock (src/ui/chat.ts attachMineChat; posts /api/mine/chat/say — only when the player types and sends). Throws (→ room manager falls back to the site's
  * 2D mine) when the hero has no access to this mine or the game refuses the entry. See docs/MINE.md.
  */
@@ -19,8 +22,16 @@ import { MineClient, type MineApi, type MineBus } from './net';
 import { MineScene, footM } from './scene';
 import { MineHud } from './hud';
 import { N_CELLS, REACH, mx, mz, px, py, spawnPt, frontOfObj, cellXY, type Pt } from './geo';
-import { TX, blockTitle, gotText } from './state';
+import { TX, blockTitle, gotText, type Burst } from './state';
+import {
+  TabSignals, domTabEnv, ReachRing, StepGuard, RenderThrottle, registerMineAfkSettings, afkOn, mineStatus, alertOf, chimeEvents,
+  myStone, reachK, REACH_LIMIT, REACH_WARN, EDGE_TEXT, GUARD_TEXT, MINE_STATUS_EVENT, ECO_FRAME_MS, type TabEnv,
+} from './afk';
 import { pickaxeGeo } from './art';
+import { estimateStone, promptEcon } from './econ';
+import { mineSwitch, PREF_ECON } from './prefs';
+import { layerBanner } from './layers';
+import { walkPlan, AutoWalk, LeaveGuard, ConfirmTwice, type WalkCtl } from './walk';
 import { attachMineChat } from '../../ui/chat';
 import type { Avatar } from '../../contracts/modules';
 import type { RoomCombat, RoomFighter } from '../../combat/room';
@@ -39,14 +50,27 @@ export interface MineRoomOpts {
   c?: string;
   /** Where the HUD goes (default ctx.engine.host). */
   hudHost?: HTMLElement;
+  /** Tab title / favicon / notification sink (tests; default: the document). */
+  tabEnv?: TabEnv;
 }
 
 /** Register the mine room kind. Returns the unregister function. */
 export function registerMine(rooms: Registry<RoomDef>): Unsub {
-  return rooms.register('mine3d', { title: 'Шахта', create: (ctx) => createMineRoom(ctx) });
+  const off = rooms.register('mine3d', { title: 'Шахта', create: (ctx) => createMineRoom(ctx) });
+  const offSet = registerMineAfkSettings();   // settings group «Шахта» (tab title, chime, notifications, guard, eco)
+  return () => { off(); offSet(); };
 }
 
 const NPC_FAR = 2.5 * 128;   // px: the buyer / supplier card closes when you walk this far away (site NPC_FAR)
+
+const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** The popup / notification text of an own finished stone (the site's words). */
+function burstLoot(b: Burst, cellR: string | null): string {
+  const g = b.got;
+  return g && g.loot ? 'Сундук: ' + Object.entries(g.loot).filter(([, v]) => v > 0).map(([k, v]) => gotText(v, k)).join(', ')
+    : cellR && g && g.q > 0 ? gotText(g.q, cellR) : TX.broke;
+}
 
 export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Promise<RoomScene> {
   const W = window as any;
@@ -63,6 +87,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     hero: () => store.hero as any, equip: (uid) => ctx.actions.equip(uid), hidden: () => document.hidden,
   });
   const M = client.model;
+  const burstText = (b: Burst) => { const cell = M.F && M.F.cells[b.i]; return burstLoot(b, cell ? cell.r : null); };
   const spawn = spawnPt(login);
   let entryErr = '';
   const offErr = client.on((e) => { if (e.type === 'error') entryErr = e.text; });
@@ -72,7 +97,8 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
 
   const style = (ctx.player.app && ctx.player.app.styleId) || 'cats';
   const scene = new MineScene({ quality: ctx.quality(), style, login });
-  scene.setView(M);
+  scene.setView(M, client.queue());
+  let floorN: number | null = M.st ? M.st.n : null;
 
   // scene fog / background: applied on the first frame (after the room host saved the city's), restored on dispose
   let prevFog: THREE.Scene['fog'] = null, prevBg: THREE.Scene['background'] = null, fogSet = false;
@@ -88,7 +114,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   let modalOn = false;
   const hud = new MineHud(host, client, {
     stop: () => { void client.stop().then(() => hud.render()); },
-    toBuyer: () => hud.open('buy'),
+    toBuyer: () => goBuyer(),
     exit: () => ctx.exit(),
     // every card / the journal / the chat field is a modal on the input's stack: gameplay off, no pointer grab,
     // no «click to return» hint, Esc closes it (src/core/modal.ts)
@@ -117,7 +143,16 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     me: () => login,
   }) : () => { /* no mine chat */ };
   const offEv = client.on((e) => {
-    if (e.type === 'state') { scene.setView(M); if (e.newFloor) { fogDark = null; refreshBoxes(); } hud.render(); }
+    if (e.type === 'state') {
+      scene.setView(M, client.queue());
+      if (e.newFloor) {
+        fogDark = null; refreshBoxes();
+        // a new depth layer (every 5 floors, site mine-biome.js): one banner line
+        const n = M.st ? M.st.n : null, ban = n != null ? layerBanner(floorN, n) : ''; floorN = n;
+        if (ban) hud.tip(ban);
+      }
+      hud.render();
+    }
     else if (e.type === 'presence' || e.type === 'here' || e.type === 'busy' || e.type === 'other') hud.render();
     else if (e.type === 'tip') hud.tip(e.text, e.bad);
     else if (e.type === 'chat') { for (const l of e.lines) { scene.say(String(l.l).toLowerCase(), l.t); } hud.chatIn(e.lines); }
@@ -128,8 +163,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
         { const c = cellXY(b.i); window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id: 'mine.break', x: mx(c.cx), y: 0.6, z: mz(c.cy) } })); }
         if (!b.mine) continue;
         const p = cellXY(b.i), cell = M.F && M.F.cells[b.i], g = b.got;
-        const text = g && g.loot ? 'Сундук: ' + Object.entries(g.loot).filter(([, v]) => v > 0).map(([k, v]) => gotText(v, k)).join(', ')
-          : cell && cell.r && g && g.q > 0 ? gotText(g.q, cell.r) : TX.broke;
+        const text = burstText(b);
         hud.popup(text, mx(p.cx), scene.stoneHeight(b.i) + 0.4, mz(p.cy));
         if (cell && cell.r && g && !(g.q > 0) && g.any) hud.tip(`${TX.done}. ${cell.r ? 'Руда' : ''} досталась другим копавшим (по вкладу) — тебе монеты за работу.`);
         else hud.tip(TX.done);
@@ -137,29 +171,130 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     }
   });
 
+  /* ---------------------------------------------------------------- AFK comfort (afk.ts: #27, #25, #5) */
+  // nothing here talks to the game: it reads the model and dispatches window events only
+  const core0 = ctx as any;
+  const afk = { tab: afkOn('tab'), notify: afkOn('notify'), guard: afkOn('guard'), eco: afkOn('eco') };
+  const onAfkSet = (e: Event) => {
+    const k = String(((e as CustomEvent).detail || {}).key || '');
+    if (!k.startsWith('l3d.mine.')) return;
+    afk.tab = afkOn('tab'); afk.notify = afkOn('notify'); afk.guard = afkOn('guard'); afk.eco = afkOn('eco');
+    refreshTab();
+  };
+  window.addEventListener('l3d:settings', onAfkSet);
+  const tab = new TabSignals(o.tabEnv || domTabEnv());
+  const refreshTab = () => tab.update(M, Date.now(), afk.tab);
+  const emitStatus = (inMine: boolean) => {
+    try { window.dispatchEvent(new CustomEvent(MINE_STATUS_EVENT, { detail: mineStatus(c!, M, Date.now(), inMine) })); } catch { /* */ }
+  };
+  const sfx = (d: object) => window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: d }));
+  const capped = () => !!M.me && +M.me.cap > 0 && +M.me.day >= +M.me.cap;
+  let capPrev = capped();
+  const offAfkEv = client.on((e) => {
+    if (e.type === 'state') {
+      refreshTab(); emitStatus(true);
+      const cp = capped(); if (cp && !capPrev) for (const d of chimeEvents('mine.cap')) sfx(d);
+      capPrev = cp;
+    } else if (e.type === 'burst') {
+      let own = false;
+      for (const b of e.bursts) {
+        if (!b.mine) continue;
+        own = true;
+        for (const d of chimeEvents(alertOf(b, M))) sfx(d);
+        tab.finished(burstText(b), afk.notify);
+      }
+      if (own) { refreshTab(); emitStatus(true); }
+    }
+  });
+  // reach ring (one draw call, on the room root) and the first-step guard after a long idle
+  const ring = new ReachRing(); scene.root.add(ring.mesh);
+  const guard = new StepGuard(performance.now());
+  let edgeWarned = false, ringI = -1, ringX = 0, ringZ = 0;
+  const isField = (t: EventTarget | null) => { const el = t as HTMLElement | null; return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable); };
+  const onGuardKey = (e: KeyboardEvent) => {
+    const now = performance.now();
+    throttle.wake();
+    if (e.type === 'keyup') { guard.keyUp(e.code, now); return; }
+    if (isField(e.target) || e.ctrlKey || e.metaKey || e.altKey) { guard.activity(now); return; }
+    const digging = afk.guard && ctx.input.gameplay && !modalOn && myStone(M) >= 0;
+    const r = guard.keyDown(e.code, e.repeat, now, digging);
+    if (r === 'pass') return;
+    // swallowed before the game input (window listener) sees it: the hero does not move
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (r === 'warn') hud.tip(GUARD_TEXT, true);
+  };
+  document.addEventListener('keydown', onGuardKey, true);
+  document.addEventListener('keyup', onGuardKey, true);
+  const onActivity = () => { guard.activity(performance.now()); throttle.wake(); };
+  const ACT = ['pointerdown', 'mousemove', 'wheel', 'focus'] as const;
+  for (const a of ACT) window.addEventListener(a, onActivity, { passive: true, capture: true });
+  // fewer frames while the window is visible but without focus (second monitor AFK); focus / input → full rate
+  const throttle = new RenderThrottle({
+    pause: (on) => ctx.engine.pause(on),
+    hidden: () => document.hidden, focused: () => document.hasFocus(),
+    blocked: () => { const s = core0.state; return !!s && (!!s.classic || (!!s.overlay && !s.overlayOver3d)); },
+  });
+  let afkTick = 0;
+  const afkTimer = window.setInterval(() => {
+    throttle.tick(performance.now(), afk.eco);
+    // the title / favicon also move while the tab is hidden (no frames then)
+    if (++afkTick % 4 === 0) refreshTab();
+  }, ECO_FRAME_MS);
+  const offAfk = () => {
+    clearInterval(afkTimer);
+    window.removeEventListener('l3d:settings', onAfkSet);
+    document.removeEventListener('keydown', onGuardKey, true);
+    document.removeEventListener('keyup', onGuardKey, true);
+    for (const a of ACT) window.removeEventListener(a, onActivity, { capture: true });
+    offAfkEv(); throttle.dispose(); ring.dispose(); tab.dispose();
+  };
+  refreshTab(); emitStatus(true);
+
   /* ---------------------------------------------------------------- interactables */
   const unsubs: Unsub[] = [];
   const boxes: THREE.Box3[] = [];
   const feetPx = (): Pt => ({ x: px(ctx.player.x), y: py(ctx.player.z) });
   const refreshBoxes = () => { for (let i = 0; i < N_CELLS; i++) scene.stoneBox(i, boxes[i]); };
+  // the prompt line of the aimed stone (#8): title + the econ estimate (econ.ts), re-estimated at most every 2 s or when the
+  // view / own stone / queue changes — the getter is read every frame, so the string is cached (no per-frame work)
+  const lab = { i: -1, at: 0, snap: -1, my: -2, raw: null as number[] | null, text: '' };
+  const stoneLabel = (i: number): string => {
+    const cell = M.F && M.F.cells[i]; if (!cell || !M.st) return 'Камень';
+    const now = Date.now(), raw = client.rawQueue();   // the queue array is replaced on every change: identity is enough
+    if (lab.i === i && lab.snap === M.st.at && lab.my === M.myI && lab.raw === raw && now - lab.at < 2000) return lab.text;
+    const on = mineSwitch(PREF_ECON), qList = client.queue(), place = qList.indexOf(i);
+    const est = on ? promptEcon(estimateStone(M.st, cell, now, M.myI)) : '';
+    const head = M.myI === i ? `${TX.doing}: ${blockTitle(cell)}` : place >= 0 ? `В очереди №${place + 1}: ${blockTitle(cell)}` : `Копать: ${blockTitle(cell)}`;
+    const hint = client.queueOn && M.myI >= 0 && M.myI !== i && place < 0 ? ' · Shift+E — в очередь' : '';
+    lab.i = i; lab.at = now; lab.snap = M.st.at; lab.my = M.myI; lab.raw = raw;
+    lab.text = head + (est ? ` · ${est}` : '') + hint;
+    return lab.text;
+  };
+  // Shift held with E (site: Shift+click / long press = «в очередь»): read from the key event itself, before the game input
+  let shiftE = false;
+  const onShiftE = (e: KeyboardEvent) => { if (e.code === 'KeyE') shiftE = e.shiftKey; };
+  document.addEventListener('keydown', onShiftE, true);
   for (let i = 0; i < N_CELLS; i++) {
     boxes.push(scene.stoneBox(i));
     const it: Interactable = {
       id: 'mine:stone:' + i,
       icon: '⛏',
-      get label() {
-        const cell = M.F && M.F.cells[i]; if (!cell) return 'Камень';
-        if (M.myI === i) return `${TX.doing}: ${blockTitle(cell)}`;
-        return `Копать: ${blockTitle(cell)}`;
-      },
+      get label() { return stoneLabel(i); },
       hit: boxes[i], reach: 3.4,
       enabled: () => !M.dug[i] && M.isFront(i) && !M.dark && !modalOn,
-      use: () => { void digAt(i); },
+      use: () => { const q = shiftE; shiftE = false; void (q ? queueAt(i) : digAt(i)); },
       // the scene outlines the aimed stone's own shape (scene.update → outlineStone), not the hit box
       highlight: () => { /* drawn by the scene */ },
     } as Interactable;
     unsubs.push(ctx.interact.add(it));
   }
+  /** Shift+E: queue stone i after the current one (only with the site's fx.q and while digging), else a normal dig. */
+  const queueAt = async (i: number) => {
+    const cc = cellXY(i);
+    const done = await client.enqueue(i, feetPx(), { x: cc.cx, y: cc.cy });
+    if (!done) await digAt(i);
+    else { scene.setView(M, client.queue()); hud.render(); }
+  };
   const digAt = async (i: number) => {
     const f = feetPx(), cc = cellXY(i);
     if (MineClient.distTo(i, f) > REACH) { hud.tip('Подойди к камню вплотную — встань на расчищенную клетку рядом', true); return; }
@@ -177,6 +312,22 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     hud.open(kind);
   };
   let npcAt: Pt | null = null, npcOn = false;
+  /* «Скупщик» in the HUD = the site's «К скупщику» (mine.js goNpc('buy')): the window opens at once, the hero puts the
+     pickaxe down (leaveRock → mineStop, as the site) and walks to the counter with the normal movement (controller.walkTo,
+     mine/go as usual). Selling stays a button in the window. While digging the first press only warns (AFK safety). */
+  const walk = new AutoWalk();
+  const buyConfirm = new ConfirmTwice(5000);
+  const ctlOf = (): (WalkCtl & { stop?(): void }) | null => { const c = core0.controller && core0.controller(); return c && typeof c.walkTo === 'function' ? c : null; };
+  const goBuyer = () => {
+    if (!buyConfirm.press(M.myI >= 0 && !M.dug[M.myI], performance.now())) {
+      hud.tip('Герой отложит кирку и пойдёт к скупщику — нажми «Скупщик» ещё раз', true);
+      return;
+    }
+    const to = frontOfObj('buyer', login), plan = walkPlan(M.dug, feetPx(), to);
+    openNpc('buy');
+    const f0 = feetPx();
+    if (plan && plan.length && Math.hypot(f0.x - to.x, f0.y - to.y) > 40 && ctlOf()) walk.startPx(plan);
+  };
   // the lift and the board stand right next to the spawn: aim only (E at the spawn must not leave the mine)
   obj('lift', scene.objBoxes.lift, () => 'В город — подъёмник', () => ctx.exit(), 3.2, false);
   obj('buyer', scene.objBoxes.buyer, () => `${TX.seller} — сдать руду`, () => openNpc('buy'));
@@ -206,6 +357,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
 
   /* ---------------------------------------------------------------- per frame */
   let lastP: Pt | null = null, stillT = 0, sentStill = false;
+  const leave = new LeaveGuard();
   const _proj = new THREE.Vector3();
   const project = (x: number, y: number, z: number): [number, number] | null => {
     _proj.set(x, y, z).project(ctx.camera); if (_proj.z > 1) return null;
@@ -214,7 +366,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   };
   let hudT = 0;
   const feet3 = new THREE.Vector3();
-  const offFrame = ctx.onFrame((dt) => {
+  const offFrame = ctx.onFrame((dt, t) => {
     const f = feetPx();
     feet3.set(ctx.player.x, ctx.player.y, ctx.player.z);
     // position → game (throttled; final point once standing still)
@@ -222,7 +374,21 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     if (moved) { stillT = 0; sentStill = false; client.moveTo(f.x, f.y); } else { stillT += dt; if (stillT > 0.25 && !sentStill) { sentStill = true; client.moveTo(f.x, f.y, true); } }
     lastP = f;
     // walked away from the own stone → the hero puts the pickaxe down (site leaveRock; the game also stops by go)
-    if (M.myI >= 0 && !M.dug[M.myI] && MineClient.distTo(M.myI, f) > REACH + 30) client.leaveRock();
+    // (only after the hero stood at it: a stone given by the queue or dug from the city does not stop by itself — the site
+    // walks the hero there instead; here the player walks or just lets him work)
+    if (leave.check(M.myI, M.myI >= 0 && !!M.dug[M.myI], M.myI >= 0 ? MineClient.distTo(M.myI, f) : 0)) client.leaveRock();
+    // auto-walk to the buyer (HUD button): own movement keys cancel it
+    if (walk.active) { const c = ctlOf(); if (c) walk.frame(c, ctx.player.x, ctx.player.z, dt); else walk.cancel(); }
+    // reach ring: gold → red towards the limit, «Ещё шаг…» once per approach to the edge
+    {
+      const my = myStone(M), d = my >= 0 ? MineClient.distTo(my, f) : 0, k = reachK(d);
+      const on = afk.guard && my >= 0 && d <= REACH_LIMIT;
+      if (on && ringI !== my) { const cc = cellXY(my); ringI = my; ringX = mx(cc.cx); ringZ = mz(cc.cy); }   // once per stone
+      if (on) ring.update(true, ringX, ringZ, k, t, !moved || REDUCED); else ring.update(false, 0, 0, 0, t, true);
+      if (on && moved && k >= REACH_WARN) { if (!edgeWarned) { edgeWarned = true; hud.tip(EDGE_TEXT, true); } }
+      else if (k < REACH_WARN - 0.12) edgeWarned = false;
+    }
+    throttle.frame();
     // NPC card closes when walking away (site npcFar)
     if ((hud.card === 'buy' || hud.card === 'lamp') && npcAt) {
       const d = Math.hypot(f.x - npcAt.x, f.y - npcAt.y);
@@ -232,7 +398,10 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     digNow = M.myI >= 0 && !M.dug[M.myI] && MineClient.distTo(M.myI, f) <= REACH + 30 && !moved;
     const fp = ctx.rig.mode === 'fp';
     fpPick.visible = digNow && fp;
-    if (core.vm && typeof core.vm.setVisible === 'function') { const hide = digNow && fp; if (hide !== vmHidden) { vmHidden = hide; core.vm.setVisible(!hide); } }
+    // the own weapon / shield step aside while the pickaxe is in the paws: through the shared state (core decides the
+    // view-model each frame — a one-off setVisible here was undone by the next menu / overlay / camera change)
+    if (core.state) core.state.toolInHand = digNow;
+    else if (core.vm && typeof core.vm.setVisible === 'function') { const hide = digNow && fp; if (hide !== vmHidden) { vmHidden = hide; core.vm.setVisible(!hide); } }
     if (digNow) {
       // face the stone while digging (TP shows the hero; FP looks where the camera looks)
       if (!fp && core.controller) { const c = cellXY(M.myI), ctl = core.controller(); if (ctl && ctl.setFace) ctl.setFace(Math.atan2(-(mx(c.cx) - ctx.player.x), -(mz(c.cy) - ctx.player.z))); }
@@ -290,8 +459,10 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   };
   let sweepT = 0;
 
-  const roomScene: RoomScene & { combat: RoomCombat } = {
+  const roomScene: RoomScene & { combat: RoomCombat; afk: object } = {
     combat,
+    // dev / screenshot handles (not in the contract)
+    afk: { guard, throttle, tab, ring, walk },
     root: scene.root,
     free: (x, z) => scene.free(M.dug, x, z),
     groundAt: () => 0,
@@ -308,11 +479,13 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       if ((sweepT += dt) > 5) { sweepT = 0; for (const av of miners.keys()) if (!av.root.parent) miners.delete(av); }
     },
     dispose() {
+      emitStatus(false); offAfk();
       afterFns.length = 0; miners.clear();
       offFrame(); offEv(); offChatTab(); offKey(); for (const u of unsubs) u();
+      document.removeEventListener('keydown', onShiftE, true); walk.cancel();
       client.close(); hud.dispose();
       if (vmHidden && core.vm) core.vm.setVisible(true);
-      fpPick.removeFromParent(); tpPick.removeFromParent();
+      fpPick.removeFromParent(); tpPick.removeFromParent(); if (core.state) core.state.toolInHand = false;
       for (const m of pickMats) m.dispose(); (paw.material as THREE.Material).dispose(); paw.geometry.dispose();
       scene.dispose();
       if (fogSet) { ctx.scene.fog = prevFog; ctx.scene.background = prevBg; }

@@ -10,6 +10,7 @@
  * wanted); ping every 60 s while visible; go once per walk (we: throttled ≥ GO_MS while walking, last point on stop);
  * dig / stop / sell / buy / lamp / claim / pick / oreBag only on the player's explicit action; leave on exit.
  */
+import { dayLimit } from './state';
 import { MineModel, TX, blockTitle, mmss, type MinePayload, type MineMe, type Burst, type ChatLine, type LookRec } from './state';
 import { REACH, cellXY, type Pt } from './geo';
 
@@ -72,6 +73,8 @@ export class MineClient {
   supSay: { t: string; at: number } | null = null;
   lampBought = 0;
   claimed = 0;
+  /** Own stone queue as we last sent it (site S.qq); the game's me.qq wins when it has one (see queue()). */
+  qq: number[] = [];
   busyOp = false;
   chat: { on: boolean; c: number; lines: ChatLine[] } = { on: false, c: 0, lines: [] };
   private o: MineClientOpts;
@@ -161,6 +164,7 @@ export class MineClient {
       this.full = true; void this.poll(true).finally(() => { this.full = false; });
     }
     if (M.needStop) { M.needStop = false; void this.o.api('/api/mineStop', { c: this.c, sid: this.sid }); }
+    if (res.newFloor) this.qq = [];   // site take(): new floor → S.qq = []
     if (res.changed) this.emit({ type: 'state', newFloor: res.newFloor });
     else if (r.me) this.emit({ type: 'state', newFloor: false });
     if (res.bursts.length) this.emit({ type: 'burst', bursts: res.bursts });
@@ -236,7 +240,7 @@ export class MineClient {
     if (M.dark) return TX.dark;
     if (cell.t === 'wall') return TX.wall;
     if (!M.isFront(i)) return TX.far;
-    const me = M.me; if (me && me.cap > 0 && me.day >= me.cap) return `На сегодня хватит: ${mmss(me.cap)} работы. Новые сутки — в 05:00`;
+    const me = M.me; if (me) { const lim = dayLimit(me, Date.now()); if (lim.kind === 'full') return lim.text; }
     if (this.other) return 'Шахта открыта в другой вкладке — копать можно только в одной';
     return null;
   }
@@ -251,7 +255,7 @@ export class MineClient {
     if (MineClient.distTo(i, at) > REACH) { this.tip('Подойди к камню вплотную', true); return false; }
     const M = this.model, cell = M.F!.cells[i];
     if (M.myI === i) { this.tip(`${TX.doing}: ${blockTitle(cell)}`); return true; }
-    M.want = { i, at: this.now() }; M.left = null;
+    M.want = { i, at: this.now() }; M.left = null; this.clearQueue();   // site clickRock: a plain dig starts over (S.qq = [])
     this.pos = { x: at.x, y: at.y }; this.flushGo();
     const r = await this.o.api('/api/mineDig', { i, c: this.c, sid: this.sid, x: Math.round(at.x), y: Math.round(at.y), k: 1, vh: this.hidden() ? 1 : 0, ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
     if (this.closed) return false;
@@ -265,11 +269,41 @@ export class MineClient {
     this.emit({ type: 'state', newFloor: false });
     return true;
   }
+  /* ---------------------------------------------------------------- stone queue (site 25.10, testers: me.fx.q) */
+  /** The queue feature is on for this hero (site: S.me.fx.q). */
+  get queueOn(): boolean { return this.model.fx('q'); }
+  /** Raw queue as the site shows it: (S.me && S.me.qq) || S.qq. */
+  rawQueue(): number[] { const me = this.model.me; return (me && me.qq) || this.qq; }
+  /** Queued stones still worth showing (not dug, not the current one), in order. */
+  queue(): number[] { const M = this.model; return this.rawQueue().filter((i) => !M.dug[i] && i !== M.myI); }
+  /** Forget the queue locally (the game forgets it on stop / a plain dig / a new floor by itself). */
+  clearQueue(): void { this.qq = []; const me = this.model.me; if (me && me.qq && me.qq.length) this.model.me = { ...me, qq: [] }; }
+  /**
+   * Site queueRock (Shift+click, testers): while digging, put stone i after the current one (at most 2). Same request as
+   * mine.js: POST /api/mineDig {i: <current stone>, c, sid, x, y, q: [...queue, i].slice(-2), k: 1, vh, pt} — x, y = where
+   * the hero stands (site: the centre of the dig spot), pt = the aimed point on stone i. Only on the player's key press.
+   * Returns false when the queue does not apply (feature off / not digging) — the caller digs as usual then.
+   */
+  async enqueue(i: number, at: Pt, pt?: Pt): Promise<boolean> {
+    const M = this.model;
+    if (!this.queueOn || M.myI < 0) return false;
+    const why = this.digBlock(i); if (why) { this.tip(why, true); return true; }
+    if (i === M.myI) return true;
+    const cur = this.rawQueue().filter((x) => x !== i), qq = [...cur, i].slice(-2);
+    const r = await this.o.api('/api/mineDig', { i: M.myI, c: this.c, sid: this.sid, x: Math.round(at.x), y: Math.round(at.y), q: qq, k: 1, vh: this.hidden() ? 1 : 0, ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
+    if (this.closed) return true;
+    if (!r || !r.ok) { if (r && r.other) this.setOther(true); this.tip((r && r.error) || 'Не получилось', true); return true; }
+    this.qq = qq; if (M.me) M.me = { ...M.me, qq };
+    this.tip(`В очереди камней: ${qq.length} — герой возьмёт их сам, когда докопает этот`);
+    this.emit({ type: 'state', newFloor: false });
+    return true;
+  }
+
   /** «Перестать копать»: POST /api/mineStop {c, sid}. */
   async stop(): Promise<boolean> {
     const M = this.model; if (M.myI < 0) return true;
     const i = M.myI;
-    M.left = { i, at: this.now() }; M.want = { i: -1, at: this.now() };
+    M.left = { i, at: this.now() }; M.want = { i: -1, at: this.now() }; this.clearQueue();   // site «Стоп»: S.qq = []
     const r = await this.o.api('/api/mineStop', { c: this.c, sid: this.sid });
     if (r && r.ok) { M.myI = -1; this.tip(TX.stopTip); this.emit({ type: 'state', newFloor: false }); return true; }
     M.want = null; if (r && r.other) this.setOther(true); this.tip((r && r.error) || 'Не получилось', true); return false;
@@ -277,7 +311,7 @@ export class MineClient {
   /** The hero walked away from his stone (site leaveRock): stop digging, tell the game once. */
   leaveRock(): void {
     const M = this.model; if (M.myI < 0) return;
-    M.left = { i: M.myI, at: this.now() }; M.want = { i: -1, at: this.now() }; M.myI = -1;
+    M.left = { i: M.myI, at: this.now() }; M.want = { i: -1, at: this.now() }; M.myI = -1; this.clearQueue();   // site leaveRock: S.qq = []
     void this.o.api('/api/mineStop', { c: this.c, sid: this.sid });
     this.tip('Герой отошёл от камня и отложил кирку');
     this.emit({ type: 'state', newFloor: false });

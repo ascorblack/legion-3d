@@ -92,3 +92,105 @@ export function campScene(TL: any): CampScene | null {
     spawn: Array.isArray(TL.spawn) ? [+TL.spawn[0], +TL.spawn[1]] : [TL.W / 2, (TL.AREA.y0 + TL.AREA.y1) / 2],
   };
 }
+
+/* ------------------------------------------------------------------ names of the camp and the town picker model */
+/** The start camp is called by the channel's style: the cat style «Кошачий привал», the cherts style «Чёртов привал»
+ *  (site campart.js THEMES.cherts; the cherts bundle is only loaded on cherts channels), every other one «Перепутье». */
+export const CAMP_DEFAULT = 'Перепутье';
+export const CAMP_SUB = 'лагерь новобранцев Легиона';
+const CAMP_BY_STYLE: Record<string, string> = { cats: 'Кошачий привал', cherts: 'Чёртов привал' };
+export interface CampName { name: string; sub: string }
+/**
+ * city.js campName(): the style's own `names.places.camp` ({ name, sub }, doodle.js addNames) wins; without it the table
+ * above, then «Перепутье». `siteNames` = `MDDoodle.names` (id → names), optional.
+ */
+export function campName(style: string | null | undefined, siteNames?: unknown): CampName {
+  const id = String(style || '');
+  let c: any = null;
+  try { c = id ? (siteNames as any)?.[id]?.places?.camp : null; } catch { /* hostile getter */ }
+  const own = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 40) : '');
+  return { name: own(c?.name) || CAMP_BY_STYLE[id] || CAMP_DEFAULT, sub: own(c?.sub) || CAMP_SUB };
+}
+/** campName() for the running page (MDDoodle.active + MDDoodle.names). */
+export function pageCampName(win: any): CampName {
+  try { return campName(win?.MDDoodle?.active, win?.MDDoodle?.names); } catch { return campName('', null); }
+}
+
+/** city.js BIO_ICO / BIO_RU / sizeRu / WHY_RU (the town picker's rows). */
+export const BIO_ICO: Record<string, string> = { meadow: '🌾', forest: '🌳', taiga: '🌲', ice: '❄️', mount: '⛰️', swamp: '🪷', ash: '🌋', desert: '🏜️', coast: '🌊', blight: '☠️', ruin: '🏚️' };
+export const BIO_RU: Record<string, string> = { meadow: 'луга', forest: 'лес', taiga: 'тайга', ice: 'льды', mount: 'горы', swamp: 'болота', ash: 'пепел', desert: 'пустыня', coast: 'побережье', blight: 'порча', ruin: 'руины' };
+export const WHY_RU: Record<string, string> = { owned: 'округ канала', party: 'отряд в округе', tester: 'тестерам' };
+export const sizeRu = (t: { kind?: unknown; danger?: unknown }): string => (t.kind === 'capital' ? 'столица' : +(t.danger as number) >= 2 ? 'посёлок' : 'деревня');
+
+export interface TownRow {
+  id: string;
+  kind: 'fair' | 'camp' | 'district';
+  name: string;
+  icon: string;
+  /** Second line: size, biome, price factor, why it is open. */
+  sub: string;
+  current: boolean;
+  /** Greyed out: can't go there now; `reason` says why. */
+  disabled: boolean;
+  reason?: string;
+  danger?: number;
+  biome?: string;
+}
+export interface TownsView {
+  rows: TownRow[];
+  /** Footnote under the list (the site's own wording). */
+  note: string;
+  /** The towns list couldn't be read (null response / not ok). */
+  error?: string;
+}
+export interface TownsInput {
+  /** Answer of GET /api/city/towns (`{ ok, list, gone?, quest?, fair? }`) or null. */
+  resp: any;
+  hero: HeroTownFlags | null;
+  /** Current town id (detectTown). */
+  current: string;
+  /** Channel style id (MDDoodle.active) and MDDoodle.names for the camp's name. */
+  style: string;
+  names?: unknown;
+}
+const safeStr = (v: unknown, max = 60) => String(v ?? '').replace(/[<>]/g, '').slice(0, max);
+const idOk = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,32}$/.test(v);
+
+/**
+ * The town picker's rows, the way city.js townPick() builds them — Ярмарка, the camp, the district towns the server
+ * lists — but as data. Closed places the site would hide are kept greyed out with the reason (squad in an expedition,
+ * the channel's home district drawn).
+ */
+export function townsView(inp: TownsInput): TownsView {
+  const T = inp.resp, h = inp.hero || null;
+  if (!T || !T.ok) return { rows: [], note: '', error: 'Список городов не загрузился — попробуй ещё раз.' };
+  const list: any[] = Array.isArray(T.list) ? T.list : [];
+  const rows: TownRow[] = [];
+  const quest = !!T.quest, gone = !!T.gone || fairGone(h);
+  const fairOk = !gone && (!quest || !!T.fair);
+  const fair: TownRow = { id: FAIR, kind: 'fair', name: 'Ярмарка', icon: '🎪', sub: quest ? 'отряд здесь' : 'всегда открыта', current: inp.current === FAIR, disabled: !fairOk };
+  if (!fairOk) { fair.sub = 'закрыта'; fair.reason = gone ? 'Ярмарка позади: канал выбрал свой округ' : 'В походе: только город, где стоит отряд'; }
+  rows.push(fair);
+  if (campOpen(h) || inp.current === CAMP) {
+    const c = campName(inp.style, inp.names);
+    const row: TownRow = { id: CAMP, kind: 'camp', name: c.name, icon: '⛺', sub: c.sub, current: inp.current === CAMP, disabled: false };
+    if (quest) { row.disabled = true; row.reason = 'В походе: только город, где стоит отряд'; }
+    else if (gone) { row.disabled = true; row.reason = 'Лагерь позади: канал выбрал свой округ'; }
+    rows.push(row);
+  }
+  for (const t of list) {
+    if (!t || !idOk(t.id)) continue;
+    const danger = Math.max(0, Math.min(5, +t.danger || 0)), biome = safeStr(t.biome, 16);
+    const parts = [`${'★'.repeat(danger)}${danger ? ' ' : ''}${sizeRu(t)}`, BIO_RU[biome] || ''];
+    if (!(t.own || (t.home && +t.k <= 1))) parts.push(`цены ×${String(+t.k || 2).replace('.', ',')}`);
+    if (t.home) parts.push('край отряда');
+    if (WHY_RU[String(t.why)]) parts.push(WHY_RU[String(t.why)]);
+    const sub = parts.filter(Boolean).join(' · ');
+    rows.push({ id: t.id, kind: 'district', name: safeStr(t.town || t.id), icon: BIO_ICO[biome] || '🏘', sub, current: t.id === inp.current, disabled: false, danger, biome });
+  }
+  const hasTowns = !!(h && (h.tw || h.cp)) || rows.some((r) => r.kind !== 'fair');
+  const note = list.length ? 'Город округа открывается, когда канал захватит округ; на стриме — пока отряд стоит в округе (участникам отряда).'
+    : hasTowns ? 'Других городов пока нет. Город округа открывается, когда канал захватит округ.'
+      : 'Города округов откроются, когда канал захватит округ; на стриме — пока отряд стоит в округе (участникам отряда).';
+  return { rows, note };
+}

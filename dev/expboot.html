@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Legion 3D · запуск в походе (test)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1b1638; color: #f3ecff; font: 15px/1.4 system-ui, sans-serif; }
+  .top { padding: 12px 18px; background: #2a2152; font-weight: 800; }
+  .tabs { display: flex; gap: 6px; padding: 8px 18px; background: #231c46; }
+  .tabs button { font: 700 14px system-ui; padding: 8px 14px; border-radius: 10px; border: 0; background: #3a2f6e; color: #fff; cursor: pointer; }
+  .tabs button.on { background: #ffd36b; color: #2a1a08; }
+  .tabs button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+  .tab { display: none; padding: 24px; } .tab.on { display: block; }
+</style>
+</head>
+<body>
+<div class="top">Легион · тестовая страница (оффлайн)</div>
+<nav class="tabs">
+  <button type="button" data-tab="hero">Герой</button>
+  <button type="button" data-tab="city" aria-disabled="true" title="Вы сейчас в походе" class="tab-lock">Город</button>
+  <button type="button" data-tab="quest" class="on">Поход</button>
+</nav>
+<section class="tab" id="tab-hero">Герой</section>
+<section class="tab" id="tab-city"></section>
+<section class="tab on" id="tab-quest">2D-вкладка «Поход» сайта (заглушка)</section>
+<script type="module" src="/expboot.js"></script>
+</body>
+</html>

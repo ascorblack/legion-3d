@@ -33,6 +33,11 @@ button { font: inherit; color: inherit; }
 .medal .ears::before, .medal .ears::after { content: ''; position: absolute; top: 2px; width: 18px; height: 18px; background: var(--l3d-gold);
   clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .medal .ears::before { left: 6px; transform: rotate(-24deg); } .medal .ears::after { right: 6px; transform: rotate(24deg); }
+/* the medal follows the channel style (src/ui/index.ts adoptSkin → data-badge): horns for «Чертики», none for the others */
+.ui[data-badge=legion] .medal .ears { display: none; }
+.ui[data-badge=cherts] .medal .ears::before, .ui[data-badge=cherts] .medal .ears::after { width: 10px; height: 16px; top: 3px; background: linear-gradient(var(--l3d-gold), #b0352a);
+  clip-path: polygon(40% 0, 100% 100%, 0 100%); }
+.ui[data-badge=cherts] .medal .ears::before { left: 10px; transform: rotate(-16deg); } .ui[data-badge=cherts] .medal .ears::after { right: 10px; transform: rotate(16deg) scaleX(-1); }
 .vbox { padding-top: 0; min-width: 220px; }
 .vname { display: flex; align-items: baseline; gap: 8px; text-shadow: 0 2px 4px #000a, 0 0 1px #000; }
 .vname b { font: 700 16px/1.1 var(--l3d-hd); letter-spacing: .01em; }

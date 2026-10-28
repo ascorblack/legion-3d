@@ -13,6 +13,7 @@ import { Parts, T, cyl, cone, sphere, box, torus, star, bodyDims, slab } from '.
 import { addWeapon, addShield } from '../../avatar/gear';
 import { addHat } from '../../avatar/hats';
 import { toonMat, outlineMat } from '../../avatar/materials';
+import { styledGoods } from '../../avatar/items';
 import type { ItemModelFactory, Registry } from '../../contracts/ext';
 import type { StockItem } from './stock';
 
@@ -239,6 +240,11 @@ export function itemObject(it: StockItem, src: ModelSource): THREE.Object3D {
   const consumable = !key.startsWith('weapon:') && !key.startsWith('shield:') && !key.startsWith('hat:') && !key.startsWith('armor:') && !key.startsWith('charm:');
   // food: the registry model is keyed by the legacy site id, so pass the shown name along — the factory picks the model by it
   if (it.slot === 'food') { const f = reg && reg.get('food:' + it.id); if (f) try { return f({ ...look, name: it.name }, opts); } catch (e) { console.warn('[l3d rooms] item model', it.id, e); } }
+  // a style with its own consumables (styles/cherts/goods.js: «зелье жара», charred parchment): the registry draws them
+  if ((it.slot === 'potion' || it.slot === 'scroll') && styledGoods(it.slot, look)) {
+    const f = reg && reg.get('slot:' + it.slot);
+    if (f) try { return f({ ...look, name: it.name, effect: it.effect }, opts); } catch (e) { console.warn('[l3d rooms] item model', it.id, e); }
+  }
   const exact = consumable ? (it.slot === 'food' ? null : tryReg(it.slot + ':' + it.id)) : tryReg(key);
   if (exact) return exact;
   try { return ownMesh(localItemGeometry(it)); } catch (e) { console.warn('[l3d rooms] local model', it.id, e); }

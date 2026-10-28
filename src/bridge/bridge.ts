@@ -33,7 +33,7 @@ declare global {
   };
   Object.defineProperty(w, '__L3D_BUS', { value: bus, configurable: false, enumerable: false, writable: false });
 
-  const TEE = new Set(['me', 'city', 'mine', 'q', 'j', 'sm']);
+  const TEE = new Set(['me', 'city', 'mine', 'q', 'j', 'sm', 'style']);
   /* ---- EventSource: listen ourselves on every source the site opens to /api/live ---- */
   const ES = w.EventSource;
   if (typeof ES === 'function') {

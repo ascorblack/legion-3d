@@ -151,6 +151,31 @@ The site's mine must not run at the same time (one presence per tab): the room c
 - **Offline:** `dev/game.ts` plugs `FakeMine` (fixture `test/fixtures/mine-enter.json`) so the whole-game demo opens
   the 3D mine; `dist-dev/mine.html` is the standalone mine demo.
 
+### 7.1 Since 0.5.0 (all client-only, no extra requests)
+- **Stone signs** (`econ.ts`, setting «Оценки у камней» `l3d.mine.econ`): over a stone «≈ ETA · копают N · твоя доля ·
+  монет/ч», the ore price on the level badge, the same line under the crosshair. Every number is an estimate from the
+  current view (median work per level², observed yields, buyer prices) and is marked «≈»; `mine.html?econ=1` shows it.
+- **Queue** (site `fx.q`): `Shift+E` on another stone while digging puts it next (up to 2), the body of `/api/mineDig`
+  is the site's Shift+click (`q`); the HUD lists «Дальше: ① …», «Стоп» or E on another stone clears it.
+- **HUD**: «Пока тебя не было» card (stones, rare finds, ore, pay since the last visit — the site's `news()`), the weekly
+  shared quest `q.c` (contribution / threshold, claim), the day limit with the 05:00 MSK reset, the «Скупщик» button
+  walks the hero to the buyer (`walk.ts`, the site's walkTo path; any movement key cancels), «?» = help card (site
+  `help()`), «Итоги шахты» (top diggers, last week, records — from the view we already have).
+- **12 depth layers** (`layers.ts`, setting «Пласты глубины» `l3d.mine.layers`): every 5 floors the cave changes colour
+  like the site's mine-biome.js, tinted by the mine's nature.
+- **AFK signals** (`afk.ts`, all switchable in Настройки → Шахта): tab title «⛏ 12 мин · этаж 25» → «✅ Камень выкопан»
+  plus a progress ring on the tab icon (`l3d.mine.tab`, on); a soft chime for the own finished stone even in a hidden
+  tab (`l3d.mine.bgsig`, on); a page notification (`l3d.mine.notify`, **off**, the browser asks for the permission on
+  the site's behalf when switched on); a reach ring + after 2 min idle the first step only warns (`l3d.mine.guard`, on);
+  ~4 fps when the window is visible but unfocused for 90 s (`l3d.mine.eco`, on). The room dispatches the window event
+  `l3d:mine-status` (state, ETA, own burst, dispose).
+- **Status chip in the city** (`src/features/mine-status.ts`, setting «Статус шахты в городе» `l3d.mine.city`):
+  «⛏ этаж 25 · ≈ 12 мин» + ore in the bag while the hero digs and you walk elsewhere; toast «Камень выкопан» when
+  `hero.mn[c].i` turns −1; `U`, the chip or the pause menu item «В шахту» go back. Hidden in the mine and in photo mode.
+- **Tool in the paws**: own weapon / shield hidden while the pickaxe is out (`state.toolInHand`, FP and TP).
+- Every settings row is checked at registration (`rowProblem` in `src/ui/settings-ext.ts`: a seg default must be one of
+  its options) — a wrong default logs `[l3d] setting row …`.
+
 ## 8. Capturing a live state (read-only)
 ```bash
 L3D_COOKIES=cookies.txt CHROMIUM=/usr/bin/google-chrome node e2e/live.mjs --allow-mine --steps=.local/mine-capture.json

@@ -23,6 +23,7 @@ import type { NpcWorld } from './hwnpc';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { selfLit } from '../common';
 import { glowPoints } from '../../world/sky';
+import { campThemeOf } from '../../world/camp-themes';
 import { groundSpec } from '../../world/ground';
 import { toX, toZ, fromX, fromZ } from '../../world/coords';
 import type { QualityLevel } from '../../contracts';
@@ -97,10 +98,20 @@ export function hookWorld(ctx: EventContext): Hooks {
   const violet = new THREE.Color('#6b2fa5'), pink = new THREE.Color('#d070c8');
   const tintCol = (c: THREE.Color, k: number, to = violet) => { const o = c.clone(); c.lerp(to, k); return () => c.copy(o); };
   const du = (dome?.material as THREE.ShaderMaterial | undefined)?.uniforms;
-  if (du) {
-    undo.push(tintCol(du.c1.value, 0.16), tintCol(du.c2.value, 0.2), tintCol(du.c3.value, 0.22), tintCol(du.hz.value, 0.2, pink));
-    undo.push(tintCol(du.c0.value, 0.1));
-  }
+  // a themed camp (cherts «Чёртов привал»: crimson sky) keeps its own sky; re-checked on a live style switch ('l3d:style')
+  let skyUndo: (() => void)[] = [];
+  const styleNow = (d?: unknown) => String((d as { style?: unknown } | undefined)?.style || (globalThis as any).MDDoodle?.active || ctx.layout?.styleId || '');
+  const sky = (d?: unknown) => {
+    const want = !!du && !campThemeOf(styleNow(d));
+    if (want === skyUndo.length > 0) return;
+    if (want && du) skyUndo = [tintCol(du.c1.value, 0.16), tintCol(du.c2.value, 0.2), tintCol(du.c3.value, 0.22), tintCol(du.hz.value, 0.2, pink), tintCol(du.c0.value, 0.1)];
+    else { for (const u of skyUndo.reverse()) u(); skyUndo = []; }
+  };
+  sky();
+  const onStyle = (e: Event) => sky((e as CustomEvent).detail);
+  const W = typeof window !== 'undefined' ? window : null;
+  W?.addEventListener('l3d:style', onStyle);
+  undo.push(() => { W?.removeEventListener('l3d:style', onStyle); for (const u of skyUndo.reverse()) u(); skyUndo = []; });
   let moon: THREE.Sprite | undefined;
   root.traverse((o) => { if ((o as THREE.Sprite).isSprite && o.renderOrder === -8) moon = o as THREE.Sprite; });
   if (moon) {

@@ -38,7 +38,7 @@ beforeAll(() => {
 const SHOPS = ['forge', 'magic', 'shop', 'tent'];
 const HYBRIDS = ['trainer', 'board', 'hall', 'auction', 'storage', 'gate', 'anvil', 'plain'];
 
-async function build(id: string, posts: { path: string; body: any }[] = []) {
+async function build(id: string, posts: { path: string; body: any }[] = [], styleId = 'cats') {
   const { createShopRoom } = await import('../src/rooms/shop');
   const { createHybridRoom } = await import('../src/rooms/hybrid');
   const inters: any[] = [];
@@ -47,7 +47,7 @@ async function build(id: string, posts: { path: string; body: any }[] = []) {
   const store: any = { hero, me: null, walkers: new Map(), chat: [], online: 1, quest: null, layout: null, on: () => () => {} };
   const actions: any = { get: async () => stockJson, post: async (path: string, body: any) => { posts.push({ path, body }); return { ok: true }; } };
   const env: any = {
-    building: { id, title: id, hit: [0, 0, 0, 0], door: { x: 0, y: 0 } }, styleId: 'cats', quality: 2, store, actions,
+    building: { id, title: id, hit: [0, 0, 0, 0], door: { x: 0, y: 0 } }, styleId, quality: 2, store, actions,
     input: { setGameplay() {} }, interact: { add: (i: any) => { inters.push(i); return () => {}; }, get target() { return target; } },
     scene: null, itemModels: null, toast() {}, exit() {}, showSitePanel() {}, hideSitePanel() {}, player: () => ({ x: 0, z: 3 }), ench: { coins: { star: 300, sphere: 900 } },
   };
@@ -58,8 +58,9 @@ async function build(id: string, posts: { path: string; body: any }[] = []) {
 
 
 describe('rooms: z-fighting', () => {
-  for (const id of [...SHOPS, ...HYBRIDS]) {
-    it(`${id}: no coplanar overlaps`, async () => {
+  // + the cherts interiors («Пекельная кузня», «Гардероб демона-франта», «Пекельные ряды»: src/rooms/shop/style.ts)
+  for (const [id, st] of [...[...SHOPS, ...HYBRIDS].map((i) => [i, 'cats']), ['forge', 'cherts'], ['shop', 'cherts'], ['tent', 'cherts']] as [string, string][]) {
+    it(`${id}${st === 'cats' ? '' : ' (' + st + ')'}: no coplanar overlaps`, async () => {
       const rec = new ZRecorder();
       // label each piece with its call site (file:line of the builder) so a hit names the code to fix
       RoomKit.recorder = (mat, g, _tag, look) => {
@@ -68,7 +69,7 @@ describe('rooms: z-fighting', () => {
         rec.add((mat === 'back' ? 'plain' : mat) as typeof mat, g, _tag && _tag.startsWith('prop:') ? _tag : st, look);
       };
       try {
-        const { room } = await build(id);
+        const { room } = await build(id, [], st);
         // goods (merged models on the shelves) and price tags (double-sided quads) are not in the static batch: add them
         room.root.updateMatrixWorld(true);
         room.root.traverse((o: any) => {

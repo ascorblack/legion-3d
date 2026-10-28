@@ -9,7 +9,7 @@
  *   - `zn` polygons are normalised by their own bounding box (any coordinate space works);
  *   - after the boss: `b.res` (end) and then `loot` = the results scene.
  */
-import { stageOf, kindOf, cmdFor, isMulti, SIDE_CMD, SKILLS, camFor, zoneOf, BASE_CMD, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped,
+import { bossName, emptyParty, EMPTY_PARTY, stageOf, kindOf, cmdFor, isMulti, SIDE_CMD, SKILLS, camFor, zoneOf, BASE_CMD, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, eventInstructions, PUZZLE_ST,
   type QuestPuzzle, type QuestPayload, type QuestBattle, type Side, type Zone, type Role } from '../quest/model';
 
 /* ------------------------------------------------------------------ scene kinds */
@@ -28,8 +28,8 @@ export function biomeOf(ter: unknown): BiomeId {
   if (/мост/.test(t)) return 'bridge';
   if (/водопад/.test(t)) return 'falls';
   if (/рек|брод|озер|берег|ручей/.test(t)) return 'river';
-  if (/курган|могил|холм/.test(t)) return 'mound';
-  if (/ущел|скал|гор|перевал/.test(t)) return 'gorge';
+  if (/курган|могил|холм|каменн|менгир|дольмен/.test(t)) return 'mound';   // live 28.10: «Каменный круг», «Холмы»
+  if (/ущел|скал|гор|перевал|овраг|расщел/.test(t)) return 'gorge';   // live 28.10: «Овраг»
   if (/шахт|рудн/.test(t)) return 'mine';
   if (/пещер|грот/.test(t)) return 'cave';
   if (/данж|подзем|склеп|катакомб/.test(t)) return 'dungeon';
@@ -45,23 +45,53 @@ export const isTight = (b: BiomeId) => b === 'cave' || b === 'mine' || b === 'du
 
 /* ------------------------------------------------------------------ foes */
 
-export type FoeArt = 'wolf' | 'skeleton' | 'bandit' | 'boar' | 'drowner' | 'spider' | 'bat' | 'ghost' | 'slime' | 'pumpkin' | 'golem';
-export const FOE_ARTS: readonly FoeArt[] = ['wolf', 'skeleton', 'bandit', 'boar', 'drowner', 'spider', 'bat', 'ghost', 'slime', 'pumpkin', 'golem'];
+export type FoeArt = 'wolf' | 'skeleton' | 'bandit' | 'boar' | 'drowner' | 'spider' | 'bat' | 'ghost' | 'slime' | 'pumpkin' | 'golem'
+  | 'pumpkinlet' | 'cat' | 'zombie' | 'scarecrow' | 'witch' | 'crow' | 'jack' | 'toad' | 'bones'
+  // pack leaders (site questfoes.js o.boss drawings)
+  | 'wolfLead' | 'skeletonLead' | 'banditLead' | 'toadLead' | 'ghostLead' | 'batLead' | 'spiderLead' | 'zombieLead' | 'bonesLead'
+  | 'witchLead' | 'catLead' | 'scarecrowLead'
+  // dungeon packs (questfoes.js dg_* / dgb_*)
+  | 'rat' | 'beast' | 'lavaslime' | 'splasher' | 'crab' | 'mushroom' | 'shroom' | 'mummy' | 'imp' | 'icelet' | 'potion' | 'book' | 'blade'
+  | 'sandworm' | 'tentacle' | 'automaton' | 'stonegolem' | 'shade' | 'voidling' | 'minerghost' | 'knight' | 'monk' | 'tinnik' | 'frostdead'
+  | 'sailor' | 'prisoner' | 'widow' | 'skullguard' | 'squire' | 'smuggler';
+export const FOE_ARTS: readonly FoeArt[] = ['wolf', 'skeleton', 'bandit', 'boar', 'drowner', 'spider', 'bat', 'ghost', 'slime', 'pumpkin', 'golem',
+  'pumpkinlet', 'cat', 'zombie', 'scarecrow', 'witch', 'crow', 'jack', 'toad', 'bones',
+  'wolfLead', 'skeletonLead', 'banditLead', 'toadLead', 'ghostLead', 'batLead', 'spiderLead', 'zombieLead', 'bonesLead', 'witchLead', 'catLead', 'scarecrowLead',
+  'rat', 'beast', 'lavaslime', 'splasher', 'crab', 'mushroom', 'shroom', 'mummy', 'imp', 'icelet', 'potion', 'book', 'blade',
+  'sandworm', 'tentacle', 'automaton', 'stonegolem', 'shade', 'voidling', 'minerghost', 'knight', 'monk', 'tinnik', 'frostdead', 'sailor', 'prisoner', 'widow', 'skullguard', 'squire', 'smuggler'];
 /**
  * Halloween foes (site questfoes.js 'enemies-hollow', 27–28.10): hw_* key → our model. The leader of hw_pumpkin is the
  * Pumpkin Golem («Тыквенный голем», battle.js topBoss: much taller than the rank-and-file) → 'golem' (foeArtOf).
  */
 export const HW_FOES: Record<string, FoeArt> = {
-  hw_pumpkin: 'pumpkin', hw_pumpkinlet: 'pumpkin', hw_jack: 'pumpkin', hw_ghost: 'ghost', hw_bat: 'bat', hw_crow: 'bat', hw_witch: 'ghost',
-  hw_zombie: 'skeleton', hw_skeleton: 'skeleton', hw_spider: 'spider', hw_cat: 'wolf', hw_scarecrow: 'bandit',
+  hw_pumpkin: 'pumpkin', hw_pumpkinlet: 'pumpkinlet', hw_jack: 'jack', hw_ghost: 'ghost', hw_bat: 'bat', hw_crow: 'crow', hw_witch: 'witch',
+  hw_zombie: 'zombie', hw_skeleton: 'bones', hw_spider: 'spider', hw_cat: 'cat', hw_scarecrow: 'scarecrow',
 };
-/** foeArt + the leader variants (hw_pumpkin leader = the pumpkin golem). */
+/** Dungeon packs (questfoes.js dg_* rank-and-file, dgb_* dungeon bosses) → our model. */
+export const DG_FOES: Record<string, FoeArt> = {
+  dg_rat: 'rat', dg_lavaslime: 'lavaslime', dg_splasher: 'splasher', dg_crab: 'crab', dg_mushroom: 'mushroom', dg_mummy: 'mummy', dg_imp: 'imp',
+  dg_icelet: 'icelet', dg_potion: 'potion', dg_book: 'book', dg_armory: 'blade', dg_sandworm: 'sandworm', dg_rootworm: 'sandworm',
+  dg_automaton: 'automaton', dg_astro: 'automaton', dg_clockwork: 'automaton', dg_voidling: 'voidling', dg_minerghost: 'minerghost',
+  dg_monk: 'monk', dg_tinnik: 'tinnik', dg_frostdead: 'frostdead', dg_sailor: 'sailor', dg_prisoner: 'prisoner', dg_smuggler: 'smuggler',
+  dg_skullguard: 'skullguard', dg_squire: 'squire',
+  dgb_light: 'shade', dgb_golem: 'stonegolem', dgb_maze: 'beast', dgb_spider: 'widow', dgb_clock: 'automaton', dgb_shroom: 'shroom',
+  dgb_knight: 'knight', dgb_living: 'tentacle',
+};
+/** Pack leaders with their own drawing (questfoes.js o.boss): base model → leader model. */
+export const LEAD_ARTS: Partial<Record<FoeArt, FoeArt>> = {
+  wolf: 'wolfLead', skeleton: 'skeletonLead', bandit: 'banditLead', toad: 'toadLead', ghost: 'ghostLead', bat: 'batLead', spider: 'spiderLead',
+  zombie: 'zombieLead', bones: 'bonesLead', witch: 'witchLead', cat: 'catLead', scarecrow: 'scarecrowLead', pumpkin: 'golem',
+};
+/** foeArt + the leader variants (hw_pumpkin leader = the pumpkin golem; others: LEAD_ARTS, dungeon packs keep their art). */
 export function foeArtOf(type: unknown, name: unknown, lead: boolean): FoeArt {
   const t = String(type ?? '').toLowerCase();
-  if (lead && t === 'hw_pumpkin') return 'golem';
   if (/голем/i.test(String(name ?? '')) && /тыкв|pump/i.test(t + ' ' + String(name ?? ''))) return 'golem';
-  return foeArt(type, name);
+  const a = foeArt(type, name);
+  if (lead && !t.startsWith('dg')) return LEAD_ARTS[a] ?? a;
+  return a;
 }
+/** Leader models carry their own regalia: no extra crown over them. */
+export const hasLeadArt = (a: FoeArt): boolean => a.endsWith('Lead') || a === 'golem';
 /**
  * Foe art key (battle.js: wolf skeleton bandit boar drowner spider bat; hw_* Halloween, dg_* dungeon packs) → our model.
  * Unknown keys go by stems (also of the display name), then a slime blob.
@@ -69,18 +99,28 @@ export function foeArtOf(type: unknown, name: unknown, lead: boolean): FoeArt {
 export function foeArt(type: unknown, name: unknown = ''): FoeArt {
   const t = String(type ?? '').toLowerCase();
   if (HW_FOES[t]) return HW_FOES[t];
+  if (DG_FOES[t]) return DG_FOES[t];
   const base = t.replace(/^(hw|dg|dgb)_/, '');
-  if ((FOE_ARTS as readonly string[]).includes(base)) return base as FoeArt;
+  if ((FOE_ARTS as readonly string[]).includes(base) && !base.endsWith('lead')) return base as FoeArt;
   const s = base + ' ' + String(name ?? '').toLowerCase();
   if (/wolf|dog|hound|волк|пёс|пес|гончая/.test(s)) return 'wolf';
-  if (/skel|bone|lich|zomb|скелет|кост|мертв|зомби|умерт/.test(s)) return 'skeleton';
-  if (/band|thief|rogue|cult|разбой|бандит|вор|атаман|культ/.test(s)) return 'bandit';
+  if (/(^|[ _])rats?\b|крыс/.test(s)) return 'rat';
+  if (/skel|bone|lich|скелет|кост/.test(s)) return 'skeleton';
+  if (/zomb|мертв|зомби|умерт/.test(s)) return 'zombie';
+  if (/mumm|мумия|мумии/.test(s)) return 'mummy';
+  if (/band|thief|rogue|cult|smuggl|разбой|бандит|вор|атаман|культ|контрабанд/.test(s)) return 'bandit';
   if (/boar|pig|кабан|вепрь|свин/.test(s)) return 'boar';
-  if (/drown|fish|frog|leech|утоп|рыб|жаб|пиявк|водян/.test(s)) return 'drowner';
+  if (/toad|frog|жаб|лягуш/.test(s)) return 'toad';
+  if (/drown|fish|leech|утоп|рыб|пиявк|водян/.test(s)) return 'drowner';
   if (/spid|паук|паучих/.test(s)) return 'spider';
   if (/bat|летуч|мыш|вампир/.test(s)) return 'bat';
   if (/ghost|spirit|wraith|shade|призрак|дух|тень|фантом/.test(s)) return 'ghost';
   if (/pump|тыкв|jack/.test(s)) return 'pumpkin';
+  if (/lava|magma|лав|магм/.test(s)) return 'lavaslime';
+  if (/mush|shroom|гриб/.test(s)) return 'mushroom';
+  if (/crab|краб/.test(s)) return 'crab';
+  if (/worm|червь|червяк/.test(s)) return 'sandworm';
+  if (/golem|голем/.test(s)) return 'stonegolem';
   if (t.startsWith('hw_')) return 'ghost';
   return 'slime';
 }
@@ -106,8 +146,9 @@ export interface Cmd {
 }
 export interface BattleState {
   id: string; round: number; maxR: number; stage: string; fronts: Side[]; multi: boolean; chaos: boolean; two: boolean;
+  ambush?: boolean; more?: number; press?: number; drop?: number;
   foes: FoeState[]; foesAlive: number;
-  tele: { word: string; text: string; got: number; need: number; ok: boolean } | null;
+  tele: { word: string; kind: string; text: string; got: number; need: number; ok: boolean } | null;
   res: { how: string; xp: number; coins: number } | null;
   feed: string[];
   /** last result of my own action (b.mine): who hit — 'party' | 'tele' | '' */
@@ -138,20 +179,30 @@ export interface SceneState {
   myRole: string;
   /** server ms when the current window closes (0 = none) — count down with the stream delay */
   until: number;
+  roll: { by: string; n: number; tier: string } | null;
+  late: [number, string, number][];
+  placeActions?: NonNullable<QuestPayload['pb']>['b'];
   battle: BattleState | null; boss: BossState | null; vote: VoteState | null;
-  trap: { type: string; name: string; icon: string; st: string; word: string; gas: boolean; n: number; len: number; max: number; tre: boolean; win: boolean | null; text: string; acted: boolean; done: boolean } | null;
+  trap: { per?: number; rd2?: NonNullable<QuestPayload['tr']>['rd2']; type: string; name: string; icon: string; st: string; word: string; gas: boolean; n: number; len: number; max: number; tre: boolean; win: boolean | null; text: string; acted: boolean; done: boolean } | null;
   shop: { name: string; items: { n: number; name: string; rarity: string; price: number; slot: string }[] } | null;
-  event: { look: string; name: string; st: string; text: string } | null;
-  /** map puzzle (site 28.10): kind, stage, the task line, scale sums, the poisoned cup after the result */
-  puzzle: { kind: string; st: string; name: string; icon: string; line: string; sums: number[]; ans: string } | null;
+  event: { look: string; name: string; st: string; text: string; game: string; how: string; steps: string[]; length: number; card: string; picked: string[]; pool: number; price: number; votes: number[];
+    /** goblin fair: the public result of the game (only in reveal / next, from `rv`): winning cup 1–3, coin face, the second hilo card */
+    res: GoblinRes | null;
+    /** lost ghost: the public riddle (quest.js shows `ev.q`), its number of `qn` */
+    q: string; qi: number; qn: number } | null;
+  /** map puzzle (site 28.10): kind, stage, the task line, scale sums, the poisoned cup after the result;
+   *  changed: `items` (every stage); letter: `letter`, words `got` of `goal` */
+  puzzle: { kind: string; st: string; name: string; icon: string; line: string; sums: number[]; ans: string; items: number; letter: string; got: number; goal: number } | null;
   loot: { name: string; votes: number } | null;
   town: { id: string; name: string } | null;
   dungeon: { name: string; esc: boolean; opts: { n: number; label: string; icon: string; votes: number; back: boolean }[] } | null;
-  lair: { isles: number; gone: number[]; my: number; hp: number } | null;
+  lair: { isles: number; gone: number[]; my: number; hp: number | null; phase: number; round: number; stage: string; acted: boolean; rt: number } | null;
   /** what to type in chat now, most important first */
   cmds: Cmd[];
   /** one-line «what is going on» */
   status: string;
+  /** the gather ended with nobody (site 28.10, quest.js `v.nb`): a calm, empty gather scene — the squad goes back to town */
+  empty?: boolean;
 }
 
 /* ------------------------------------------------------------------ roster: the party across stages */
@@ -211,7 +262,7 @@ export interface AdaptCtx { login: string; role: string; roster: Roster }
 
 const EMPTY: SceneState = {
   kind: 'off', setKey: 'off', title: '', sub: '', hw: false, ter: '', biome: 'meadow', n: 0, party: [], reserve: 0, inParty: false, partyState: '', myRole: 'recruit',
-  until: 0, battle: null, boss: null, vote: null, trap: null, shop: null, event: null, puzzle: null, loot: null, town: null, dungeon: null, lair: null, cmds: [], status: '',
+  until: 0, roll: null, late: [], battle: null, boss: null, vote: null, trap: null, shop: null, event: null, puzzle: null, loot: null, town: null, dungeon: null, lair: null, cmds: [], status: '',
 };
 
 /** Delayed view → scene state. Never throws: a broken block is dropped, the rest still shows. */
@@ -231,8 +282,19 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   const myRole = c.role || 'recruit';
   if (q.b && typeof q.b === 'object') c.roster.remember(q.b);
   const n = Math.max(0, Math.round(num(q.n, 0)));
-  const s: SceneState = { ...EMPTY, ter, biome, n, inParty, partyState: str(q.party), myRole, title: str(q.t), cmds: [], party: [], hw: !!(q.gather && q.gather.hw) };
+  const s: SceneState = { ...EMPTY, ter, biome, n, inParty, partyState: str(q.party), myRole, title: str(q.t), cmds: [], party: [], hw: !!(q.gather?.hw || q.ev?.hw || ter === 'Изнанка') };
+  s.roll = q.roll ? { by: str(q.roll.by), n: num(q.roll.n), tier: str(q.roll.tier) } : null;
+  s.late = arr<[number, string, number]>(q.late);
+  s.placeActions = arr<NonNullable<QuestPayload['pb']>['b'][number]>(q.pb?.b);
   const me = { login: c.login, role: myRole, in: inParty };
+  // 28.10 (empty-party): nobody joined — the site shows only that; we show the empty gather place, nothing to type
+  if (emptyParty(q)) {
+    s.kind = 'gather'; s.empty = true; s.n = 0; s.party = []; s.reserve = 0; s.inParty = false; s.until = 0; s.roll = null; s.placeActions = [];
+    s.status = EMPTY_PARTY.title; s.sub = EMPTY_PARTY.back;
+    s.cmds = [{ kind: 'info', text: EMPTY_PARTY.back, note: 'стример объявит новый сбор — пиши «поход»' }];
+    s.setKey = `gather|${biome}||empty`;
+    return s;
+  }
 
   // which scene
   let kind: SceneKind;
@@ -281,10 +343,11 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   if (kind === 'dungeon') dungeonOf(q, s);
   if (kind === 'lair') lairOf(q, s);
   if (!s.status) s.status = s.title || 'Поход';
+  if (s.roll) s.status += ` · бросок ${s.roll.n}${s.roll.tier ? ' (' + s.roll.tier + ')' : ''}`;
 
   // set key: what forces a rebuild of the 3D set
   const bid = s.battle ? s.battle.id : '';
-  s.setKey = `${kind}|${biome}|${bid}|${kind === 'event' ? s.event?.look : kind === 'trap' ? s.trap?.type : kind === 'puzzle' ? s.puzzle?.kind : ''}`;
+  s.setKey = `${kind}|${biome}|${bid}|${kind === 'event' ? s.event?.look + ':' + s.event?.game : kind === 'trap' ? s.trap?.type : kind === 'puzzle' ? s.puzzle?.kind : ''}`;
   return s;
 }
 
@@ -328,19 +391,20 @@ function battleOf(b: QuestBattle, s: SceneState, c: AdaptCtx) {
     return { i, art: foeArtOf(f[1], f[4], !!f[2]), type: str(f[1], 'unknown'), side: fronts.includes(f[0]) ? f[0] : side(f[0], fronts[i % fronts.length]), lead: !!f[2], hp: hp01, dead: hp01 <= 0, name: str(f[4]) };
   });
   const tele = b.tele && typeof b.tele === 'object' && typeof b.tele.word === 'string'
-    ? { word: b.tele.word, text: str(b.tele.text), got: num(b.tele.got, 0), need: num(b.tele.need, 0), ok: !!b.tele.ok } : null;
+    ? { word: b.tele.word, kind: str(b.tele.kind), text: str(b.tele.text), got: num(b.tele.got, 0), need: num(b.tele.need, 0), ok: !!b.tele.ok } : null;
   const res = b.res && typeof b.res === 'object' ? { how: str(b.res.how, 'win'), xp: num(b.res.xp, 0), coins: num(b.res.coins, 0) } : null;
   const stage = str(b.st, 'party');
   const mine = b.mine && typeof b.mine === 'object' ? b.mine : null;
   s.battle = {
     id: str(b.id, 'b'), round: num(b.round, 1), maxR: num(b.maxR, 0), stage, fronts, multi, chaos: !!b.cr?.chaos, two: !!b.two,
+    ambush: !!b.ambush, more: num(b.more), press: num(b.press), drop: num(b.drop),
     foes, foesAlive: foes.filter((f) => !f.dead).length, tele, res,
     feed: stage === 'tele' ? [] : arr(b.fd).map((x) => str(x)).slice(-6),
     mineK: mine ? str(mine.k) : '', mineText: mineLine(mine),
     cam: camFor(fighters, 200, s.ter), fighters,
     me: { st: mst, hp, side: mySide, role: myRole },
   };
-  s.until = num(b.until, 0);
+  s.until = b.st === 'party' || b.st === 'tele' ? num(b.until, 0) : 0;
   const title = str(b.title, s.title);
   s.title = title;
   const stRu: Record<string, string> = { intro: 'Бой начинается', party: 'Ход отряда', hit: 'Удары!', tele: 'Ход врага', mech: 'Механика босса', trans: 'Новая фаза', end: 'Бой окончен' };
@@ -495,14 +559,15 @@ function trapOf(q: any, s: SceneState) {
   s.trap = { type, name: str(T.name, s.kind === 'treasure' ? 'Сокровищница' : 'Ловушка'), icon: str(T.icon, '🪤'), st: str(T.st, 'intro'), word: str(T.word), gas: !!T.gas || type === 'gas',
     n: Math.max(0, Math.round(num(T.n, 3))), len: Math.max(1, Math.round(num(T.len, 3))), max: Math.max(1, Math.round(num(T.max, 6))), tre: !!T.tre || s.kind === 'treasure',
     win: res ? (res.win == null ? null : !!res.win) : null, text: res ? str(res.text) : str(T.intro), acted: !!T.acted, done: !!res };
+  s.trap.per = num(T.per, 3); s.trap.rd2 = T.rd2;
   s.title = s.trap.name;
   s.status = res ? (str(res.text) || 'Итог') : str(T.intro, s.trap.name);
-  const act = s.trap.st === 'act';
+  const act = s.trap.st === 'act' || s.trap.st === 'wait';
   if (act) s.until = num(T.until, 0);
   if (res) { s.cmds.push({ kind: 'info', text: str(res.text, 'итог'), note: res.me?.gain ? `+${num(res.me.gain)} монет` : undefined }); return; }
   if (!act) { s.cmds.push({ kind: 'info', text: str(T.intro, 'Приготовься…') }); return; }
   if (s.trap.gas) { s.cmds.push(T.acted ? { kind: 'info', text: 'ты написал — вдохнул газ' } : { kind: 'silent', text: 'Не пиши в чат!', note: 'газ: кто пишет — вдыхает' }); return; }
-  if (T.acted) { s.cmds.push({ kind: 'ok', text: 'ход принят' }); return; }
+  if (T.acted && !(type === 'code' && T.rd2)) { s.cmds.push({ kind: 'ok', text: 'ход принят' }); return; }
   const how = str(T.how);
   switch (type) {
     case 'react': s.cmds.push(s.trap.word ? { kind: 'word', text: s.trap.word, note: 'успей написать' } : { kind: 'info', text: how || 'Реагируй!' }); break;
@@ -511,7 +576,13 @@ function trapOf(q: any, s: SceneState) {
     case 'bait': s.cmds.push({ kind: 'say', text: 'взять', note: how || 'кто-то один берёт' }); break;
     case 'greed': s.cmds.push({ kind: 'say', text: 'взять', note: how || 'хватай и беги' }); break;
     case 'share': s.cmds.push({ kind: 'say', text: 'поровну', note: 'или «себе»' }); break;
-    case 'code': s.cmds.push({ kind: 'say', text: `код ${digits(s.trap.len)}`, note: how || `${s.trap.len} разных цифры 1–${s.trap.max}` }); break;
+    case 'code':
+      if (T.rd2?.ph === 'vote') {
+        s.cmds.push({ kind: 'say', text: 'забрать', note: 'забрать награду' }, { kind: 'say', text: 'дальше', note: 'риск: вторая дверь ×2, попытки общие' });
+        break;
+      }
+      if (T.rd2 && T.rd2.left <= 0) { s.cmds.push({ kind: 'info', text: 'попытки кончились — смотри на отряд' }); break; }
+      s.cmds.push({ kind: 'say', text: `код ${digits(s.trap.len)}`, note: [how || `${s.trap.len} рун 1–${s.trap.max}; повторы разрешены`, T.rd2 ? `попыток ${T.rd2.left} из ${num(T.per, 3)} · дверь ${num(T.rd2.door, 1)}` : ''].filter(Boolean).join(' · ') }); break;
     case 'plates': s.cmds.push({ kind: 'say', text: 'путь 123', note: how || 'цифры плит 1–9' }); break;
     default: s.cmds.push(s.trap.word ? { kind: 'word', text: s.trap.word } : { kind: 'info', text: how || s.trap.name });
   }
@@ -519,25 +590,54 @@ function trapOf(q: any, s: SceneState) {
 const digits = (n: number) => '123456789'.slice(0, Math.max(1, Math.min(9, n)));
 
 /* ---- event ---- */
+export interface GoblinRes { cup: number; face: '' | 'h' | 't'; card2: string }
+const CARD_RU: Record<string, string> = { валет: 'В', дама: 'Д', король: 'К', туз: 'Т', j: 'В', q: 'Д', k: 'К', a: 'Т' };
+const cardOf = (x: unknown): string => { const c = str(x).trim(); return CARD_RU[c.toLowerCase()] || (/^(10|[2-9]|[ВДКТ])$/i.test(c) ? c.toUpperCase() : ''); };
+/**
+ * Goblin game result from the public reveal (quest.js gobHtml shows only `rv.text`, «угадали N · мимо M»): the winning cup,
+ * the coin face, the second hilo card. Structured fields win when a capture carries them (rv.cup / rv.face / rv.c2 / hl.c2 [guess]);
+ * else the reveal line is read. Pure; 0 / '' when the line does not say.
+ */
+export function revealOf(game: string, text: string): { cup: number; face: '' | 'h' | 't'; card: string } {
+  const out: { cup: number; face: '' | 'h' | 't'; card: string } = { cup: 0, face: '', card: '' };
+  const t = String(text || '');
+  if (game === 'shell') {
+    const m = /(?:под|в)\s+(перв|втор|трет|[123])/i.exec(t);
+    if (m) { const k = m[1].toLowerCase(); out.cup = k.startsWith('перв') || k === '1' ? 1 : k.startsWith('втор') || k === '2' ? 2 : 3; }
+  } else if (game === 'coin') {
+    const u = t.replace(/орёл или решка/gi, ' ');
+    const h = u.search(/орёл|орел/i), r = u.search(/решк/i);
+    out.face = h >= 0 && (r < 0 || h < r) ? 'h' : r >= 0 ? 't' : '';
+  } else if (game === 'hilo') {
+    const m = /(?:открыл[аи]?|открыта|вторая карта|выпал[аио]?|карта)\s*[:—–-]?\s*(10|[2-9]|валет|дама|король|туз|[ВДКТJQKA])(?![а-яё\w])/i.exec(t);
+    if (m) out.card = cardOf(m[1]);
+  }
+  return out;
+}
+function goblinRes(E: any, game: string): GoblinRes | null {
+  const rv = E.rv && typeof E.rv === 'object' ? E.rv : null;
+  if (!rv || (E.st !== 'reveal' && E.st !== 'next')) return null;
+  const g = str(rv.gk, game) || game, R = revealOf(g, str(rv.text));
+  const cup = Math.round(num(rv.cup, num(rv.ball, 0)));
+  const f = str(rv.face ?? rv.side).toLowerCase();
+  return {
+    cup: g === 'shell' ? (cup >= 1 && cup <= 3 ? cup : R.cup) : 0,
+    face: g === 'coin' ? (f === 'h' || f.startsWith('ор') ? 'h' : f === 't' || f.startsWith('реш') ? 't' : R.face) : '',
+    card2: g === 'hilo' ? cardOf(rv.c2 ?? E.hl?.c2) || R.card : '',
+  };
+}
 function eventOf(q: any, s: SceneState) {
   const E = q.ev && typeof q.ev === 'object' ? q.ev : {};
   const look = str(E.look, 'traveler');
-  s.event = { look, name: str(E.name, 'Событие'), st: str(E.st, 'on'), text: str(E.res?.text, str(E.said?.text)) };
-  s.title = s.event.name; s.status = s.event.name;
-  if (E.until) s.until = num(E.until, 0);
-  if (E.res && s.event.st === 'done') { s.cmds.push({ kind: 'info', text: str(E.res.text, 'итог') }); return; }
-  if (look === 'traveler' && s.event.st === 'vote') {
-    if (E.my) s.cmds.push({ kind: 'ok', text: `твой выбор: ${E.my === 'rob' ? 'обобрать' : 'помочь'}` });
-    else { s.cmds.push({ kind: 'say', text: 'помочь', note: `${num(E.votes?.help)} за` }); s.cmds.push({ kind: 'say', text: 'обобрать', note: `${num(E.votes?.rob)} за` }); }
-    return;
-  }
-  const cmds = arr<any[]>(E.cmds).filter((x) => Array.isArray(x) && typeof x[0] === 'string');
-  for (const x of cmds.slice(0, 4)) s.cmds.push({ kind: 'say', text: x[0], note: str(x[1]) || undefined });
-  if (!cmds.length) {
-    if (look === 'dice') s.cmds.push({ kind: 'say', text: 'ставка 10', note: 'от 5 до 200 монет' });
-    if (look === 'well') s.cmds.push({ kind: 'say', text: 'монетка', note: 'брось монету (до 3)' });
-    if (look === 'priest') s.cmds.push({ kind: 'say', text: 'пожертвовать 10', note: 'в чашу жреца' });
-  }
+  const I = eventInstructions(E, q.party);
+  const game = str(E.gk);
+  s.event = { look, name: str(E.name, 'Событие'), st: str(E.st, 'on'), text: I.text, game, how: str(E.how),
+    steps: E.st === 'show' ? arr<any[]>(E.sq).map(p => str(p[0])) : E.st === 'done' ? arr<string>(E.seq) : [],
+    length: num(E.len), card: E.st === 'guess' ? str(E.hl?.c1) : '', picked: arr<string>(E.picked), pool: num(E.pool), price: num(E.price), votes: [num(E.vt?.sweet), num(E.vt?.trick)],
+    res: E.gob ? goblinRes(E, game) : null, q: str(E.q), qi: Math.max(0, Math.round(num(E.qi))), qn: Math.max(0, Math.round(num(E.qn))) };
+  // the top bar shows «title · status»: the stage only (the name is the title already)
+  s.title = s.event.name; s.status = I.status; s.until = E.st === 'done' ? 0 : num(E.until);
+  s.cmds.push(...I.cmds);
 }
 
 /* ---- map puzzle (site 28.10, quest.js pzHtml) ---- */
@@ -545,9 +645,12 @@ function puzzleOf(q: any, s: SceneState) {
   const P = q.pz && typeof q.pz === 'object' ? (q.pz as QuestPuzzle) : null;
   if (!P) return;
   const M = puzzleMy(P), st = str(P.st, 'answer'), kind = str(P.kind, 'riddle');
-  s.puzzle = { kind, st, name: str(P.name, 'Головоломка'), icon: str(P.icon, '🧩'), line: puzzleTask(P), sums: arr<number>(P.sums).map((x) => num(x, 0)), ans: st === 'done' ? str(P.res?.ans) : '' };
-  s.title = s.puzzle.name; s.status = `Головоломка: ${s.puzzle.name}`;
-  s.until = num(st === 'show' ? P.showUntil : P.until, 0);
+  // quest.js pzHtml reads P.items (changed), P.letter / P.got / P.goal (letter) straight from the view, in every stage
+  const items = Math.max(0, Math.round(num(P.items, kind === 'changed' ? arr(P.bt).length : 0)));
+  s.puzzle = { kind, st, name: str(P.name, 'Головоломка'), icon: str(P.icon, '🧩'), line: puzzleTask(P), sums: arr<number>(P.sums).map((x) => num(x, 0)), ans: st === 'done' ? str(P.res?.ans) : '',
+    items, letter: str(P.letter).trim().toUpperCase(), got: Math.max(0, Math.round(num(P.got))), goal: Math.max(0, Math.round(num(P.goal))) };
+  s.title = s.puzzle.name; s.status = `Головоломка · ${PUZZLE_ST[st] || st}`;
+  s.until = st === 'done' ? 0 : num(st === 'show' ? P.showUntil : P.until, 0);
   if (st === 'done') {
     s.cmds.push({ kind: 'info', text: str(P.res?.text, 'итог') });
     if (M.st === 'ok') s.cmds.push({ kind: 'ok', text: 'ты ответил верно', note: M.coins ? `+${M.coins}` : undefined });
@@ -556,10 +659,11 @@ function puzzleOf(q: any, s: SceneState) {
   }
   if (!s.inParty) { s.cmds.push({ kind: 'info', text: 'отвечает только отряд' }); return; }
   if (st === 'show') { s.cmds.push({ kind: 'info', text: kind === 'count' ? 'считай зверьков на стриме' : 'смотри на стрим и запоминай' }); return; }
-  if (M.ans) { s.cmds.push({ kind: 'ok', text: `твой ответ: ${puzzleAnsText(P, M.ans)}`, note: kind === 'riddle' ? 'верный или нет — в итоге' : undefined }); return; }
+  if (M.ans && kind !== 'scales' && kind !== 'cups') { s.cmds.push({ kind: 'ok', text: `твой ответ: ${puzzleAnsText(P, M.ans)}`, note: kind === 'riddle' ? 'верный или нет — в итоге' : undefined }); return; }
   const bt = arr<any[]>(P.bt).filter((b) => Array.isArray(b) && typeof b[1] === 'string');
-  if (!puzzleTyped(kind) && bt.length) for (const b of bt.slice(0, 4)) s.cmds.push({ kind: 'say', text: b[1], note: str(b[0]) || undefined });
-  else s.cmds.push({ kind: 'say', text: str(P.how, 'ответ в чат'), note: s.puzzle.line ? s.puzzle.line.slice(0, 60) : undefined });
+  if (!puzzleTyped(kind) && bt.length) for (const b of bt) s.cmds.push({ kind: 'say', text: b[1], note: str(b[0]) || undefined });
+  // typed answers: `how` is an instruction («Слово на «К»», «Напиши число»), not a chat line — no «» around it (site: q-big + «Пиши ответ в чат»)
+  else s.cmds.push({ kind: 'info', text: str(P.how, 'Ответ — в чат'), note: ['пиши ответ в чат стрима', s.puzzle.line].filter(Boolean).join(' · ') });
 }
 
 /* ---- shop ---- */
@@ -597,14 +701,17 @@ function lairOf(q: any, s: SceneState) {
   const L = q.lair && typeof q.lair === 'object' ? q.lair : {};
   const I = L.is && typeof L.is === 'object' ? L.is : null;
   const my = num(I?.at?.my, num(I?.pick?.my, 0));
-  s.lair = { isles: 4, gone: arr<number>(I?.gone).map(Number), my, hp: L.hp == null ? -1 : num(L.hp, 0) };
-  s.title = 'Логово Закхуэля'; s.status = I ? (I.pick ? 'Выбор острова' : I.doom ? 'Какой остров уничтожить?' : 'Острова') : 'Логово';
+  s.lair = { isles: 4, gone: arr<number>(I?.gone).map(Number), my, hp: L.hp == null ? null : num(L.hp, 0), phase: num(L.phase, 1), round: num(L.round), stage: str(L.st), acted: !!L.acted, rt: num(L.rt) };
+  s.title = `Логово ${bossName(q).g}`; s.status = I ? (I.pick ? 'Выбор острова' : I.doom ? 'Какой остров уничтожить?' : 'Острова') : `Логово · фаза ${num(L.phase, 1)} · раунд ${num(L.round)} · ${str(L.st)}`;
   s.until = num(I?.pick?.until, num(I?.doom?.until, num(L.spell?.until, 0)));
   if (I?.pick) s.cmds.push(my ? { kind: 'ok', text: `ты на острове ${my}` } : { kind: 'num', text: '1–4', note: 'номер острова' });
   if (I?.doom) s.cmds.push({ kind: 'num', text: arr<number>(I.doom.opts).join(' / ') || '1–4', note: 'какой остров уничтожить' });
   if (my && !I?.pick) s.cmds.push({ kind: 'say', text: 'прыгнуть 2', note: 'на соседний остров', dim: true });
   if (L.tele?.word) s.cmds.push(L.tele.ok ? { kind: 'ok', text: 'слово принято' } : { kind: 'word', text: str(L.tele.word) });
-  for (const w of arr<string>(L.spell?.words).slice(0, 3)) s.cmds.push({ kind: 'word', text: str(w), note: 'заклинание' });
+  const phrase = arr<string>(L.spell?.words || L.mass?.words);
+  if (phrase.length) s.cmds.push({ kind: 'word', text: phrase.join(' '), note: 'повтори фразу целиком' });
+  if (L.st === 'party' && L.hp > 0) s.cmds.push(L.acted ? { kind: 'ok', text: 'ход принят' } : { kind: 'say', text: baseOf(s.myRole), note: 'твой ход' });
+  if (!s.cmds.length) s.cmds.push({ kind: 'info', text: L.st === 'end' ? 'бой окончен' : 'наблюдай за боем' });
   if (L.deal) s.cmds.push({ kind: 'say', text: 'сделка', note: 'полжизни за монеты', dim: true });
 }
 

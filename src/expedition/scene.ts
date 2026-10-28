@@ -20,7 +20,8 @@ import { Foes, Boss, Bars, Decals, Shots, type FoeActor } from './foes';
 import { FloatText, Label } from './text';
 import { buildSet, Crossroads, type SetPiece } from './sets';
 import { partySpots, frontLine, foeSpots, circleSpots, columnSpots, extent, type Spot } from './layout';
-import { platformGeo, disposeArt, markerGeo } from './art';
+import { platformGeo, disposeArt, markerGeo, foeSize } from './art';
+import { disposeEventArt } from './art-events';
 import { Fx } from '../combat/fx';
 import { jhash } from '../avatar';
 
@@ -87,7 +88,7 @@ export class ExpeditionScene implements RoomScene {
   // camera
   private cam = { x: 0, y: 6, z: 14, tx: 0, ty: 1, tz: 0, init: false };
   private user = { yaw: 0, pitch: 0, zoom: 1 };
-  private focus = { x: 0, y: 1, z: 0, d: 12, pitch: 0.35, yaw: 0 };
+  private focus: { x: number; y: number; z: number; d: number; pitch: number; yaw: number; lock?: boolean } = { x: 0, y: 1, z: 0, d: 12, pitch: 0.35, yaw: 0 };
   private disposed = false;
   private labelT = 0; private relabel = true; private lastLabelS: SceneState | null = null;
   private teleLead: FoeActor | null = null;
@@ -152,7 +153,7 @@ export class ExpeditionScene implements RoomScene {
       if (this.sceneRef) this.terrain.apply(this.sceneRef);
     }
     this.set?.dispose();
-    this.set = buildSet({ mats: this.mats, fx: this.fx, decals: this.decals, secLeft: (u) => this.env.secLeft(u), float: (a, b, x, y, z, sz) => this.floats.spawn(a, b, x, y, z, sz, 2.6) }, s);
+    this.set = buildSet({ mats: this.mats, fx: this.fx, decals: this.decals, secLeft: (u) => this.env.secLeft(u), float: (a, b, x, y, z, sz) => this.floats.spawn(a, b, x, y, z, sz, 2.6), q: this.env.quality }, s);
     this.root.add(this.set.root);
     this.focus = { ...this.set.focus };
     // boss / platforms
@@ -238,7 +239,10 @@ export class ExpeditionScene implements RoomScene {
     if (s.kind === 'boss' && s.boss?.zones.length) this.ensurePlatforms(s);
     if (s.kind === 'loot' && first) this.crowd.setLoopAll('cheer');
     this.crowd.march = s.kind === 'travel' ? 1 : 0;
-    this.crowd.names = s.kind === 'gather' || s.kind === 'rest' || s.kind === 'town';
+    // nicknames over heads in every stage (owner request), following the game's «Ники» setting: off → only mine;
+    // 'near' → only the closest few (the crowd caps the count anyway)
+    { let n = 'all'; try { n = JSON.parse(localStorage.getItem('l3d.names') || '"all"'); } catch { n = localStorage.getItem('l3d.names') || 'all'; }
+      this.crowd.names = n !== 'off'; this.crowd.labelCap = n === 'near' ? 10 : 24; }
     if (s.kind === 'rest') this.crowd.setLoopAll('sit');
   }
 
@@ -254,7 +258,7 @@ export class ExpeditionScene implements RoomScene {
     // foes: battle foes + boss adds
     const foes: FoeState[] = B.foes.slice();
     if (s.kind === 'boss') this.appendAdds(s, foes);
-    const fs = s.kind === 'boss' && this.boss ? this.addSpots(foes) : foeSpots(foes, this.line);
+    const fs = s.kind === 'boss' && this.boss ? this.addSpots(foes) : foeSpots(foes, this.line, undefined, undefined, foeSize);
     this.foes.set(foes, fs, newBattle && !first ? true : newBattle && B.stage === 'intro');
     if (newBattle) {
       this.prevBattle = B.id; this.prevFoeHp = foes.map((f) => f.hp); this.prevStage = ''; this.prevRound = -1; this.seenFeed.clear(); this.resPlayed = '';
@@ -267,10 +271,8 @@ export class ExpeditionScene implements RoomScene {
       const from = this.prevStage;
       this.prevStage = st; this.prevRound = B.round;
       if (st === 'intro') this.say('В бой!', '#ffe27a', 1.6);
-      if (st === 'hit') {
-        const foesHit = from === 'tele' || (from === '' && B.mineK === 'tele');
-        if (foesHit) this.foeAttack(s); else this.partyAttack(s);
-      }
+      const beat = resolveBeat(st, from, B.mineK);
+      if (beat === 'foes') this.foeAttack(s); else if (beat === 'party') this.partyAttack(s);
       if (st === 'tele') for (const A of this.foes.list) this.foes.windup(A, true);
       else for (const A of this.foes.list) this.foes.windup(A, false);
       if (st === 'trans') { this.say('Новая фаза!', '#ff7af0', 1.6); this.boss?.play('roar'); this.fx.ring(this.boss?.x ?? 6, 0.05, 0, 1, 9, 1.2, '#ff7af0', 1, 0.3); this.shake = 0.6; }
@@ -524,6 +526,7 @@ export class ExpeditionScene implements RoomScene {
       this.frameBattle(dt, t, s);
     }
     this.terrain?.update(t);
+    this.crowd.camPos.copy((camera as THREE.PerspectiveCamera).position);
     this.crowd.update(dt, t);
     this.foes.update(dt, t);
     this.boss?.update(dt, t);
@@ -551,8 +554,8 @@ export class ExpeditionScene implements RoomScene {
       }
       for (const A of this.foes.list) {
         if (A.dead && A.deadT > 0.8) continue;
-        const p = this.foes.pos(A, _v);
-        this.bars.add(p.x, A.y + this.foes.top(A) + 0.45 + (A.f.lead ? 0.3 : 0), p.z, A.shown, A.f.lead ? 0.95 : 0.7, A.f.lead ? 0.12 : 0.09, 0);
+        const p = this.foes.barPos(A, _v);
+        this.bars.add(p.x, p.y, p.z, A.shown, A.f.lead ? 0.95 : 0.7, A.f.lead ? 0.12 : 0.09, 0);
         if (A.act === 'windup') this.decals.add(A.x, 0.02, A.z, this.foes.radius(A) * 2 + 0.3, '#ff3a4a', 0.85, 0.5, 9);
       }
     }
@@ -669,10 +672,19 @@ export class ExpeditionScene implements RoomScene {
       const foeC = n ? _v2.set(ex / n, 0, ez / n) : _v2.set(pc.x + 5, 0, pc.z);
       const multi = !!s.battle?.multi;
       fx = multi ? pc.x * 0.6 + foeC.x * 0.4 : (pc.x + foeC.x) / 2; fz = multi ? pc.z : (pc.z + foeC.z) / 2 + 0.6; fy = this.boss ? 1.2 : -0.2;
+      let span = 0;
+      if (!multi && n && !this.boss) {
+        // single front: centre on the whole fight (party spots + the far edge of the pack), not on the two centres
+        let x0 = Infinity, x1 = -Infinity;
+        for (const sp of this.spots) if (sp) { x0 = Math.min(x0, sp.x); x1 = Math.max(x1, sp.x); }
+        for (const A of this.foes.list) if (!A.dead) { const m = foeSize(this.foes.art(A))[0] * 0.55 * A.sc; x0 = Math.min(x0, A.hx - m); x1 = Math.max(x1, A.hx + m); }
+        if (x1 > x0) { fx = (x0 + x1) / 2; span = (x1 - x0) / 2; }
+      }
       let r = extent(this.spots, fx, fz);
-      for (const A of this.foes.list) if (!A.dead) r = Math.max(r, Math.hypot(A.hx - fx, A.hz - fz) + 1.2);
+      for (const A of this.foes.list) if (!A.dead) r = Math.max(r, Math.hypot(A.hx - fx, A.hz - fz) + Math.max(1.2, foeSize(this.foes.art(A))[0] * 0.65 * A.sc));
       if (this.boss) r = Math.max(r, Math.abs(this.boss.x - fx) + 2);
-      d = Math.max(this.boss ? 14 : 9.5, r * (multi ? 1.5 : 1.3)) / Math.max(0.45, s.battle?.cam ?? 1) * (isTight(s.biome) ? 0.85 : 1);
+      d = Math.max(this.boss ? 14 : 9.5, r * (multi ? 1.5 : 1.42)) / Math.max(0.45, s.battle?.cam ?? 1) * (isTight(s.biome) ? 0.85 : 1);
+      d = Math.max(d, span / 0.62);   // the whole width of the fight fits a 16:9 view
       pitch = multi ? 0.72 : this.boss ? 0.4 : 0.5; yaw = multi ? 0.25 : 0.12;
       yaw += Math.sin(t * 0.06) * 0.12;
     } else if (s && s.kind === 'travel') {
@@ -683,7 +695,8 @@ export class ExpeditionScene implements RoomScene {
       d = Math.max(F.d, 8 + Math.sqrt(this.crowd.actors.length) * 1.4);
       yaw += Math.sin(t * 0.05) * 0.1;
     } else {
-      d = s && s.kind === 'shop' ? F.d : Math.max(F.d, 7 + Math.sqrt(this.crowd.actors.length) * 1.3);
+      // F.lock: the set frames its key object itself (28.10 event / puzzle sets) — the party size must not push the camera back
+      d = s && (s.kind === 'shop' || F.lock) ? F.d : Math.max(F.d, 7 + Math.sqrt(this.crowd.actors.length) * 1.3);
       yaw += Math.sin(t * 0.05) * 0.12;
     }
     d *= this.user.zoom; yaw += this.user.yaw; pitch = Math.max(0.05, Math.min(1.25, pitch + this.user.pitch));
@@ -718,7 +731,7 @@ export class ExpeditionScene implements RoomScene {
     for (const l of [this.bossSign, this.bossName, this.teleSign, this.banner]) l.dispose();
     this.marker.removeFromParent();
     this.mats.dispose();
-    disposeArt();
+    disposeArt(); disposeEventArt();
     this.root.removeFromParent();
     this.sceneRef = null;
   }
@@ -728,6 +741,15 @@ const _m4 = new THREE.Matrix4();
 /** cinematic field of view while the expedition is shown */
 export const FOV = 50;
 const CONF: [number, number, number][] = [[1, 0.4, 0.5], [1, 0.85, 0.3], [0.4, 0.8, 1], [0.5, 0.95, 0.5], [0.85, 0.5, 1]];
+/**
+ * Which side's blows land on this battle-stage change: live data resolves the enemy telegraph in 'tele2' (site 28.10),
+ * older captures in 'hit' right after 'tele' (or with b.mine.k === 'tele' when we join mid-beat); 'hit' otherwise = the party.
+ */
+export function resolveBeat(st: string, from: string, mineK: string): 'foes' | 'party' | null {
+  if (st === 'tele2') return 'foes';
+  if (st !== 'hit') return null;
+  return from === 'tele' || (from === '' && mineK === 'tele') ? 'foes' : 'party';
+}
 const dummyBattle = { id: 'boss', round: 1, maxR: 0, stage: 'hit', fronts: ['R' as const], multi: false, chaos: false, two: false, foes: [], foesAlive: 0, tele: null, res: null, feed: [], mineK: '', mineText: '', cam: 1, fighters: 0,
   me: { st: 'out' as const, hp: null, side: '' as const, role: 'recruit' } };
 const wrap = (a: number) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };

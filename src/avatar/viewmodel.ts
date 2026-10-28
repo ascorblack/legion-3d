@@ -10,6 +10,7 @@
  * update() never allocates.
  */
 import * as THREE from 'three';
+import { addClaws } from './cherts';
 import type { Appearance } from '../contracts';
 import type { ViewModel } from '../contracts/modules';
 import { Parts, T, mul, sphere, tube, torus, box, cyl, cone, capsule } from './geom';
@@ -268,7 +269,7 @@ class ViewModelImpl implements ViewModel {
     const ak = g.a === 'lorica' && g.am === 'light' ? 'light' : g.a;
     const sleeve = ak ? (SLEEVE[ak] || SLEEVE.lorica)(g.ar || 'common') : fur;
     const trim = g.ar && g.ar !== 'common' ? RARITY_COLOR[g.ar] : ak === 'plate' ? '#b89a52' : '#c9b28a';
-    const cat = app.styleId === 'cats', monkey = app.styleId === 'monkeys' || (app.styleId as string) === 'ugabugi';
+    const cat = app.styleId === 'cats', monkey = app.styleId === 'monkeys' || (app.styleId as string) === 'ugabugi', imp = app.styleId === 'cherts';
     const kind: Kind = g.w ? KIND[g.w] || 'blade' : 'none';
     this.kind = kind;
     // mirrors the third-person body: the weapon (any kind, the bow too) in the right paw, the shield on the left forearm
@@ -302,6 +303,8 @@ class ViewModelImpl implements ViewModel {
         for (let i = 0; i < 2; i++) p.add(capsule(0.0019, 0.014, 2, 5), crease, T(-s * 0.0262, 0.0044 - i * 0.0152, 0.003, Math.PI / 2, 0, 0));
         // thumb folded across the front of the grip (camera side): the "opposition" that makes it a grip
         p.add(capsule(0.0098, 0.02, 3, 8), fur, T(-s * 0.009, 0.021, 0.014, 0, -s * 0.35, Math.PI / 2 - s * 0.15));
+        // imp hands (cherts): little dark claws on the curled fingers
+        if (imp) addClaws(p, [0, 1, 2].map((i) => [-s * 0.027, 0.012 - i * 0.0152, 0.004] as [number, number, number]), new THREE.Vector3(-s, -0.2, 0.5), 0.011);
         return;
       }
       // open paw: a soft mitten, toes on the top-front, beans on the underside
@@ -311,6 +314,7 @@ class ViewModelImpl implements ViewModel {
         for (const k of [-1, 0, 1]) p.add(sphere(0.0065, 6, 4), '#ff8fa3', T(k * 0.0145, -0.01, -0.036 - (k === 0 ? 0.004 : 0), 0, 0, 0, [1, 0.8, 0.6]));
         p.add(sphere(0.012, 8, 6), '#ff8fa3', T(0, -0.025, -0.018, 0, 0, 0, [1.2, 0.5, 0.9]));
       } else if (monkey) p.add(sphere(0.024, 10, 8), '#ffe4c4', T(0, -0.01, -0.01, 0, 0, 0, [1.1, 0.6, 1.1]));
+      else if (imp) addClaws(p, [-1, 0, 1].map((k) => [k * 0.0145, 0.022, -0.035 - (k === 0 ? 0.004 : 0)] as [number, number, number]), new THREE.Vector3(0, 0.45, -1), 0.013);
     };
 
     // right paw

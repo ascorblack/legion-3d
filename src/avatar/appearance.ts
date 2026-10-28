@@ -3,6 +3,7 @@
  * Pure TS, no three.js: safe for tests and workers.
  */
 import type { Appearance, Gear, Look, StyleId } from '../contracts';
+import { CH_SKINS, chTraits, chFaceBits } from './cherts-traits';
 
 /* ------------------------------------------------------------------ site PRNG (same as MDDoodle) */
 export const jhash = (s: string): number => {
@@ -62,7 +63,7 @@ export function normColor(c: unknown): string | null {
 /* ------------------------------------------------------------------ "by nick" defaults (port of MDDoodle nickPicks) */
 const FUR = ['#f2a65a', '#e8914a', '#f3d9b1', '#9aa3ad', '#7d8a99', '#f4f1ec', '#4a4350', '#a8754f', '#ffc6a0', '#c9ccd3', '#b6a6c9', '#e7b98a'];
 const BASE_HATS = ['none', 'tuft', 'cap', 'bow', 'horns', 'crown', 'tophat', 'party', 'wizard', 'antenna', 'antenna2', 'cat', 'bunny', 'halo', 'sprout', 'bandana'];
-interface StyleRules { palette(r: () => number): { fill: string; c2: string }; bodyDraws: Record<string, number>; eyePool: string[]; blush: number; hatNone: number }
+interface StyleRules { palette(r: () => number): { fill: string; c2: string }; bodyDraws: Record<string, number>; eyePool: string[]; mouthPool?: string[]; blush: number; hatNone: number; capeColor?: string }
 const LEGION_RULES: StyleRules = {
   palette(r) {
     const hue = Math.floor(r() * 360);
@@ -78,7 +79,14 @@ const CAT_RULES: StyleRules = {
   bodyDraws: { bean: 2, box: 3, ball: 2, tall: 2, ghost: 2, cone: 2, egg: 2 },
   eyePool: ['dots', 'big', 'big', 'slit', 'happy', 'sleepy', 'cyclops', 'stars'], blush: 0.55, hatNone: 0.2,
 };
-const rulesFor = (styleId: StyleId): StyleRules => (styleId === 'cats' ? CAT_RULES : LEGION_RULES);
+/** «Чертики» (styles/cherts/characters.js): skin colour from its list, the box form takes two draws (width, top). */
+const CHERTS_RULES: StyleRules = {
+  palette(r) { const fill = CH_SKINS[Math.floor(r() * CH_SKINS.length)]; const c2 = `hsl(${Math.floor(r() * 360)} 75% 55%)`; return { fill, c2 }; },
+  bodyDraws: { bean: 1, box: 2, ball: 1, tall: 1, ghost: 1, cone: 1, egg: 1 },
+  eyePool: ['dots', 'dots', 'big', 'happy', 'slit', 'slit', 'sly', 'sly', 'cyclops', 'stars'],
+  mouthPool: ['open', 'grin', 'grin', 'tongue'], blush: 0.35, hatNone: 0.4, capeColor: '#2a1a22',
+};
+const rulesFor = (styleId: StyleId): StyleRules => (styleId === 'cats' ? CAT_RULES : styleId === 'cherts' ? CHERTS_RULES : LEGION_RULES);
 
 export interface NickDefaults {
   shape: string; color: string; color2: string; eyes: string; mouth: string; blush: boolean; hat: string;
@@ -96,13 +104,14 @@ export function nickDefaults(login: string, styleId: StyleId = 'legion'): NickDe
   const w01 = r();                                   // first draw inside the body function = width
   for (let i = 1; i < (st.bodyDraws[shape] || 1); i++) r();
   const eyes = jpick(r, st.eyePool);
-  const mouth = jpick(r, CATALOG.mouths);
+  const mouth = jpick(r, st.mouthPool || CATALOG.mouths);
   const blush = r() < st.blush;
   const hat = r() < st.hatNone ? 'none' : jpick(r, BASE_HATS);
   return {
     shape, color: normColor(fill) || '#f2a65a', color2: normColor(c2) || '#4aa3ff', eyes, mouth, blush, hat,
-    aura: null, acc: null, accColor: normColor(c2) || '#4aa3ff', capeColor: '#c0182b',
-    w01, iris: (seed >>> 3) % 5, pat: (seed >>> 7) % 5,
+    aura: null, acc: null, accColor: normColor(c2) || '#4aa3ff', capeColor: st.capeColor || '#c0182b',
+    // cherts: no iris colours; the face key's iris slot carries the per-nick face bits (fangs, brows, freckles)
+    w01, iris: styleId === 'cherts' ? chFaceBits(chTraits(seed)) : (seed >>> 3) % 5, pat: (seed >>> 7) % 5,
   };
 }
 

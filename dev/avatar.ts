@@ -99,6 +99,14 @@ if (q.get('acc') === '1') {
   const rows = ACC_SETS.length;
   if (cam === 'back') camera.position.set(0, 1.4 + rows * 0.5, -(3.2 + rows * 1.6)); else camera.position.set(0, 1.4 + rows * 0.5, 3.2 + rows * 1.6);
   controls.target.set(0, 0.6, 0); controls.update();
+} else if (q.get('faces')) {
+  // ?faces=1 — ONE login in several eyes / mouths (a shared model): every figure must show its own face
+  const F: [string, string][] = [['dots', 'open'], ['stars', 'tongue'], ['happy', 'grin'], ['cyclops', 'open'], ['big', 'grin'], ['jack', 'tongue']];
+  ENTRIES = F.map(([eyes, mouth], i) => ({ raw: W('facetest', `${eyes} · ${mouth}`, 1, { shape: 'bean', color: '#ffb27a', eyes, mouth, blush: false }, {}), pos: new THREE.Vector3((i - (F.length - 1) / 2) * 1.35, 0, 0) }));
+} else if (q.get('nicks')) {
+  // ?nicks=a,b,c — looks "by nick" only (no wardrobe, no gear): side-by-side checks against the site's doodles
+  const ns = q.get('nicks')!.split(','), per = +(q.get('per') || 6);
+  ENTRIES = ns.map((n, i) => ({ raw: W(n, n, 1, null, {}), pos: new THREE.Vector3((i % per - (Math.min(per, ns.length) - 1) / 2) * 1.35, 0, Math.floor(i / per) * 2.4) }));
 } else if (q.get('items')) {
   ENTRIES = [];
   buildItemsGrid(q.get('items')!);
@@ -131,7 +139,7 @@ ENTRIES.forEach(({ raw, pos }, i) => {
   if (!accMode) labels.set(app.login, { name: app.name, level: app.level, me: i === 0 });
 });
 // a couple of bubbles right away (for screenshots)
-if (!solo && !accMode) { labels.bubble(guys[1].login, LINES[0], 60000); labels.bubble(guys[4].login, LINES[4], 60000); labels.bubble(guys[11].login, LINES[3], 60000); }
+if (!solo && !accMode && guys.length > 11) { labels.bubble(guys[1].login, LINES[0], 60000); labels.bubble(guys[4].login, LINES[4], 60000); labels.bubble(guys[11].login, LINES[3], 60000); }
 
 // ?cp=x,y,z&ct=x,y,z — explicit camera position / target (screenshots)
 if (q.get('cp')) { const [x, y, z] = q.get('cp')!.split(',').map(Number); camera.position.set(x, y, z); }

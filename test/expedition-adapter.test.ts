@@ -50,10 +50,10 @@ describe('expedition adapter — FakeQuest timeline', () => {
     expect(t2.party.some((m) => m.login === 'barsik' && m.role === 'legionary')).toBe(true);
     expect(t2.party.filter((m) => m.me)).toHaveLength(1);
   });
-  it('battle: stage cycle intro → party → hit → tele → hit → … → end with the result', () => {
+  it('battle: stage cycle intro → party → hit → tele → tele2 → … → end with the result', () => {
     const b1 = tl.filter(({ s }) => s.kind === 'battle' && s.battle!.id === 'b1').map(({ s }) => s.battle!.stage);
     const seq: string[] = []; for (const st of b1) if (seq[seq.length - 1] !== st) seq.push(st);
-    expect(seq).toEqual(['intro', 'party', 'hit', 'tele', 'hit', 'party', 'hit', 'end']);
+    expect(seq).toEqual(['intro', 'party', 'hit', 'tele', 'tele2', 'party', 'hit', 'end']);
     const end = tl.find(({ s }) => s.battle?.stage === 'end')!.s;
     expect(end.battle!.res!.how).toBe('win');
     expect(end.battle!.foes.every((f) => f.dead)).toBe(true);
@@ -62,7 +62,7 @@ describe('expedition adapter — FakeQuest timeline', () => {
     const p = tl.find(({ s }) => s.battle?.id === 'b1' && s.battle.stage === 'party')!.s;
     expect(p.cmds[0]).toMatchObject({ kind: 'say', text: 'выстрел', note: 'твоя команда' });
     expect(cmdTexts(p)).toEqual(expect.arrayContaining(['прицел']));
-    expect(p.battle!.foes.map((f) => f.art)).toEqual(['wolf', 'wolf', 'wolf', 'wolf']);
+    expect(p.battle!.foes.map((f) => f.art)).toEqual(['wolf', 'wolf', 'wolfLead', 'wolf']);   // the pack leader has its own model
     expect(p.battle!.foes.filter((f) => f.lead)).toHaveLength(1);
     expect(p.party.find((m) => m.me)).toBeTruthy();
   });
@@ -73,7 +73,7 @@ describe('expedition adapter — FakeQuest timeline', () => {
     const says = p.cmds.filter((c) => c.kind === 'say').map((c) => c.text);
     expect(says).toEqual(expect.arrayContaining(['выстрел лево', 'выстрел право']));
     expect(p.cmds[0].note).toBe('твоя команда');
-    expect(new Set(p.battle!.foes.map((f) => f.art))).toEqual(new Set(['bandit', 'skeleton']));
+    expect(new Set(p.battle!.foes.map((f) => f.art))).toEqual(new Set(['bandit', 'banditLead', 'skeleton']));
   });
   it('battle: the telegraph word is a canvas-only «word» command; the feed is hidden meanwhile', () => {
     const t = tl.find(({ s }) => s.battle?.stage === 'tele')!.s;
@@ -141,7 +141,8 @@ describe('expedition adapter — defensive', () => {
   it('clamps foe hp, maps unknown art, keeps priests side-less', () => {
     const s = adapt({ on: true, k: 'battle', b: { id: 'b', st: 'party', round: 1, form: [['me', 'priest', 'L']], me: 0, hp: 1, foes: [['R', 'hw_ghoul', 1, 5, 'Гуль'], ['L', 'dg_rat', 0, -1, '']], cr: { fr: ['L', 'R'] } } } as any, ctx());
     expect(s.battle!.foes.map((f) => f.hp)).toEqual([1, 0]);
-    expect(s.battle!.foes[0].art).toBe('ghost');
+    expect(s.battle!.foes[0].art).toBe('ghostLead');   // unknown hw_* leader → the ghost leader
+    expect(s.battle!.foes[1].art).toBe('rat');
     expect(s.cmds[0].text).toBe('лечить');
   });
   it('biomes and foe arts', () => {
