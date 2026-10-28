@@ -16,6 +16,7 @@ const propCliff = () => propGeo('cliff', 2);
 const wood = (g: THREE.BufferGeometry, c = '#8a6a42') => new GB().add(g, c).build();
 import {
   campfireGeo, flameGeo, signpostGeo, flagGeo, gateGeo, bannerGeo, tentGeo, chestGeo, lidGeo, runeDoorGeo, doorSlabGeo, platformGeo,
+  puzzleTabletGeo, runeStoneGeo, cupGeo, scalesPostGeo, scalesBeamGeo,
   stallGeo, wellGeo, altarGeo, tableGeo, d20Geo, cartGeo, ropeGeo, logGeo, spikeSlabGeo, pedestalGeo, itemGeo, markerGeo, bossGeo, RARITY_COL,
 } from './art';
 
@@ -388,6 +389,47 @@ class Event extends Base implements SetPiece {
   }
 }
 
+/* ------------------------------------------------------------------ map puzzle (site 28.10, kind `puzzle`) */
+
+/**
+ * The party before a stone tablet («Головоломка»); by puzzle kind: rune stones in a row (runes), three cups on the
+ * plinth (cups — the poisoned one tips over after the result), the balance scales (scales — tilt from the sums).
+ * The tablet's label shows the name and what to type; the answer is never drawn (it is on the stream).
+ */
+class Puzzle extends Base implements SetPiece {
+  party = { cx: -1.4, cz: 1.0, r: 2.0 };
+  focus = { x: 1.4, y: 1.5, z: 0, d: 11.5, pitch: 0.28, yaw: -0.25 };
+  private sign: Label;
+  private cups: THREE.Mesh[] = [];
+  private beam: THREE.Mesh | null = null;
+  private glow = 0;
+  constructor(env: SetEnv, private kind: string) {
+    super(env, 'puzzle-' + kind);
+    this.outlined(puzzleTabletGeo(), 3.4, 0, -0.4, -0.25);
+    if (kind === 'cups') for (let i = 0; i < 3; i++) this.cups.push(this.outlined(cupGeo(), 1.8 + i * 0.7, 0, 0.9 - i * 0.15, 0));
+    else if (kind === 'scales') { this.outlined(scalesPostGeo(), 1.0, 0, 0.9); this.beam = this.outlined(scalesBeamGeo(), 1.0, 2.15, 0.9); }
+    else for (let i = 0; i < 4; i++) this.outlined(runeStoneGeo(), 1.2 + i * 0.75, 0, 1.0 - (i % 2) * 0.25, (i - 1.5) * 0.25);
+    this.sign = this.label('loot', 512, 160, 0.6);
+    this.sign.obj.position.set(3.4, 3.7, -0.4);
+    this.light('#7af0ff', 3.4, 2.2, 0.6, 6, 8);
+  }
+  update(dt: number, t: number, s: SceneState): void {
+    const P = s.puzzle;
+    if (this.relabel) this.sign.set(P ? `${P.icon} ${P.name}` : 'Головоломка', P ? short(P.line, 44) : '');
+    if (this.beam && P) {
+      // the heavier plate goes down (≤ 0.35 rad)
+      const d = Math.max(-5, Math.min(5, (P.sums[1] || 0) - (P.sums[0] || 0)));
+      const a = -d * 0.07; this.beam.rotation.z += (a - this.beam.rotation.z) * Math.min(1, dt * 3);
+    }
+    if (this.cups.length && P) for (let i = 0; i < this.cups.length; i++) {
+      const pois = P.st === 'done' && P.ans === String(i + 1), c = this.cups[i];
+      c.rotation.z += ((pois ? 1.3 : 0) - c.rotation.z) * Math.min(1, dt * 4);
+    }
+    this.glow = P && P.st === 'show' ? 0.6 + 0.3 * Math.sin(t * 4) : 0.35;
+    this.env.decals.add(3.4, 0.01, 0.2, 2.2, '#7af0ff', this.glow, 0.5, 0);
+  }
+}
+
 /* ------------------------------------------------------------------ dungeon doors */
 
 class Dungeon extends Base implements SetPiece {
@@ -521,6 +563,7 @@ export function buildSet(env: SetEnv, s: SceneState): SetPiece {
     case 'trap': return s.trap?.type === 'code' ? new RuneDoor(env, s) : new Trap(env, s.trap?.type || 'react', s);
     case 'shop': return new Shop(env, s);
     case 'event': return new Event(env, s.event?.look || 'traveler', s);
+    case 'puzzle': return new Puzzle(env, s.puzzle?.kind || 'riddle');
     case 'dungeon': return new Dungeon(env, s);
     case 'lair': return new Lair(env, s);
     case 'loot': return new Loot(env, s);

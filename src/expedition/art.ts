@@ -723,6 +723,58 @@ export function tableGeo(): THREE.BufferGeometry {
     return b.build();
   });
 }
+/** Map puzzle (site 28.10, kind `puzzle`): a standing stone tablet with a round top and carved lines (glowing rune
+ *  inlays), on a two-step plinth. */
+export function puzzleTabletGeo(): THREE.BufferGeometry {
+  return cached('pz-tablet', () => {
+    const b = new GB();
+    b.add(box(2.4, 0.25, 1.2), '#6e687e', T(0, 0.125, 0));
+    b.add(box(2.0, 0.22, 0.95), '#7e7890', T(0, 0.36, 0));
+    b.add(box(1.6, 2.1, 0.32), '#8a849c', T(0, 1.52, 0));
+    b.add(new THREE.CylinderGeometry(0.8, 0.8, 0.32, 18, 1, false, 0, Math.PI), '#8a849c', T(0, 2.57, 0, Math.PI / 2, 0, -Math.PI / 2));
+    for (let i = 0; i < 4; i++) b.add(box(1.1 - (i === 3 ? 0.35 : 0), 0.06, 0.02), '#7af0ff', T(0, 1.2 + i * 0.32, 0.17));
+    b.add(cyl(0.12, 0.12, 0.03, 10), '#ffc94d', T(0, 2.62, 0.17, Math.PI / 2, 0, 0));
+    return b.build();
+  });
+}
+/** A rune stone (one of the equation's glyph stones): a rough slab with a glowing glyph. */
+export function runeStoneGeo(): THREE.BufferGeometry {
+  return cached('pz-rune', () => {
+    const b = new GB();
+    b.add(dod(0.42), '#6e687e', T(0, 0.38, 0, 0, 0, 0, [0.9, 1.1, 0.55]));
+    b.add(box(0.05, 0.36, 0.02), '#9ff4ff', T(-0.04, 0.42, 0.23));
+    b.add(box(0.2, 0.05, 0.02), '#9ff4ff', T(0.03, 0.5, 0.23, 0, 0, -0.6));
+    return b.build();
+  });
+}
+/** Cup (the poisoned-cups puzzle). */
+export function cupGeo(): THREE.BufferGeometry {
+  return cached('pz-cup', () => {
+    const b = new GB();
+    b.add(cyl(0.22, 0.08, 0.32, 12), '#ffc94d', T(0, 0.66, 0));
+    b.add(cyl(0.04, 0.04, 0.3, 6), '#c8901a', T(0, 0.36, 0));
+    b.add(cyl(0.18, 0.2, 0.05, 12), '#c8901a', T(0, 0.22, 0));
+    return b.build();
+  });
+}
+/** Scales (balance puzzle): post, beam and two plates — the beam tilts as a whole in the set. */
+export function scalesPostGeo(): THREE.BufferGeometry {
+  return cached('pz-scales', () => {
+    const b = new GB();
+    b.add(cyl(0.12, 0.2, 2.2, 8), '#8a6a42', T(0, 1.1, 0));
+    b.add(box(0.8, 0.2, 0.8), '#6e687e', T(0, 0.1, 0));
+    return b.build();
+  });
+}
+export function scalesBeamGeo(): THREE.BufferGeometry {
+  return cached('pz-beam', () => {
+    const b = new GB();
+    b.add(box(2.5, 0.12, 0.14), '#c8901a', T(0, 0, 0));
+    b.add(sph(0.12, 8, 6), '#ffc94d', T(0, 0, 0));
+    for (const s of [-1, 1]) { for (const d of [-1, 1]) b.add(cyl(0.015, 0.015, 0.85, 4), '#c8ccd8', T(s * 1.15 + d * 0.2, -0.4, 0, 0, 0, -d * 0.24)); b.add(cyl(0.45, 0.38, 0.08, 14), '#e8e2d0', T(s * 1.15, -0.82, 0)); }
+    return b.build();
+  });
+}
 export function d20Geo(): THREE.BufferGeometry { return cached('d20', () => new GB().add(ico(0.22, 0), '#f4eedc').build()); }
 export function cartGeo(): THREE.BufferGeometry {
   return cached('cart', () => {

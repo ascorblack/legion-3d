@@ -9,13 +9,13 @@
  *   - `zn` polygons are normalised by their own bounding box (any coordinate space works);
  *   - after the boss: `b.res` (end) and then `loot` = the results scene.
  */
-import { stageOf, kindOf, cmdFor, isMulti, SIDE_CMD, SKILLS, camFor, zoneOf, BASE_CMD,
-  type QuestPayload, type QuestBattle, type Side, type Zone, type Role } from '../quest/model';
+import { stageOf, kindOf, cmdFor, isMulti, SIDE_CMD, SKILLS, camFor, zoneOf, BASE_CMD, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped,
+  type QuestPuzzle, type QuestPayload, type QuestBattle, type Side, type Zone, type Role } from '../quest/model';
 
 /* ------------------------------------------------------------------ scene kinds */
 
 export type SceneKind = 'off' | 'gather' | 'vote' | 'travel' | 'battle' | 'boss' | 'trap' | 'treasure' | 'rest' | 'shop' | 'event'
-  | 'town' | 'dungeon' | 'lair' | 'loot';
+  | 'town' | 'dungeon' | 'lair' | 'loot' | 'puzzle';
 export type BiomeId = 'meadow' | 'forest' | 'river' | 'falls' | 'bridge' | 'mound' | 'gorge' | 'mine' | 'cave' | 'dungeon' | 'gate' | 'swamp' | 'snow' | 'desert';
 
 /** Terrain name (`v.ter`, Russian) → biome. Known names from docs/QUEST.md §9; unknown names by word stems, else meadow. */
@@ -142,6 +142,8 @@ export interface SceneState {
   trap: { type: string; name: string; icon: string; st: string; word: string; gas: boolean; n: number; len: number; max: number; tre: boolean; win: boolean | null; text: string; acted: boolean; done: boolean } | null;
   shop: { name: string; items: { n: number; name: string; rarity: string; price: number; slot: string }[] } | null;
   event: { look: string; name: string; st: string; text: string } | null;
+  /** map puzzle (site 28.10): kind, stage, the task line, scale sums, the poisoned cup after the result */
+  puzzle: { kind: string; st: string; name: string; icon: string; line: string; sums: number[]; ans: string } | null;
   loot: { name: string; votes: number } | null;
   town: { id: string; name: string } | null;
   dungeon: { name: string; esc: boolean; opts: { n: number; label: string; icon: string; votes: number; back: boolean }[] } | null;
@@ -209,7 +211,7 @@ export interface AdaptCtx { login: string; role: string; roster: Roster }
 
 const EMPTY: SceneState = {
   kind: 'off', setKey: 'off', title: '', sub: '', hw: false, ter: '', biome: 'meadow', n: 0, party: [], reserve: 0, inParty: false, partyState: '', myRole: 'recruit',
-  until: 0, battle: null, boss: null, vote: null, trap: null, shop: null, event: null, loot: null, town: null, dungeon: null, lair: null, cmds: [], status: '',
+  until: 0, battle: null, boss: null, vote: null, trap: null, shop: null, event: null, puzzle: null, loot: null, town: null, dungeon: null, lair: null, cmds: [], status: '',
 };
 
 /** Delayed view → scene state. Never throws: a broken block is dropped, the rest still shows. */
@@ -241,6 +243,7 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
     case 'isles': case 'lair': kind = 'lair'; break;
     case 'trap': kind = st.treasure ? 'treasure' : 'trap'; break;
     case 'event': kind = 'event'; break;
+    case 'puzzle': kind = 'puzzle'; break;
     case 'vote': kind = 'vote'; break;
     case 'loot': kind = 'loot'; break;
     case 'shop': kind = 'shop'; break;
@@ -272,6 +275,7 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   if (kind === 'town') { s.town = { id: str(q.town?.id), name: str(q.town?.name, s.title || 'Город') }; s.status = `Город: ${s.town.name}`; travelCmds(q, s); }
   if (kind === 'trap' || kind === 'treasure') trapOf(q, s);
   if (kind === 'event') eventOf(q, s);
+  if (kind === 'puzzle') puzzleOf(q, s);
   if (kind === 'shop') shopOf(q, s);
   if (kind === 'loot') lootOf(q, s);
   if (kind === 'dungeon') dungeonOf(q, s);
@@ -280,7 +284,7 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
 
   // set key: what forces a rebuild of the 3D set
   const bid = s.battle ? s.battle.id : '';
-  s.setKey = `${kind}|${biome}|${bid}|${kind === 'event' ? s.event?.look : kind === 'trap' ? s.trap?.type : ''}`;
+  s.setKey = `${kind}|${biome}|${bid}|${kind === 'event' ? s.event?.look : kind === 'trap' ? s.trap?.type : kind === 'puzzle' ? s.puzzle?.kind : ''}`;
   return s;
 }
 
@@ -534,6 +538,28 @@ function eventOf(q: any, s: SceneState) {
     if (look === 'well') s.cmds.push({ kind: 'say', text: 'монетка', note: 'брось монету (до 3)' });
     if (look === 'priest') s.cmds.push({ kind: 'say', text: 'пожертвовать 10', note: 'в чашу жреца' });
   }
+}
+
+/* ---- map puzzle (site 28.10, quest.js pzHtml) ---- */
+function puzzleOf(q: any, s: SceneState) {
+  const P = q.pz && typeof q.pz === 'object' ? (q.pz as QuestPuzzle) : null;
+  if (!P) return;
+  const M = puzzleMy(P), st = str(P.st, 'answer'), kind = str(P.kind, 'riddle');
+  s.puzzle = { kind, st, name: str(P.name, 'Головоломка'), icon: str(P.icon, '🧩'), line: puzzleTask(P), sums: arr<number>(P.sums).map((x) => num(x, 0)), ans: st === 'done' ? str(P.res?.ans) : '' };
+  s.title = s.puzzle.name; s.status = `Головоломка: ${s.puzzle.name}`;
+  s.until = num(st === 'show' ? P.showUntil : P.until, 0);
+  if (st === 'done') {
+    s.cmds.push({ kind: 'info', text: str(P.res?.text, 'итог') });
+    if (M.st === 'ok') s.cmds.push({ kind: 'ok', text: 'ты ответил верно', note: M.coins ? `+${M.coins}` : undefined });
+    else if (M.st === 'bad') s.cmds.push({ kind: 'info', text: 'твой ответ — мимо', note: M.hp ? `яд −${M.hp} ❤` : undefined });
+    return;
+  }
+  if (!s.inParty) { s.cmds.push({ kind: 'info', text: 'отвечает только отряд' }); return; }
+  if (st === 'show') { s.cmds.push({ kind: 'info', text: kind === 'count' ? 'считай зверьков на стриме' : 'смотри на стрим и запоминай' }); return; }
+  if (M.ans) { s.cmds.push({ kind: 'ok', text: `твой ответ: ${puzzleAnsText(P, M.ans)}`, note: kind === 'riddle' ? 'верный или нет — в итоге' : undefined }); return; }
+  const bt = arr<any[]>(P.bt).filter((b) => Array.isArray(b) && typeof b[1] === 'string');
+  if (!puzzleTyped(kind) && bt.length) for (const b of bt.slice(0, 4)) s.cmds.push({ kind: 'say', text: b[1], note: str(b[0]) || undefined });
+  else s.cmds.push({ kind: 'say', text: str(P.how, 'ответ в чат'), note: s.puzzle.line ? s.puzzle.line.slice(0, 60) : undefined });
 }
 
 /* ---- shop ---- */

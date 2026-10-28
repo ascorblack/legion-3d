@@ -10,8 +10,8 @@
  *   - NEAR: the closest volume whose footprint is within the proximity reach (default 2.2 m) of the player's feet,
  *     unless the interactable says `proximity: false`.
  *   - target = aimed ?? near.
- * Use: E → target (aimed or nearby); LMB → only `aimed` (so clicking near a building never opens it); RMB is never
- * routed here (block). No allocations per frame except the exact raycast while the crosshair is inside an AABB.
+ * Use: E → target (aimed or nearby). Mouse clicks never interact (like in games: LMB swings, RMB blocks) —
+ * use('click') is a no-op kept for the contract. No allocations per frame except the exact raycast while the crosshair is inside an AABB.
  *
  * Highlight: exactly one object — the current target — gets the silhouette outline (src/engine/outline.ts; drawn by
  * the engine: screen-space mask + edge at q2–3, inverted hull at q0–1). An interactable with `highlight(on)` draws its
@@ -56,7 +56,7 @@ export interface InteractSystemEx extends InteractSystem {
    * (0 in first person; the TP boom length otherwise), added to the aim reach.
    */
   update(camera: THREE.Camera, feet: { x: number; y: number; z: number }, eyeExtra?: number): void;
-  /** Use the current target: 'key' → aimed or nearby, 'click' → aimed only. Returns true if something was used. */
+  /** Use the current target: 'key' → aimed or nearby; 'click' → nothing (clicks never interact). Returns true if something was used. */
   use(how: 'key' | 'click'): boolean;
   /** Off: no targets (menus, overlays, loading). */
   setEnabled(on: boolean): void;
@@ -215,7 +215,8 @@ export function createInteractSystem(opts: { scene?: THREE.Object3D } = {}): Int
     },
 
     use(how) {
-      const t = how === 'click' ? aimed : (aimed ?? near);
+      if (how !== 'key') return false;   // the mouse never interacts with the world (E / F only)
+      const t = aimed ?? near;
       if (!t) return false;
       try { t.use(how); } catch (e) { console.error('[l3d] interact', t.id, e); }
       return true;

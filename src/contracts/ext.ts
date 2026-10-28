@@ -38,9 +38,9 @@ export interface Interactable {
   reach?: number;
   /** If false the item is only usable by crosshair aim (not by E proximity). Default true. */
   proximity?: boolean;
-  /** Called on E or LMB while aimed. */
+  /** Called on E (aimed or nearby). Mouse clicks never call it (the 'click' value is kept for compatibility). */
   use(how: 'key' | 'click'): void;
-  /** Optional secondary action (RMB / F), e.g. «Осмотреть». */
+  /** Optional secondary action (F), e.g. «Осмотреть». */
   alt?: { label: string; use(): void };
   enabled?: () => boolean;
   /** Draw your own highlight while targeted (then the generic silhouette outline is skipped). Exactly one target is highlighted at a time. */

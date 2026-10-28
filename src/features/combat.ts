@@ -6,7 +6,7 @@
  *
  * LMB is an attack only when: the setting is on, the pointer is locked in gameplay (no menu, modal, photo mode or
  * text field), not in a scene-mode / loading room, on the street, in a 3D shop or in the mine (not in hybrid rooms),
- * and the crosshair is NOT on an interactable (doors, goods and stones keep LMB — a swing never buys anything). The
+ * wherever the crosshair is (clicks never interact — doors, goods and stones are used with E; a swing never buys). The
  * swing animation itself stays with the controls feature (vm.swing + meAv.play('swing')); this feature adds the hit,
  * the bow draw and the effects.
  *
@@ -96,7 +96,7 @@ export default coreFeature({
       enabled, locked: input.locked, gameplay: ctx.gameplay() && input.gameplay,
       menu: !!ctx.state.menu, modals: (input as InputEx).modals?.length ?? 0, photo, typing: isTyping(),
       stage: !!rooms.stage, busy: rooms.busy, room: ctx.state.inRoom ? rooms.kind : null,
-      aimed: !ignoreAim && !!interact.aimed,
+      aimed: false,   // clicks never interact: LMB swings even on doors, goods and stones (E / F use them)
     });
 
     // capture phase on window: runs BEFORE the controls' canvas listener, so the bow draw is set up before

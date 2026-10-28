@@ -19,7 +19,7 @@ const feet = (x: number, z: number) => ({ x, y: 0, z });
 const door = (id: string, x: number) => new THREE.Box3(new THREE.Vector3(x - 0.6, 0, -1.4), new THREE.Vector3(x + 0.6, 2.6, 0));
 
 describe('InteractSystem', () => {
-  it('aims through the crosshair at a Box3 within reach; LMB uses only the aimed target', () => {
+  it('aims through the crosshair at a Box3 within reach; only E uses it — a mouse click never interacts', () => {
     const s = createInteractSystem();
     const use = vi.fn();
     s.add({ id: 'forge', label: 'Войти: Кузня', hit: door('forge', 0), use });
@@ -27,16 +27,32 @@ describe('InteractSystem', () => {
     s.update(cam(0, 2, 0), feet(0, 2));
     expect(s.aimed?.id).toBe('forge');
     expect(s.target?.id).toBe('forge');
-    expect(s.use('click')).toBe(true);
-    expect(use).toHaveBeenLastCalledWith('click');
-    // same spot, looking away: not aimed; still near → E works, LMB does nothing
+    expect(s.use('click')).toBe(false);   // LMB on an aimed door: nothing
+    expect(use).not.toHaveBeenCalled();
+    expect(s.use('key')).toBe(true);
+    expect(use).toHaveBeenLastCalledWith('key');
+    // same spot, looking away: not aimed; still near → E works, a click does nothing
     s.update(cam(0, 2, Math.PI), feet(0, 2));
     expect(s.aimed).toBeNull();
     expect(s.near?.id).toBe('forge');
     expect(s.use('click')).toBe(false);
     expect(s.use('key')).toBe(true);
-    expect(use).toHaveBeenLastCalledWith('key');
     expect(use).toHaveBeenCalledTimes(2);
+  });
+
+  it('a click on an aimed door, shop good or mine stone never uses it; E does', () => {
+    const s = createInteractSystem();
+    const calls: string[] = [];
+    const box = (x: number) => new THREE.Box3(new THREE.Vector3(x - 0.3, 0.8, -1.2), new THREE.Vector3(x + 0.3, 1.5, -0.8));
+    for (const [id, x] of [['door:mine', 0], ['good:claw', 3], ['stone:7', 6]] as const) s.add({ id, label: id, hit: box(x), use: (how) => calls.push(`${id}:${how}`) });
+    for (const x of [0, 3, 6]) {
+      s.update(cam(x, 0, 0), feet(x, 0));
+      expect(s.aimed).not.toBeNull();
+      expect(s.use('click')).toBe(false);
+    }
+    expect(calls).toEqual([]);
+    for (const x of [0, 3, 6]) { s.update(cam(x, 0, 0), feet(x, 0)); s.use('key'); }
+    expect(calls).toEqual(['door:mine:key', 'good:claw:key', 'stone:7:key']);
   });
 
   it('ignores volumes beyond reach (aim 3 m from the eye + TP extra, proximity 2.2 m from the feet)', () => {

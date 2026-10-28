@@ -37,7 +37,7 @@ export interface GameUi extends Ui {
    */
   addTab(id: string, def: MenuTabDef): () => void;
   removeTab(id: string): boolean;
-  /** Crosshair prompt line, e.g. «[E] Войти: Кузня», «[ЛКМ] Купить: Коготок · [ПКМ] Осмотреть»; «!» prefix = muted; null hides. */
+  /** Crosshair prompt line, e.g. «[E] Войти: Кузня», «[E] Купить: Коготок · [F] Осмотреть»; «!» prefix = muted; null hides. */
   prompt(text: string | null): void;
   /** GameContext passed to feature tabs' render(el, ctx). */
   setGameContext(ctx: GameContext): void;

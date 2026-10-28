@@ -9,6 +9,13 @@
  * Changes live (no reload) with smooth transitions; everything is undone when the night ends, the town changes or the
  * setting «События → Ночь Тыквенной Луны» is off. Dev pages: `?hwc=look|portal|lp|off` (dev/game.ts).
  * Budget: portal 3 draw calls (frame, vortex, street glow), grading 0 (shader tail on existing materials), ghosts 0.
+ *
+ * NPCs (site 28.10, hwnpc.js): with `look` on the Fair the site puts «Ступа сладостей» (candy exchange) and «Призрачный
+ * Фонарщик» (battle pass, 20 lanterns lit = `hero.hw.p`) on the middle street right of the Mine. Their models join the
+ * Halloween extras mesh (src/events/halloween/npcgeo.ts, +0 draw calls; lantern halos in the halo points); here: where
+ * (src/events/halloween/hwnpc.ts — the site's own LGCityHW.npcSpots + LGHwNpc.geo, table fallback), the pass level, and
+ * the prompts: aim + E opens the site's own window through the room manager → openSite → LGCity.panel(id) (city.js
+ * openPanel → hwOpen → LGHwNpc.open). The walk grid gets their obstacles in src/net/site.ts. No own requests.
  */
 import * as THREE from 'three';
 import { registerSettingRow, settingValue } from '../ui/settings-ext';
@@ -18,6 +25,8 @@ import { parseHwc, hwcMode, modeKey, portalSpot, HW_OFF, type HwMode, type Porta
 import { DeadGrade } from '../events/halloween/dead';
 import { buildPortal, type Portal } from '../events/halloween/portal';
 import { GhostCrowd, type CrowdEntry } from '../events/halloween/ghosts';
+import { npcPlaces, npcWorld, passLevel, type NpcWorld } from '../events/halloween/hwnpc';
+import type { Interactable } from '../contracts/ext';
 import { fromX, fromZ, toX } from '../world/coords';
 import type { Appearance } from '../contracts';
 import type { World3DExt } from '../contracts/ext';
@@ -69,7 +78,9 @@ export default coreFeature({
       const m = hwcMode(parseHwc(ctx.store.hero?.hwc), ctx.layout()?.id, settingValue<string>(HWCITY_SETTING, 'on') !== 'off');
       const lookChanged = m.look !== want.look;
       want = m;
+      halloweenOpts.npcLv = passLevel(ctx.store.hero);
       if (lookChanged || !m.look) {
+        halloweenOpts.npcs = m.look ? npcPlaces(window).map(npcWorld) : null;
         halloweenOpts.hw = m.look;
         setEventOverride(m.look ? 'halloween' : null, m.look ? 'hw' : '', () => ctx.layout()?.id === 'fair');
       }
@@ -82,9 +93,32 @@ export default coreFeature({
         if (spot) { portal = buildPortal(spot, reduced); portal.setOpen(0); group.add(portal.group); }
       }
       ghosts.on = m.ghosts;
+      syncNpcs();
+    };
+
+    /* ---- NPC prompts (aim + E → the site's own window) ---- */
+    let npcOffs: (() => void)[] = [], npcKey = '', npcW: unknown = null;
+    const syncNpcs = () => {
+      const list: NpcWorld[] = want.look && ctx.layout()?.id === 'fair' ? (halloweenOpts.npcs ?? []) : [];
+      const w = ctx.world(), key = list.map((n) => n.id + n.x.toFixed(2)).join();
+      if (key === npcKey && npcW === w) return;
+      npcKey = key; npcW = w;
+      for (const o of npcOffs) o(); npcOffs = [];
+      for (const n of list) {
+        const gy = w.groundAt(fromX(n.x), fromZ(n.z));
+        const zs = n.base.map((b) => b[1]), z0 = Math.min(...zs) - 0.45, z1 = Math.max(...zs) + 0.45;
+        const it: Interactable = {
+          id: 'npc:' + n.id, label: n.id === 'hwshop' ? `Обменять конфеты: ${n.title}` : `Баттл-пасс: ${n.title}`, icon: n.icon,
+          hit: new THREE.Box3(new THREE.Vector3(n.x0 + 0.15, gy, z0), new THREE.Vector3(n.x1 - 0.15, gy + n.h, z1)), reach: 3.4,
+          enabled: () => want.look && !ctx.state.inRoom,
+          use: () => { void ctx.rooms.enter(n.id); },
+        };
+        npcOffs.push(ctx.interact.add(it));
+      }
     };
 
     const offHero = ctx.store.on('hero', evaluate);
+    syncNpcs();
     const offWorld = ctx.onWorld(() => evaluate());
     const onSet = (e: Event) => { const k = (e as CustomEvent).detail?.key; if (!k || k === HWCITY_SETTING) evaluate(); };
     window.addEventListener('l3d:settings', onSet);
@@ -115,6 +149,7 @@ export default coreFeature({
 
     ctx.dev.hwcity = {
       mode: () => ({ ...want, key: modeKey(want) }),
+      npcs: () => ({ list: (halloweenOpts.npcs ?? []).map((n) => ({ id: n.id, x: +n.x.toFixed(2), z: +n.z.toFixed(2) })), lv: halloweenOpts.npcLv, prompts: npcOffs.length }),
       state: () => ({ deadK, portalK, spot, facadeZ, dead: dead?.counts ?? null, ghosts: ghosts.count, settled: ghosts.settled(crowd()) }),
       evaluate,
     };
@@ -122,6 +157,8 @@ export default coreFeature({
       offFrame(); offHero(); offWorld(); offWalk(); window.removeEventListener('l3d:settings', onSet); offRow();
       ghosts.dispose(crowd(), me(), ctx.vm.root);
       dropWorld(); group.removeFromParent();
+      for (const o of npcOffs) o(); npcOffs = [];
+      halloweenOpts.npcs = null;
       if (halloweenOpts.hw) { halloweenOpts.hw = false; setEventOverride(null); }
     };
   },

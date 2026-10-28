@@ -49,7 +49,7 @@ export class Hud {
     this.mini.setOn(!!c.settings.minimap);
   }
 
-  /** Crosshair prompt from the interact system: «[E] Войти: Кузня», «[ЛКМ] Купить: …»; null hides it. */
+  /** Crosshair prompt from the interact system: «[E] Войти: Кузня», «[E] Купить: … · [F] Осмотреть»; null hides it. */
   setPrompt(text: string | null) {
     this.driven = true;
     const t = text && text.trim() ? text : null;

@@ -7,10 +7,12 @@ import { DeadGrade, DEAD_U, patchDead } from '../src/events/halloween/dead';
 import { buildPortal } from '../src/events/halloween/portal';
 import { GhostCrowd, type CrowdEntry } from '../src/events/halloween/ghosts';
 import halloween, { halloweenOpts } from '../src/events/halloween';
+import { npcPlaces, npcWorld } from '../src/events/halloween/hwnpc';
 import { toX, toZ, fromX, fromZ } from '../src/world/coords';
 import type { Appearance } from '../src/contracts';
 
 const city = eventCity();
+const info = (g: THREE.Object3D): any => { let r: any = null; g.traverse((o) => { if (o.userData.halloween) r = o.userData.halloween; }); return r; };
 const drawables = (root: THREE.Object3D) => {
   const out: THREE.Object3D[] = [];
   root.traverse((o) => { const m = o as THREE.Mesh; if ((m.isMesh || (o as THREE.Points).isPoints || (o as THREE.LineSegments).isLine) && o.visible && ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count > 0 : true)) out.push(o); });
@@ -113,6 +115,46 @@ describe('hwc: extras (cauldron, candles, witch, bats, cobwebs)', () => {
       d();
       expect(h.ctx.group.children.length).toBe(0); expect(h.scene.children.length).toBe(kids); expect(h.hooks).toBe(0);
     } finally { halloweenOpts.hw = false; }
+  });
+  it('the NPCs (site hwnpc.js) join the extras mesh: +0 draw calls, ≤ 15 with the portal, lanterns follow the pass level, every quality, clean dispose', () => {
+    const npcs = npcPlaces({}).map(npcWorld);
+    for (const q of [0, 2] as const) {
+      halloweenOpts.hw = true;
+      const h0 = eventHarness(q); const d0 = halloween.setup(h0.ctx); h0.frame(100);
+      const calls0 = drawables(h0.ctx.group).length;
+      const ex0 = (h0.ctx.group.getObjectByName('halloween:hw-extras') as THREE.Mesh).geometry.getAttribute('position').count;
+      d0();
+      halloweenOpts.npcs = npcs; halloweenOpts.npcLv = 7;
+      try {
+        const h = eventHarness(q);
+        const kids = h.scene.children.length;
+        const d = halloween.setup(h.ctx); h.frame(100);
+        expect(drawables(h.ctx.group).length).toBe(calls0);
+        expect(calls0 + 3).toBeLessThanOrEqual(15);
+        const mesh = h.ctx.group.getObjectByName('halloween:hw-extras') as THREE.Mesh, g = mesh.geometry;
+        expect(g.getAttribute('position').count).toBeGreaterThan(ex0);
+        const fly = g.getAttribute('aFly'), lamps = new Set<number>();
+        for (let i = 0; i < fly.count; i++) if (fly.getX(i) > 10.5) lamps.add(Math.round(fly.getX(i)));
+        expect(lamps.size).toBe(20);
+        expect(info(h.ctx.group).npcs).toEqual(['hwshop', 'hwpass']);
+        // the lanterns' lit count follows hero.hw.p live
+        halloweenOpts.npcLv = 13; h.frame(5);
+        expect(info(h.ctx.group).lampLv()).toBe(13);
+        d();
+        expect(h.ctx.group.children.length).toBe(0); expect(h.scene.children.length).toBe(kids); expect(h.hooks).toBe(0);
+      } finally { halloweenOpts.hw = false; halloweenOpts.npcs = null; halloweenOpts.npcLv = 0; }
+    }
+  });
+  it('NPC models stand inside their obstacle ellipses: pumpkins and candles keep clear of them', () => {
+    const npcs = npcPlaces({}).map(npcWorld);
+    halloweenOpts.hw = true; halloweenOpts.npcs = npcs;
+    try {
+      const h = eventHarness(2); const d = halloween.setup(h.ctx); h.frame(10);
+      const inf = info(h.ctx.group);
+      for (const c of inf.plan.clusters) for (const n of npcs) for (const [cx, cz, rx, rz] of n.base)
+        expect(((c.x - cx) / (rx + 0.3)) ** 2 + ((c.z - cz) / (rz + 0.3)) ** 2, `cluster at ${c.x.toFixed(1)},${c.z.toFixed(1)}`).toBeGreaterThan(1);
+      d();
+    } finally { halloweenOpts.hw = false; halloweenOpts.npcs = null; }
   });
 });
 

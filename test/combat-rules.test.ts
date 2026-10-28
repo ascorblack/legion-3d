@@ -78,7 +78,7 @@ describe('input gate', () => {
   });
   it('refuses everything else, interactables first-class', () => {
     expect(gate({ ...OK, enabled: false })).toBe('off');
-    expect(gate({ ...OK, aimed: true })).toBe('interactable');
+    expect(gate({ ...OK, aimed: true })).toBeNull();   // clicks never interact: LMB swings even on doors / goods / stones
     expect(gate({ ...OK, room: 'shop3d' })).toBeNull();   // 3D shops fight too (goods under the crosshair keep LMB)
     expect(gate({ ...OK, room: 'hybrid' })).toBe('room');
     expect(gate({ ...OK, stage: true })).toBe('scene');

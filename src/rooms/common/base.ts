@@ -244,8 +244,8 @@ export class RoomBase {
   }
   /**
    * Open the card of exactly this good (bound to it: the purchase uses g.it, never the current aim).
-   * buy = true (E / LMB on a coin good) → the full card with the confirmation «Купить «X» за Y? Да / Нет» shown;
-   * otherwise (F / RMB «Осмотреть», stream-only goods) → the full card with «Купить…».
+   * buy = true (E on a coin good) → the full card with the confirmation «Купить «X» за Y? Да / Нет» shown;
+   * otherwise (F «Осмотреть», stream-only goods) → the full card with «Купить…».
    */
   openGood(g: Good, buy: boolean): void {
     if (!this.card) return;

@@ -17,7 +17,10 @@ import { planHalloween, PUMPKIN_HALF, type PlaceCity, type Plan, type Cluster, t
 import { pumpkinGeometry, batGeometry, ghostGeometry, groundQuad, cornerQuad, buntingGeometry } from './geo';
 import { jackFaceTexture, glowTexture, fogTexture, webTexture } from './tex';
 import { planHwExtras, type HwExtras } from './hwcity';
-import { extrasGeometry, extrasGlows } from './hwgeo';
+import { extrasGeometry, extrasGlows, Parts } from './hwgeo';
+import { stupaGeometry, passGeometry, lanternPoints, poleFlame } from './npcgeo';
+import type { NpcWorld } from './hwnpc';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { selfLit } from '../common';
 import { glowPoints } from '../../world/sky';
 import { groundSpec } from '../../world/ground';
@@ -40,7 +43,7 @@ export const HALLOWEEN_BUDGET: Record<QualityLevel, { clusters: number; hang: nu
  * props — a cauldron by the gate, candle trios by the door pumpkins, a witch on a broom circling over the gate,
  * more bats and cobwebs high on the facades. +1 draw call (the extras are one merged mesh; flames join the halos).
  */
-export const halloweenOpts = { hw: false };
+export const halloweenOpts: { hw: boolean; npcs: NpcWorld[] | null; npcLv: number } = { hw: false, npcs: null, npcLv: 0 };
 const HW_MORE = { bats: 8, webs: 10 };
 
 const TINTS = [[1, 1, 1], [1, 0.8, 0.62], [1, 1.14, 0.62], [0.9, 0.92, 0.82]];
@@ -128,8 +131,14 @@ function setup(ctx: EventContext): () => void {
 
 function build(ctx: EventContext, hooks: Hooks): () => void {
   const city = placeCity(ctx);
-  const plan = planHalloween(city);
   const hw = halloweenOpts.hw;
+  // «Ночь Тыквенной Луны» NPCs (site hwnpc.js, only with the hw dress on the Fair): their bases stay clear of pumpkins / candles
+  const npcs = hw && ctx.layout.id === 'fair' && halloweenOpts.npcs?.length ? halloweenOpts.npcs : null;
+  if (npcs) {
+    const free0 = city.free;
+    city.free = (X, Z) => free0(X, Z) && !npcs.some((n) => n.base.some(([cx, cz, rx, rz]) => ((X - cx) / (rx + 0.35)) ** 2 + ((Z - cz) / (rz + 0.35)) ** 2 <= 1));
+  }
+  const plan = planHalloween(city);
   const L = ctx.layout;
   const upper = L.buildings.filter((b) => !b.soon && b.door.y < 1100 && b.hit[3] <= 1000 && b.id !== 'board' && b.id !== 'anvil');
   const gateB = L.buildings.find((b) => b.id === 'gate');
@@ -199,7 +208,9 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
   const strings = new THREE.LineSegments(stringGeo, stringMat); strings.name = 'halloween:strings'; strings.frustumCulled = false; group.add(strings);
 
   /* ---- halos (additive glow points; flicker per point in the world's glow shader). Capacity = every jack + lantern. */
-  const MAXH = plan.clusters.reduce((a, c) => a + c.items.filter((i) => i.kind).length, 0) + HALLOWEEN_BUDGET[3].hang + plan.lanterns.length + plan.ghosts.length + extraGlow.length / 7;
+  const passNpc = npcs?.find((n) => n.id === 'hwpass') ?? null;
+  const lampPts = passNpc ? lanternPoints(passNpc, city.groundAt(passNpc.x, passNpc.z)) : [];
+  const MAXH = plan.clusters.reduce((a, c) => a + c.items.filter((i) => i.kind).length, 0) + HALLOWEEN_BUDGET[3].hang + plan.lanterns.length + plan.ghosts.length + extraGlow.length / 7 + lampPts.length + 1;
   const haloPts = glowPoints(new Array(Math.max(1, MAXH) * 7).fill(0).map((_, i) => (i % 7 === 3 ? 0.01 : 0)), 7, glowTex, { flicker: 0.16, intensity: 0.6 });
   haloPts.name = 'halloween:halos'; haloPts.frustumCulled = false; group.add(haloPts); own(haloPts.geometry); own(haloPts.material as THREE.Material);
   const hPos = haloPts.geometry.getAttribute('position') as THREE.BufferAttribute, hSize = haloPts.geometry.getAttribute('size') as THREE.BufferAttribute, hCol = haloPts.geometry.getAttribute('color') as THREE.BufferAttribute;
@@ -288,24 +299,36 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
   };
 
   /* ---- «Ночь Тыквенной Луны» extras: cauldron, candles, the flying witch (1 draw) */
-  const flyU = { uTime: { value: 0 }, uFlyC: { value: new THREE.Vector3() }, uFlyR: { value: 6 }, uFlyW: { value: 0.32 } };
+  const flyU = { uTime: { value: 0 }, uFlyC: { value: new THREE.Vector3() }, uFlyR: { value: 6 }, uFlyW: { value: 0.32 }, uLv: { value: 0 }, uBob: { value: 1 } };
+  flyU.uBob.value = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
   let extrasMesh: THREE.Mesh | null = null;
   if (extras) {
-    const geo = own(extrasGeometry(extras));
+    let geo = extrasGeometry(extras);
+    if (npcs) {   // the NPCs join the extras mesh: +0 draw calls (aFly codes: 2 mortar bob, 3 ghost bob, 10 + i lantern i)
+      const p = new Parts();
+      for (const n of npcs) (n.id === 'hwshop' ? stupaGeometry : passGeometry)(p, n, city.groundAt(n.x, n.z));
+      const ng = p.build();
+      const merged = mergeGeometries([geo, ng], false);
+      if (merged) { geo.dispose(); ng.dispose(); geo = merged; geo.computeBoundingSphere(); } else ng.dispose();
+    }
+    own(geo);
     const mat = own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 }));
     flyU.uFlyC.value.set(extras.witch.cx, extras.witch.cy, extras.witch.cz); flyU.uFlyR.value = extras.witch.r;
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, flyU);
-      const fly = `if (aFly > 0.5) {
+      const fly = `if (aFly > 0.5 && aFly < 1.5) {
           float fa = uTime * uFlyW, ca = cos(fa), sa = sin(fa);
           vec3 ft = vec3(-sa, 0.0, ca), fz = vec3(-ca, 0.0, -sa);
           float bank = 0.25;
           vec3 l = vec3(LV.x, LV.y * cos(bank) - LV.z * sin(bank), LV.y * sin(bank) + LV.z * cos(bank));
           LV = l.x * ft + vec3(0.0, l.y, 0.0) + l.z * fz OFS;
         }`;
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aFly;\nuniform float uTime; uniform vec3 uFlyC; uniform float uFlyR; uniform float uFlyW;')
+      const bob = `if (aFly > 1.5 && aFly < 3.5) { float bk = aFly < 2.5 ? 0.035 : 0.06; transformed.y += uBob * bk * sin(uTime * (aFly < 2.5 ? 1.7 : 1.15) + aFly); }`;
+      const lamp = `if (aFly > 10.5) { float lit = step(aFly - 10.0, uLv + 0.5); vColor.rgb = mix(vec3(0.13, 0.12, 0.17), vColor.rgb, lit); }`;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aFly;\nuniform float uTime; uniform vec3 uFlyC; uniform float uFlyR; uniform float uFlyW; uniform float uLv; uniform float uBob;')
+        .replace('#include <color_vertex>', '#include <color_vertex>\n' + lamp)
         .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n' + fly.replace(/LV/g, 'objectNormal').replace('OFS', ''))
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + fly.replace(/LV/g, 'transformed').replace('OFS', '+ uFlyC + uFlyR * vec3(ca, 0.0, sa) + vec3(0.0, 0.35 * sin(uTime * 1.3), 0.0)'));
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + fly.replace(/LV/g, 'transformed').replace('OFS', '+ uFlyC + uFlyR * vec3(ca, 0.0, sa) + vec3(0.0, 0.35 * sin(uTime * 1.3), 0.0)') + '\n' + bob);
     };
     selfLit(mat, 0.3);
     mat.customProgramCacheKey = () => 'l3d-hw-extras';
@@ -314,6 +337,15 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
   }
 
   /* ---- placement of instances for the current quality */
+  let lampHalo0 = 0, lampLv = -1;
+  const syncLamps = () => {
+    const lv = Math.max(0, Math.min(20, halloweenOpts.npcLv | 0));
+    flyU.uLv.value = lv;
+    if (lv === lampLv || !lampPts.length) return;
+    lampLv = lv;
+    for (let i = 0; i < lampPts.length; i++) hSize.setX(lampHalo0 + i, i < lv ? 0.75 : 0);
+    hSize.needsUpdate = true;
+  };
   let q = ctx.quality(), batN = 0, ghostN = 0, fogN = 0, webLimit = 0, hangN = 0, clustersN = 0;
   const writeInstances = () => {
     const B = HALLOWEEN_BUDGET[q];
@@ -370,12 +402,16 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
     fogN = Math.min(B.fog, plan.fog.length); fogMesh.count = fogN * 2; fogMesh.visible = fogN > 0;
     webLimit = B.webs + (extras ? HW_MORE.webs : 0); webs.count = Math.min(webN, webLimit);
     for (let i = 0; i + 6 < extraGlow.length; i += 7) halo(extraGlow[i], extraGlow[i + 1], extraGlow[i + 2], extraGlow[i + 3], extraGlow[i + 4], extraGlow[i + 5], extraGlow[i + 6]);
+    lampHalo0 = haloN; lampLv = -1;
+    for (const l of lampPts) halo(l.x, l.y, l.z + 0.03, 0, 1, 0.6, 0.2);   // sizes by the pass level (syncLamps)
+    if (passNpc) { const f = poleFlame(passNpc, city.groundAt(passNpc.x, passNpc.z)); halo(f.x, f.y, f.z, 0.9, 1, 0.62, 0.22); }
     haloFixed = haloN;
     for (let i = 0; i < Math.min(B.ghosts, plan.ghosts.length); i++) halo(plan.ghosts[i].x, plan.ghosts[i].y + 0.3, plan.ghosts[i].z, 2.0, 0.55, 0.45, 1.0);
     haloPts.geometry.setDrawRange(0, haloN); hPos.needsUpdate = hSize.needsUpdate = hCol.needsUpdate = true;
     haloPts.geometry.computeBoundingSphere();
   };
   writeInstances();
+  syncLamps();
   offs.push(ctx.onQuality((nq) => { q = nq; writeInstances(); }));
 
   /* ---- per frame */
@@ -392,6 +428,7 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
     poolMat.opacity = 0.52 + 0.06 * Math.sin(t * 8.3) * Math.sin(t * 2.1);
     fogMat.opacity = 0.27 + 0.04 * Math.sin(t * 0.3);
     batU.uTime.value = t; buntU.uTime.value = t; flyU.uTime.value = t;
+    if (lampPts.length && (halloweenOpts.npcLv | 0) !== lampLv) syncLamps();
     hu.uTime.value = t;
     if (ctx.renderer) { const h = ctx.renderer.domElement.height || 720; hu.uScale.value = h / (2 * Math.tan((ctx.camera.fov * Math.PI / 180) / 2)); }
     // bats
@@ -427,7 +464,7 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
   }));
 
   ctx.group.add(group);
-  group.userData.halloween = { plan, draws: 0, extras } as unknown as HalloweenInfo;
+  group.userData.halloween = { plan, draws: 0, extras, npcs: npcs?.map((n) => n.id) ?? [], lampLv: () => flyU.uLv.value } as unknown as HalloweenInfo;
 
   return () => {
     for (const u of offs.reverse()) u();

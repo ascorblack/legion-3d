@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process';
 const args = process.argv.slice(2);
 const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => { const i = a.indexOf('='); return i < 0 ? [a.slice(2), '1'] : [a.slice(2, i), a.slice(i + 1)]; }));
 const out = args.find((a) => !a.startsWith('--')) || 'release/hw';
+// --only=hw-npcs,hw-npc-pass: render just those views
 mkdirSync(out, { recursive: true });
 const Q = +(opt.q ?? 3), W = +(opt.w || 2560), H = +(opt.h || 1440);
 // views: hwc state, hero (site px), bots gathered around [x, y, rx, ry] px (null = where they are), free camera (metres:
@@ -20,6 +21,10 @@ export const VIEWS = [
   { name: 'hw-decor', hwc: 'look', what: 'the Fair in its Halloween dress, «dead» grade: cauldron by the gate, candles, cobwebs, bats', hero: [3150, 900], bots: [3000, 1000, 300, 60], cam: [34.0, 2.6, 6.2], at: [28.6, 1.3, 0.6], fov: 58 },
   { name: 'hw-portal', hwc: 'lp', what: 'the portal at the gate, the own hero as a ghost', hero: [2700, 900], bots: [2560, 1010, 160, 40], cam: [25.4, 2.0, 5.6], at: [27.5, 1.6, 0.3], fov: 50 },
   { name: 'hw-ghosts', hwc: 'lp', what: 'the dead city with every cat a ghost', hero: [2470, 1010], bots: [2470, 960, 320, 75], cam: [24.7, 2.8, 7.6], at: [24.9, 0.9, 2.2], fov: 56 },
+  // NPCs (site hwnpc.js 28.10) on the middle street right of the Mine: «Ступа сладостей» x ≈ 28.0 m, Фонарщик x ≈ 31.3 m, z ≈ 12.2; the middle street's ground is y ≈ −1.4 m
+  { name: 'hw-npcs', hwc: 'look', lv: 7, what: 'the Halloween NPCs by the canal: «Ступа сладостей» and the Ghost Lamplighter (7 of 20 lanterns lit)', hero: [2960, 1462], bots: [2900, 1300, 350, 40], cam: [29.7, 0.7, 18.0], at: [29.7, -0.15, 12.0], fov: 54 },
+  { name: 'hw-npc-stupa', hwc: 'look', lv: 7, what: 'the candy-exchange witch in her mortar, close', hero: [2700, 1465], bots: [2500, 1300, 150, 40], cam: [26.9, 0.45, 15.3], at: [28.0, -0.2, 12.3], fov: 50 },
+  { name: 'hw-npc-pass', hwc: 'lp', lv: 13, what: 'the Ghost Lamplighter under his arch, 13 of 20 lanterns lit, portal night', hero: [3330, 1465], bots: [3300, 1300, 150, 40], cam: [32.3, 0.35, 15.8], at: [31.2, 0.05, 12.2], fov: 54 },
   { name: 'hw-wide', hwc: 'lp', what: 'wide view along the street: portal, witch and bats over the gate', hero: [2300, 1000], bots: [2600, 960, 400, 60], cam: [20.5, 3.0, 9.5], at: [28.8, 3.9, 1.0], fov: 64 },
 ];
 
@@ -49,10 +54,11 @@ await p.evaluate(() => {
     if (cam.fov !== c.fov) { cam.fov = c.fov; cam.updateProjectionMatrix(); }
   });
 });
-for (const v of VIEWS) {
+for (const v of VIEWS.filter((x) => !opt.only || opt.only.split(',').includes(x.name))) {
   await p.evaluate((v) => {
     const g = window.__l3dGame, D = window.__demo;
     if (g.hwcity.mode().key !== (v.hwc === 'look' ? 'ld' : 'ldpg')) D.hwc(v.hwc);
+    if (v.lv != null && D.hwlv) D.hwlv(v.lv);
     g.player.teleport(v.hero[0], v.hero[1]);
     if (v.bots) {
       const [cx, cy, rx, ry] = v.bots, L = g.ctx.layout();
@@ -72,8 +78,8 @@ for (const v of VIEWS) {
   const png = `${out}/${v.name}.png`;
   await p.screenshot({ path: png, timeout: 240000 });
   await p.evaluate(() => window.__l3dGame.engine.pause(false));
-  const st = await p.evaluate(() => { const g = window.__l3dGame, s = g.engine.stats(); return { q: g.engine.quality, scale: s.scale, pr: g.engine.renderer.getPixelRatio(), calls: s.calls, tris: s.tris, hwc: g.hwcity.mode().key, ...g.hwcity.state() }; });
-  console.log(png, '—', v.what, JSON.stringify({ q: st.q, scale: st.scale, pr: st.pr, calls: st.calls, tris: st.tris, hwc: st.hwc, deadK: st.deadK, portalK: st.portalK, ghosts: st.ghosts }));
+  const st = await p.evaluate(() => { const g = window.__l3dGame, s = g.engine.stats(); return { q: g.engine.quality, scale: s.scale, pr: g.engine.renderer.getPixelRatio(), calls: s.calls, tris: s.tris, hwc: g.hwcity.mode().key, ...g.hwcity.state(), npcs: g.hwcity.npcs?.() }; });
+  console.log(png, '—', v.what, JSON.stringify({ q: st.q, scale: st.scale, pr: st.pr, calls: st.calls, tris: st.tris, hwc: st.hwc, deadK: st.deadK, portalK: st.portalK, ghosts: st.ghosts, npcs: st.npcs }));
   if (opt.jpg) execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', png, '-vf', 'scale=1600:-1', '-q:v', '4', png.replace(/\.png$/, '.jpg')]);
 }
 await b.close();

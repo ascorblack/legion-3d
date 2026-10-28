@@ -1,14 +1,14 @@
 /**
- * Controls: E = use the target (aimed or nearby), LMB = use only what the crosshair is on (else swing),
- * F = the target's secondary action (alt), RMB = block (never opens anything). Space (jump) is read by the player
- * controller from input.consumeJump(). First click on the canvas grabs the pointer — on the street and in rooms
- * without a stage.
+ * Controls: E = use the target (aimed or nearby), F = the target's secondary action (alt, «Осмотреть»). Like in games,
+ * the mouse NEVER interacts with the world: LMB = swing / attack (src/features/combat.ts), RMB = block. Doors, goods,
+ * mine stones, NPCs, benches and signs are used only with E (and F); the aim highlight and the «[E] …» prompt show what
+ * E would use. Space (jump) is read by the player controller from input.consumeJump(). The first click on the canvas
+ * grabs the pointer — on the street and in rooms without a stage. DOM UI (menus, cards, the site's panels) still
+ * works by click: those are not world interactions.
  *
- * Scene mode (rooms.stage, hybrid rooms): the pointer is NEVER grabbed. LMB picks the room interactable under the
- * cursor (NPC, desk, station, exit) and uses it; hovering one shows a pointer cursor; RMB drag orbits the shot
- * (src/features/camera.ts). Clicks while a room is loading are ignored.
+ * Scene mode (rooms.stage, hybrid rooms): the pointer is NEVER grabbed and clicks on the 3D view do nothing; E uses
+ * the NPC / desk the hero stands at; RMB drag orbits the shot (src/features/camera.ts).
  */
-import * as THREE from 'three';
 import { coreFeature } from './types';
 
 export default coreFeature({
@@ -25,54 +25,27 @@ export default coreFeature({
       code: 'KeyF', label: 'Второе действие (осмотреть)',
       run: () => { const t = interact.target; if (!t?.alt) return false; try { t.alt.use(); } catch (e) { console.error('[l3d] alt', t.id, e); } return true; },
     });
-    const rc = new THREE.Raycaster(), ndc = new THREE.Vector2();
-    /** The stage interactable under the cursor (scene mode), or null. */
-    const pickAt = (cx: number, cy: number) => {
-      const st = rooms.stage;
-      if (!st || !st.pick) return null;
-      const r = el.getBoundingClientRect();
-      if (!(r.width > 0 && r.height > 0)) return null;
-      ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
-      ctx.camera.updateMatrixWorld();
-      rc.setFromCamera(ndc, ctx.camera);
-      return st.pick(rc.ray);
-    };
     const down = (e: MouseEvent) => {
       if (ctx.state.menu) return;
       if (rooms.busy) return;   // loading a room: never grab the pointer for a scene that may be a hybrid one
-      if (rooms.stage) {
-        // scene mode: the cursor stays free; LMB uses what is under it
-        if (e.button !== 0 || !ctx.gameplay()) return;
-        const t = pickAt(e.clientX, e.clientY);
-        if (t) { try { t.use('click'); } catch (err) { console.error('[l3d] use', t.id, err); } }
-        return;
-      }
+      if (rooms.stage) return;  // scene mode: the cursor stays free, clicks on the 3D view never use anything (E does)
       if (!input.locked) {
         input.lock();
         return;
       }
       if (!ctx.gameplay()) return;
-      if (e.button === 0) { if (!interact.use('click')) { vm.swing(); meAv.play('swing'); } }
+      // LMB never interacts (no interact.use here): it is a swing even when the crosshair is on a door, a good or a stone
+      if (e.button === 0) { vm.swing(); meAv.play('swing'); }
       if (e.button === 2) vm.block(true);
     };
     const up = (e: MouseEvent) => { if (e.button === 2) vm.block(false); };
     const menu = (e: Event) => e.preventDefault();
-    // hover: pointer cursor over usable things (scene mode), at most every 80 ms
-    let hoverAt = 0, hovering = false;
-    const hover = (e: MouseEvent) => {
-      if (!rooms.stage) { if (hovering) { hovering = false; el.style.cursor = ''; } return; }
-      const now = performance.now(); if (now - hoverAt < 80) return; hoverAt = now;
-      const h = !!pickAt(e.clientX, e.clientY);
-      if (h !== hovering) { hovering = h; el.style.cursor = h ? 'pointer' : ''; }
-    };
-    const offRooms = rooms.onChange(() => { if (hovering) { hovering = false; el.style.cursor = ''; } });
     el.addEventListener('mousedown', down);
-    el.addEventListener('mousemove', hover);
     window.addEventListener('mouseup', up);
     el.addEventListener('contextmenu', menu);
     return () => {
-      offE(); offF(); offRooms();
-      el.removeEventListener('mousedown', down); el.removeEventListener('mousemove', hover);
+      offE(); offF();
+      el.removeEventListener('mousedown', down);
       window.removeEventListener('mouseup', up); el.removeEventListener('contextmenu', menu);
     };
   },

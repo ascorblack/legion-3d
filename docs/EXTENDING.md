@@ -69,14 +69,14 @@ const off = ctx.interact.add({
   hit: someMesh,                     // invisible mesh or a THREE.Box3 in world metres
   reach: 2.5,                        // default 3 m from the eye (crosshair), 2.2 m from the feet (E)
   proximity: true,                   // false = only by aiming (shelf goods)
-  use(how) { /* how: 'key' (E) or 'click' (LMB while aimed) */ },
+  use(how) { /* how: 'key' (E); clicks never interact — 'click' is kept for compatibility and never sent */ },
   alt: { label: 'Осмотреть', use() { /* F */ } },
   enabled: () => true,
 });
 ```
 
 The crosshair ray picks the nearest volume within reach; if nothing is aimed, E uses the nearest volume within
-proximity reach. **LMB uses only what the crosshair is on**; RMB is block and never uses anything. The HUD prompt is
+proximity reach. **The mouse never interacts with the world** (like in games): LMB swings / attacks, RMB blocks; E uses, F is the secondary action. The HUD prompt is
 built from the target: `[E] <label>` (plus `· [F] <alt.label>`); `soon: true` on the object shows it muted.
 `ctx.ui.prompt(text)` overrides the prompt (null returns control to the interact system).
 

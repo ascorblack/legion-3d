@@ -93,6 +93,31 @@ describe('expedition scene', () => {
     expect(scene.children).toHaveLength(0);
   });
 
+  it('map puzzles (site 28.10): the tablet set builds per kind (runes, cups, scales, riddle), within budget, disposes cleanly', async () => {
+    const { ExpeditionScene } = await import('../src/expedition/scene');
+    const { adapt, Roster } = await import('../src/expedition/adapter');
+    const { artCacheSize } = await import('../src/expedition/art');
+    const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(50, 16 / 9, 0.03, 400);
+    const sc = new ExpeditionScene({ kit: null, appOf: () => null, style: 'cats', quality: 0, secLeft: () => 5 });
+    scene.add(sc.root); sc.attach(scene);
+    const roster = new Roster();
+    let t = 0;
+    const pz = (kind: string, extra: Record<string, unknown> = {}) => ({ on: true, k: 'puzzle', party: 'in', n: 6, ter: 'Курган', pz: { id: kind, kind, st: 'answer', name: 'Головоломка ' + kind, how: 'ответ', until: Date.now() + 9000, ...extra } }) as unknown as QuestPayload;
+    for (const v of [pz('runes', { rows: [['R', '+', 'T', '=', '5']] }), pz('cups', { signs: ['a', 'b', 'c'] }), pz('cups', { st: 'done', res: { text: 'яд во 2', ans: '2' } }), pz('scales', { sums: [3, 7, 4, 6] }), pz('riddle', { q: 'загадка' })]) {
+      const s = adapt(v, { login: 'murka', role: 'archer', roster });
+      expect(s.kind).toBe('puzzle');
+      sc.setState(s);
+      for (let i = 0; i < 8; i++) { t += 0.1; sc.update(0.1, t, cam); }
+      const b = budget(sc.root);
+      expect(b.calls).toBeGreaterThan(3);
+      expect(b.calls).toBeLessThanOrEqual(120);
+      expect(b.tris).toBeLessThanOrEqual(100_000);
+    }
+    sc.dispose();
+    expect(scene.children).toHaveLength(0);
+    expect(artCacheSize()).toBe(0);
+  });
+
   it('the view feeds the delay buffer, opens and closes the scene + HUD', async () => {
     const { ExpeditionView } = await import('../src/expedition');
     const root = (globalThis as any).document.createElement('div');

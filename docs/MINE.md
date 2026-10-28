@@ -137,7 +137,7 @@ The site's mine must not run at the same time (one presence per tab): the room c
 - **Lighting:** cool ambient + warm lantern light patches (the city's `world/lightPools` shader, no extra real lights);
   ore stones glow and light the ground; 1–4 real lights follow the player to the nearest lanterns by quality.
 - **Diggable stones** (adjacent to cleared floor, like the site's yellow ring) are brighter, with a gold floor halo and
-  a level badge; others are dimmed. Aim + E / LMB digs (you must stand within reach); walking away stops digging.
+  a level badge; others are dimmed. Aim + E digs (clicks never dig) (you must stand within reach); walking away stops digging.
 - **Other miners** are avatars with helmets, pulled to the face of their stone; idle ones are spread ≥ 1.3 m off the
   player and fade near the camera. In third person, rock right in front of the camera dissolves (never the ceiling).
 - **HUD** (`hud.ts`): a compact top-right card (floor, nature, counts, «Сейчас» + progress + «Стоп», income with

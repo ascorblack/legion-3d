@@ -184,7 +184,8 @@
     "gather",
     "boss",
     "dungeon",
-    "bossgen"
+    "bossgen",
+    "puzzle"
   ],
   "itemModels": {
     "weapons": [

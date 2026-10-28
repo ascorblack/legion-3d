@@ -146,7 +146,7 @@ For views inside «Персонаж» (skills/ach/look) the adapter also clicks 
 | `V` | toggle FP ⇄ TP | TP = behind, right shoulder (+0.45 m right, +0.35 m up, 3.2 m back) |
 | Wheel | TP: zoom 1.6–7 m; FP: wheel-down (zoom out) → switches to TP at 1.6 m; TP at min + wheel-up → FP | |
 | `RMB` (hold) | TP free-look orbit around the character (character keeps heading) | release → camera eases back behind |
-| `LMB` | FP: swing held item (cosmetic `ViewModel.swing()`); on a door/NPC/player = same as `E` | |
+| `LMB` | FP: swing held item (cosmetic `ViewModel.swing()`, combat); never opens doors, goods, stones or NPCs — that is `E` only | |
 | `E` | interact: door / player card / sign | prompt shows what; nothing near → nothing |
 | `Tab` | Character screen (last opened tab, default Снаряжение) | `preventDefault` only in `play` |
 | `C` | Снаряжение | |

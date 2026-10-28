@@ -372,6 +372,48 @@
       "why": "the site's Halloween city art; we mirror at(sc) (portal at the gate door, bottom at the gate ground) and items() (cauldron, candles, witch, bats, cobwebs) in src/events/halloween/hwcity.ts"
     },
     {
+      "id": "LGHwNpc",
+      "kind": "global",
+      "name": "LGHwNpc",
+      "file": "hwnpc.js",
+      "keys": [
+        "geo",
+        "open"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "Halloween NPCs «Ступа сладостей» / «Призрачный Фонарщик» on the Fair: geo(spot) gives building hit / door / obstacle ellipses — we place the 3D models there and add the obstacles to the walk grid (src/events/halloween/hwnpc.ts, src/net/site.ts); E opens the site window via LGCity.panel('hwshop'|'hwpass')"
+    },
+    {
+      "id": "HW-NPC panels (hwshop / hwpass)",
+      "file": "city.js",
+      "re": "id === 'hwshop' \\|\\| id === 'hwpass'",
+      "severity": "degrade",
+      "why": "city.js openPanel('hwshop' | 'hwpass') → hwOpen → LGHwNpc.open: our E on the NPC goes through LGCity.panel(id) (src/features/hwcity.ts)"
+    },
+    {
+      "id": "citymap make({ hwObst, hwB })",
+      "file": "citymap.js",
+      "re": "hwObst[\\s\\S]{0,200}hwB",
+      "severity": "degrade",
+      "why": "the NPCs' obstacles and buildings in the site's walk grid (src/net/site.ts buildLayout)"
+    },
+    {
+      "id": "hero.hw.p (pass level)",
+      "file": "city.js",
+      "re": "\\.hw\\.p\\b",
+      "severity": "degrade",
+      "why": "battle-pass level 0…20 = lit lanterns of the Ghost Lamplighter (src/events/halloween/hwnpc.ts passLevel)"
+    },
+    {
+      "id": "quest kind puzzle (q.pz)",
+      "file": "quest.js",
+      "re": "puzzle:\\s*'Головоломка'[\\s\\S]*\\.pz\\b",
+      "severity": "degrade",
+      "why": "map puzzles: q.pz {kind, st, name, how, q, rows, signs, sums, bt, my, res} → quest HUD card and the 3D tablet set (src/quest/model.ts, src/expedition/adapter.ts, sets.ts Puzzle)"
+    },
+    {
       "id": "quest gather.hw",
       "file": "quest.js",
       "re": "gather\\.hw",

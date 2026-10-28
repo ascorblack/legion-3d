@@ -5,8 +5,9 @@
  */
 import type { Store, Actions, QuestView } from '../contracts';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
+import { PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle } from './model';
 
-const KIND_RU: Record<string, string> = { battle: 'Бой', trap: 'Ловушка', treasure: 'Сокровищница', lair: 'Логово', rest: 'Привал', shop: 'Лавка', event: 'Событие', map: 'Карта', travel: 'В пути', town: 'Город', gather: 'Сбор отряда', boss: 'Босс', dungeon: 'Данж', bossgen: 'Босс' };
+const KIND_RU: Record<string, string> = { battle: 'Бой', trap: 'Ловушка', treasure: 'Сокровищница', lair: 'Логово', rest: 'Привал', shop: 'Лавка', event: 'Событие', map: 'Карта', travel: 'В пути', town: 'Город', gather: 'Сбор отряда', boss: 'Босс', dungeon: 'Данж', bossgen: 'Босс', puzzle: 'Головоломка' };
 const SIDE_RU: Record<string, string> = { L: 'левое крыло', R: 'правое крыло', F: 'дальнее крыло' };
 const SIDE_CMD: Record<string, string> = { L: 'лево', R: 'право', F: 'вдали' };
 const ADJ_KEY = 'lgQDelay';
@@ -54,6 +55,18 @@ export function cardOf(v: QuestView | null, me: { login: string; role: string },
     const urge: Card['urge'] = T.res ? { kind: 'info', text: T.res.text || 'итог ловушки' } : act && T.gas ? (T.acted ? { kind: 'info', text: 'ты написал — вдохнул газ' } : { kind: 'silent', text: 'Не пиши в чат!' })
       : act && T.word ? (T.acted ? { kind: 'ok', text: 'слово принято' } : { kind: 'word', text: String(T.word) }) : act && T.how ? { kind: 'info', text: String(T.how) } : undefined;
     return { icon: T.icon || '🪤', title: String(T.name || 'Ловушка'), right: '', until: act ? T.until : undefined, urge, inParty };
+  }
+  if (q.pz) {   // 28.10 (map-puzzles, quest.js pzHtml): what to type now, the task, own answer, the result
+    const P = q.pz as QuestPuzzle, M = puzzleMy(P), done = P.st === 'done';
+    const urge: Card['urge'] = done ? { kind: 'info', text: P.res?.text || 'итог' }
+      : P.st === 'show' ? { kind: 'info', text: P.kind === 'count' ? 'Зверьки бегут на стриме — считай!' : 'Смотри на стрим и запоминай!' }
+      : M.ans ? { kind: 'ok', text: `твой ответ: ${puzzleAnsText(P, M.ans)}` }
+      : P.kind === 'letter' && M.words ? { kind: 'ok', text: `твоих слов: ${M.words} — пиши ещё` }
+      : { kind: 'say', text: String(P.how || (puzzleTyped(String(P.kind)) ? 'ответ в чат' : (P.bt || []).map((b) => b[1]).join(' / ') || 'ответ в чат')) };
+    const mine = done && M.st === 'ok' ? `ты ответил верно${M.coins ? ` · +${M.coins}` : ''}` : done && M.st === 'bad' ? `твой ответ — мимо${M.hp ? ` · яд −${M.hp} ❤` : ''}` : '';
+    const note = [puzzleTask(P), !done ? `ответили: ${+(P.an || 0)} · награда: ${P.prize === 'buff' ? 'враги следующего боя ослаблены' : `${+(P.coins || 0)} каждому верному`}` : mine].filter(Boolean).join(' · ');
+    return { icon: P.icon || '🧩', title: `Головоломка · ${P.name}`, right: PUZZLE_ST[P.st] || '', until: done ? undefined : P.st === 'show' ? P.showUntil : P.until, urge, note: note || undefined,
+      where: inParty ? undefined : 'отвечает только отряд', inParty };
   }
   if (q.ev) {
     const E = q.ev, vote = E.look === 'traveler' && E.st === 'vote';

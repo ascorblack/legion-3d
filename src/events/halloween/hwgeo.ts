@@ -9,10 +9,10 @@ import type { HwExtras, PortalSpot } from './hwcity';
 
 const _c = new THREE.Color();
 /** Parts.add(…, shade = keepColours): keep the geometry's own vertex colours (a merged sub-assembly). */
-const keepColours = Symbol('keep') as unknown as (x: number, y: number, z: number) => number;
+export const keepColours = Symbol('keep') as unknown as (x: number, y: number, z: number) => number;
 
 /** Tiny merge helper: every part gets position / normal / color (+ aFly). */
-class Parts {
+export class Parts {
   private list: THREE.BufferGeometry[] = [];
   add(g: THREE.BufferGeometry, color: string | [number, number, number], m?: THREE.Matrix4, fly = 0, shade?: (x: number, y: number, z: number) => number): this {
     let geo = g.index ? g.toNonIndexed() : g;
@@ -43,7 +43,7 @@ class Parts {
   }
 }
 
-const M = (x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) =>
+export const M = (x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ')), new THREE.Vector3(sx, sy, sz));
 
 /** The witch on a broom at the origin, flying along local +X, ~1.1 m long. Every vertex aFly = 1. */

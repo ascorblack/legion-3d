@@ -15,6 +15,7 @@ import stock from '../test/fixtures/stock.json';
 import { FakeMine, makeBus } from '../src/rooms/mine/fake';
 import mineEnter from '../test/fixtures/mine-enter.json';
 import { FakeQuest } from '../src/quest/fake';
+import { npcPlaces, npcBlocks } from '../src/events/halloween/hwnpc';
 
 // ?town=camp: the start camp «Перепутье» (test/fixtures/camp-map.json), otherwise the fair
 const TOWN = new URLSearchParams(location.search).get('town');
@@ -27,6 +28,10 @@ const hero = structuredClone((me as any).hero) as Hero;
 // ?hwc=look|portal|lp: the site's «Ночь Тыквенной Луны» (hero.hwc); live: __demo.hwc('lp' | 'look' | 'portal' | 'off')
 const hwcOf = (v: string | null) => (v === 'look' ? { look: true, portal: false } : v === 'portal' ? { look: true, portal: true, at: Date.now() } : v === 'lp' ? { look: true, portal: true, at: Date.now() } : v === 'p' ? { look: false, portal: true } : null);
 { const v = new URLSearchParams(location.search).get('hwc'); if (v) (hero as any).hwc = hwcOf(v); }
+// Halloween NPCs (site hwnpc.js): battle-pass level ?hwlv=0…20 (default 7; live __demo.hwlv(n)), candies; the walk grid
+// gets their obstacles while the look is on (as src/net/site.ts does with the site's make({ hwObst }))
+(hero as any).hw = { c: 42, p: Math.max(0, Math.min(20, +(new URLSearchParams(location.search).get('hwlv') ?? 7) || 0)), x: 0 };
+if (layout.id === 'fair') { const free0 = layout.free, NPCS = npcPlaces({}); layout.free = (x, y) => free0(x, y) && !((hero as any).hwc?.look && npcBlocks(NPCS, x, y)); }
 store.setHero(hero);
 store.setLayout(layout);
 const STYLE = 'cats';
@@ -124,5 +129,6 @@ const site: SiteSession = {
 startGame(site, (s) => console.log('[demo]', s)).then((g) => {
   const ui = (window as any).__l3dGame?.ui;
   if (ui) toastDemo = (t) => ui.toast(t);
-  (window as any).__demo = { g, store, bots, hero, hwc: (v: string) => { (hero as any).hwc = hwcOf(v); store.setHero(structuredClone(hero)); } };
+  (window as any).__demo = { g, store, bots, hero, hwc: (v: string) => { (hero as any).hwc = hwcOf(v); store.setHero(structuredClone(hero)); },
+    hwlv: (n: number) => { (hero as any).hw = { ...(hero as any).hw, p: n }; store.setHero(structuredClone(hero)); } };
 }).catch((e) => { console.error('demo failed', e); document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f88;position:fixed;top:0;left:0;z-index:999">${String(e?.stack || e)}</pre>`); });

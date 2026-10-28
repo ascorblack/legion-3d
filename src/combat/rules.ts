@@ -87,13 +87,13 @@ export interface GateInput {
   stage: boolean; busy: boolean;
   /** Room kind (null on the street). */
   room: string | null;
-  /** The crosshair is on an interactable (doors, goods, stones keep LMB). */
-  aimed: boolean;
+  /** The crosshair is on an interactable. Ignored since clicks never interact (E / F only): LMB swings anyway. */
+  aimed?: boolean;
 }
 /**
  * Rooms where attacks are allowed (the street is always allowed): the 3D shops (forge, «Лавка», magic, tent) and the
- * mine — pointer-locked rooms with a crosshair, where goods / stones / doors under the crosshair still win LMB.
- * Hybrid interiors are not: they run in scene mode (free cursor, the site's panel docked, LMB picks under the cursor).
+ * mine — pointer-locked rooms with a crosshair (goods / stones / doors are used with E only, LMB always swings).
+ * Hybrid interiors are not: they run in scene mode (free cursor, the site's panel docked).
  */
 export const COMBAT_ROOMS = new Set(['shop3d', 'mine3d']);
 
@@ -108,6 +108,5 @@ export function gate(g: GateInput): string | null {
   if (g.stage) return 'scene';
   if (g.busy) return 'loading';
   if (g.room && !COMBAT_ROOMS.has(g.room)) return 'room';
-  if (g.aimed) return 'interactable';
   return null;
 }

@@ -12,6 +12,7 @@ import { createGoSender } from '../flight/sendpoint';
 import CONTRACT from '../data/site-contract.json';
 import { runtimeContract, describeFails, type ContractCheck } from './contract';
 import { reportDrift } from '../core/drift';
+import { npcPlaces, makeOpts } from '../events/halloween/hwnpc';
 import { CAMP, campScene, detectTown, readTownSignals, townMeta, type CampScene, type HeroTownFlags } from './town';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
@@ -89,7 +90,12 @@ function buildLayout(hero: Hero | null, town: string, townMetaOf: any): CityLayo
   if (!L) return null;
   const ms = !!(hero && hero.ms), mn = !!(hero && hero.mn && Object.keys(hero.mn as object).length);
   const MS = ms && !!L.magic;
-  const map = M.make((L.obstacles || []).filter((o: any) => !o.divider), { magic: MS, magicObst: L.magic && L.magic.obstacle, mine: mn });
+  // HW-NPC (site 28.10): with the Halloween look the site's walk grid also has the NPCs' obstacles (city.js hwNpc → S.mk({ hwObst, hwB })).
+  // The grid is swapped in place (hwNpcGrid) — no world rebuild when the night starts / ends.
+  const mk = (hw: boolean) => M.make((L.obstacles || []).filter((o: any) => !o.divider), { magic: MS, magicObst: L.magic && L.magic.obstacle, mine: mn, ...(hw ? makeOpts(npcPlaces(W)) : {}) });
+  const hold = { on: hwNpcOn(hero), map: null as any };
+  try { hold.map = mk(hold.on); } catch { hold.on = false; hold.map = mk(false); }
+  const map = hold.map;
   const st = styleId();
   const art: CityLayout['art'] = {};
   try {
@@ -102,18 +108,28 @@ function buildLayout(hero: Hero | null, town: string, townMetaOf: any): CityLayo
     art.fairX = M.QW + 8;
   } catch { /* art is optional */ }
   const skyM = /\.fr-skybg\{background:([^}]+)\}/.exec(L.css || '');
-  const buildings: Building[] = (map.BUILDINGS as any[]).map((b) => ({
+  const buildings: Building[] = (map.BUILDINGS as any[]).filter((b) => !b.hw).map((b) => ({
     ...b,
     title: b.id === 'magic' && ms ? String(hero!.ms) : b.title,
     soon: !!b.soon && !((b.id === 'auction' && hero?.au) || (b.id === 'storage' && hero?.sg) || (b.id === 'mine' && mn)),
   }));
-  return {
+  const out: CityLayout = {
     id: 'fair', styleId: st, W: map.W, H: map.H, QW: map.QW, area: map.AREA,
-    obstacles: map.OBST as Obstacle[], buildings, low: M.LOW,
+    obstacles: (map.OBST as any[]).filter((o) => !o.hwnpc) as Obstacle[], buildings, low: M.LOW,
     sky: skyM ? skyM[1] : undefined, art,
-    free: (x, y) => map.free(x, y), nearest: (x, y) => map.nearest(x, y), path: (a, b) => map.path(a, b),
+    free: (x, y) => hold.map.free(x, y), nearest: (x, y) => hold.map.nearest(x, y), path: (a, b) => hold.map.path(a, b),
   };
+  hwGrids.set(out, (on) => { if (on === hold.on) return; try { hold.map = mk(on); hold.on = on; } catch (e) { console.warn('[legion-3d] hw NPC grid', e); } });
+  return out;
 }
+/** The site shows its Halloween NPCs (and has their obstacles in its grid): look on, hwnpc.js + cityhw.js loaded. */
+function hwNpcOn(hero: Hero | null): boolean {
+  const c = (hero as any)?.hwc;
+  return !!(c && c.look) && !!W.LGHwNpc && typeof W.LGHwNpc.geo === 'function' && !!W.LGCityHW && typeof W.LGCityHW.npcSpots === 'function';
+}
+const hwGrids = new WeakMap<CityLayout, (on: boolean) => void>();
+/** Swap the Fair's walk grid with / without the NPC obstacles (no-op for other towns or when unchanged). */
+export function hwNpcGrid(L: CityLayout | null, hero: Hero | null): void { if (L) hwGrids.get(L)?.(hwNpcOn(hero)); }
 /** city.js soonB / bOk for a town's buildings (same hero flags as the fair). */
 function townBuildings(list: any[], hero: Hero | null, magicOk: boolean): Building[] {
   const h = (hero || {}) as any, mn = !!(h.mn && Object.keys(h.mn).length);
@@ -256,7 +272,10 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     const L = buildLayout(h, t.id, null); if (!L) return;   // camp: null until campmap.js is loaded (the City rebuilds → refresh)
     layoutKey = key; store.setLayout(L); mapRef = L;
   };
+  const refreshAll = () => { refreshLayout(); hwNpcGrid(mapRef, store.hero); };
   refreshLayout();
+  // the site lazy-loads hwnpc.js once the night starts: re-check the NPC grid now and then (a boolean compare when unchanged)
+  const hwTimer = window.setInterval(() => hwNpcGrid(mapRef, store.hero), 2000);
   // the site builds a new town asynchronously (townPrep loads campmap.js / towngen.js, then open()): watch the City root
   let townObs: MutationObserver | null = null;
   {
@@ -336,7 +355,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     sims.clear(); store.emit('walkers');
     if (Array.isArray(r.chat)) store.pushChat(r.chat.map(toChat));
     if (r.me && store.me) { store.me.x = +r.me.x; store.me.y = +r.me.y; }
-    refreshLayout();
+    refreshAll();
     applyBatch({ ...r, chat: undefined });
   };
 
@@ -364,7 +383,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
       const h = d && (d.hero || (d.login ? d : null)); if (!h) return;
       store.setHero(h);
       setMeApp(heroApp(h));
-      refreshLayout();
+      refreshAll();
     };
     unsubs.push(B.on('sse:me', onHero));
     unsubs.push(B.on('me', onHero));
@@ -485,6 +504,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     dispose() {
       for (const u of unsubs) u();
       townObs?.disconnect();
+      clearInterval(hwTimer);
       if (W.__l3dTown === townInfo) delete W.__l3dTown;
       document.removeEventListener('visibilitychange', onVis);
       setClassic(true); style.remove();

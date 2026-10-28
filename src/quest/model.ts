@@ -14,9 +14,9 @@
 
 export type Side = 'L' | 'R' | 'F';
 /** Stage kinds of `q.k` (quest.js KIND_RU). */
-export const KINDS = ['battle', 'trap', 'treasure', 'lair', 'rest', 'shop', 'event', 'map', 'travel', 'town', 'gather', 'boss', 'dungeon', 'bossgen'] as const;
+export const KINDS = ['battle', 'trap', 'treasure', 'lair', 'rest', 'shop', 'event', 'map', 'travel', 'town', 'gather', 'boss', 'dungeon', 'bossgen', 'puzzle'] as const;
 export type QuestKind = typeof KINDS[number];
-export const KIND_RU: Record<QuestKind, string> = { battle: 'Бой', trap: 'Ловушка', treasure: 'Сокровищница', lair: 'Логово', rest: 'Привал', shop: 'Лавка', event: 'Событие', map: 'Карта', travel: 'В пути', town: 'Город', gather: 'Сбор отряда', boss: 'Босс', dungeon: 'Данж', bossgen: 'Главный враг' };
+export const KIND_RU: Record<QuestKind, string> = { battle: 'Бой', trap: 'Ловушка', treasure: 'Сокровищница', lair: 'Логово', rest: 'Привал', shop: 'Лавка', event: 'Событие', map: 'Карта', travel: 'В пути', town: 'Город', gather: 'Сбор отряда', boss: 'Босс', dungeon: 'Данж', bossgen: 'Главный враг', puzzle: 'Головоломка' };
 /** Class ids (game-data.js CLASS_META) + recruit. */
 export type Role = 'legionary' | 'archer' | 'mage' | 'priest' | 'rogue' | 'necromancer' | 'paladin' | 'recruit';
 /** `q.party`: in party / queued until the next stop / ghost (dead hero) / anything else = not in party. */
@@ -200,7 +200,69 @@ export interface QuestPayload {
   loot?: QuestLoot;
   sh?: QuestShop;
   pb?: { b: PlaceButton[] };
+  /** map puzzle (site 28.10, quest/mappuzzles.js siteView; kind `puzzle`) */
+  pz?: QuestPuzzle;
   [k: string]: unknown;
+}
+
+/* ------------------------------------------------------------------ map puzzles (site 28.10, quest.js pzHtml) */
+
+export type PuzzleKind = 'riddle' | 'count' | 'runes' | 'cups' | 'changed' | 'letter' | 'scales';
+/** A map puzzle: show (look at the stream) → answer (type in chat) → done. Typed answers: riddle, count, runes, letter;
+ *  a choice (cup, item number, a scale plate) for cups / changed / scales. The answer is only shown after the result. */
+export interface QuestPuzzle {
+  id?: string | number;
+  kind: PuzzleKind | string;
+  st: 'show' | 'answer' | 'done' | string;
+  name: string; icon?: string;
+  /** what to type now */
+  how?: string;
+  /** riddle text / count question */
+  q?: string;
+  showUntil?: number; until?: number;
+  /** runes: equations, rows of 'R' | 'T' | other glyphs */
+  rows?: string[][];
+  /** cups: inscriptions */
+  signs?: string[];
+  /** changed: how many items */
+  items?: number;
+  /** letter: the letter, words found / goal, the words */
+  letter?: string; got?: number; goal?: number; words?: string[];
+  /** scales: [left, right, left people, right people], what the left plate must be */
+  sums?: number[]; rt?: string;
+  /** buttons: [label, chat line] */
+  bt?: [string, string][];
+  /** answered so far */
+  an?: number;
+  prize?: 'buff' | 'coins' | string; coins?: number;
+  res?: { text: string; ok?: boolean; prize?: string; ans?: string };
+  /** own answer: «a:X» / «w:N»; after the result «ok:coins:-hp|a:X» or «bad…|a:X» */
+  my?: string;
+}
+export const PUZZLE_ST: Record<string, string> = { show: 'смотри на стрим', answer: 'отвечай', done: 'итог' };
+/** quest.js pzMy(): own answer and result. */
+export function puzzleMy(P: Pick<QuestPuzzle, 'my' | 'st'>): { st: '' | 'ok' | 'bad' | string; coins: number; hp: number; ans: string; words: number } {
+  const parts = String(P.my || '').split('|'), done = P.st === 'done';
+  const fin = done && /^(ok|bad)/.test(parts[0]) ? parts[0].split(':') : null, raw = (fin ? parts[1] : parts[0]) || '';
+  const coins = fin ? +((fin.find((x, i) => i > 0 && /^\d+$/.test(x))) || 0) : 0, hp = fin ? +((fin.find((x) => /^-\d+$/.test(x)) || '0').slice(1)) : 0;
+  return { st: fin ? fin[0] : '', coins, hp, ans: raw.startsWith('a:') ? raw.slice(2) : '', words: raw.startsWith('w:') ? +raw.slice(2) || 0 : 0 };
+}
+/** quest.js pzAnsText(): an answer in words. */
+export const puzzleAnsText = (P: Pick<QuestPuzzle, 'kind'>, a: string) => (P.kind === 'scales' ? (a === 'l' ? 'левая плита' : a === 'r' ? 'правая плита' : a) : P.kind === 'cups' ? `кубок ${a}` : P.kind === 'changed' ? `предмет ${a}` : `«${a}»`);
+/** Typed answers (no buttons on the site): riddle, count, runes, letter. */
+export const puzzleTyped = (k: string) => k === 'riddle' || k === 'count' || k === 'runes' || k === 'letter';
+/** What the puzzle shows as its task line (riddle / question / letter / scales goal / cups / items) — no answer. */
+export function puzzleTask(P: QuestPuzzle): string {
+  switch (P.kind) {
+    case 'riddle': return P.q ? `«${P.q}»` : '';
+    case 'count': return P.q || '';
+    case 'runes': return (P.rows || []).map((r) => r.map((c) => (c === 'R' ? 'ᚱ' : c === 'T' ? 'ᚦ' : c)).join(' ')).join('  ·  ');
+    case 'cups': return (P.signs || []).map((t, i) => `${i + 1}: «${t}»`).join('  ');
+    case 'changed': return P.st === 'answer' ? `Номер пропавшего: от 1 до ${+(P.items || 0)}` : '';
+    case 'letter': return `Буква ${String(P.letter || '').toUpperCase()} · слов ${+(P.got || 0)} из ${+(P.goal || 0)}`;
+    case 'scales': return P.rt ? `Левая плита должна быть ${P.rt}` : '';
+    default: return '';
+  }
 }
 
 /* ------------------------------------------------------------------ guards */
@@ -250,6 +312,7 @@ export function isQuestPayload(x: unknown): x is QuestPayload {
   if (x.vote != null && !isVote(x.vote)) return false;
   if (x.tr != null && !(isObj(x.tr) && isStr(x.tr.name))) return false;
   if (x.ev != null && !(isObj(x.ev) && isStr(x.ev.look) && isStr(x.ev.name))) return false;
+  if (x.pz != null && !(isObj(x.pz) && isStr(x.pz.name) && isStr(x.pz.kind))) return false;
   if (x.loot != null && !(isObj(x.loot) && isStr(x.loot.name) && isNum(x.loot.until))) return false;
   if (x.sh != null && !(isObj(x.sh) && Array.isArray(x.sh.items))) return false;
   if (x.roll != null && !(isObj(x.roll) && isNum(x.roll.n))) return false;
@@ -271,6 +334,7 @@ export type Stage =
   | { s: 'isles' }
   | { s: 'lair' }
   | { s: 'trap'; treasure: boolean }
+  | { s: 'puzzle'; kind: string }
   | { s: 'event'; look: string }
   | { s: 'vote' }
   | { s: 'loot' }
@@ -285,6 +349,7 @@ export function stageOf(v: QuestPayload | null | undefined): Stage {
   if (v.lair?.is) return { s: 'isles' };
   if (v.lair) return { s: 'lair' };
   if (v.tr) return { s: 'trap', treasure: !!v.tr.tre || v.k === 'treasure' };
+  if (v.pz) return { s: 'puzzle', kind: String(v.pz.kind) };   // 28.10 (map-puzzles): before events, like quest.js
   if (v.ev) return { s: 'event', look: v.ev.look };
   if (v.vote && !v.vote.done) return { s: 'vote' };
   if (v.loot) return { s: 'loot' };
@@ -301,6 +366,7 @@ export function kindOf(v: QuestPayload): QuestKind | 'unknown' {
   if (v.lair) return 'lair';
   if (v.dgn) return 'dungeon';
   if (v.tr) return v.tr.tre ? 'treasure' : 'trap';
+  if (v.pz) return 'puzzle';
   if (v.ev) return 'event';
   if (v.sh) return 'shop';
   if (v.vote) return 'map';
@@ -343,6 +409,8 @@ export function mergeOwn(cur: QuestPayload, newest: QuestPayload): QuestPayload 
   if (c.dgn?.vote && n.dgn?.vote && c.dgn.vote.id === n.dgn.vote.id) v.dgn = { ...c.dgn, vote: { ...c.dgn.vote, my: n.dgn.vote.my } };
   if (c.loot && n.loot && c.loot.name === n.loot.name) v.loot = { ...c.loot, my: n.loot.my };
   if (c.ev && n.ev && c.ev.look === n.ev.look) v.ev = { ...c.ev, my: n.ev.my, used: n.ev.used, said: n.ev.said };
+  // 28.10 (map-puzzles): own answer at once, the result with the stream
+  if (c.pz && n.pz && n.pz.id === c.pz.id && n.pz.st === c.pz.st) v.pz = { ...c.pz, my: n.pz.my };
   return v;
 }
 
