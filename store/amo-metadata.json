@@ -18,9 +18,6 @@
   "support_url": {
     "en-US": "https://github.com/ascorblack/legion-3d/issues"
   },
-  "tags": [
-    "games"
-  ],
   "version": {
     "license": "MIT",
     "approval_notes": "Source: the attached archive (git archive of the tagged commit). Build: npm ci && node scripts/build.mjs --browser=firefox --prod --only=ext && node scripts/pack.mjs --browser=firefox -> legion-3d-<version>-firefox-store.zip (esbuild bundles TypeScript from src/; three.js from npm). The add-on runs only on https://play.multidonate.ru/c/* (the Legion game), makes no network requests of its own and collects no data."
