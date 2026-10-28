@@ -50,6 +50,25 @@ jobs:
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
             && gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --clobber \
             || gh release create "${GITHUB_REF_NAME}" "${files[@]}" --title "Legion 3D ${GITHUB_REF_NAME}" --notes-file release-notes.md
+      # Firefox catalogue (addons.mozilla.org, listed): a SEPARATE add-on (legion-3d-amo@ascorblack, see scripts/pack.mjs)
+      # built from the store payload (no GitHub update check — AMO updates it). Submitted for Mozilla's review with the
+      # source archive (the bundle is minified); it appears on AMO and auto-updates after their review. Skipped without
+      # the AMO secrets; a failure here never blocks the GitHub release above.
+      - name: Submit Firefox catalogue update (AMO listed)
+        continue-on-error: true
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          if [[ -z "$AMO_JWT_ISSUER" || -z "$AMO_JWT_SECRET" ]]; then echo 'AMO secrets missing; skipping.'; exit 0; fi
+          set -euo pipefail
+          v="${GITHUB_REF_NAME#v}"
+          node scripts/pack.mjs --browser=firefox
+          rm -rf amo-listed && mkdir amo-listed && unzip -q "legion-3d-$v-firefox-store.zip" -d amo-listed
+          git archive --format=zip -o "legion-3d-$v-source.zip" HEAD
+          npx --yes web-ext@10.8.0 sign --source-dir amo-listed --artifacts-dir amo-listed-out --channel listed \
+            --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" \
+            --amo-metadata store/amo-metadata.json --upload-source-code "legion-3d-$v-source.zip" --approval-timeout 0
       # First submission and store listing are created manually. These steps update an existing item only.
       - name: Upload and publish Chrome Web Store update (optional)
         env:

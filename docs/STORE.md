@@ -26,3 +26,11 @@
 ## Edge Add-ons (необязательно)
 
 Создайте первую карточку вручную в [Microsoft Partner Center](https://partner.microsoft.com/dashboard/microsoftedge/overview), загрузите zip и заполните описание/конфиденциальность. После первой публикации выпустите API key и Client ID для [Edge Add-ons Update API v1.1](https://learn.microsoft.com/en-us/microsoft-edge/extensions/update/api/using-addons-api). Добавьте secrets `EDGE_PRODUCT_ID`, `EDGE_CLIENT_ID`, `EDGE_API_KEY`. Если любого нет, шаг пропускается. При теге CI загружает тот же store zip, ждёт успешной проверки пакета и подаёт draft на сертификацию; отслеживайте статус в панели. Ключ Edge не равен Google OAuth client secret. На ошибке/таймауте шаг завершится ошибкой и **не** подаст непроверенный пакет.
+
+## Firefox: каталог Mozilla (AMO) — отдельное дополнение
+
+Firefox-версий две, с разными ID:
+- `legion-3d@ascorblack` — подписанный `.xpi` в релизах GitHub (канал unlisted, подпись за минуты, без каталога; об обновлениях сообщает уведомление в игре);
+- `legion-3d-amo@ascorblack` — карточка в каталоге addons.mozilla.org (канал listed): собирается из store-архива (без проверки обновлений — AMO обновляет сам), отправляется на ручную проверку Mozilla вместе с архивом исходников (`git archive`), появляется в каталоге после одобрения.
+Отдельный ID нужен потому, что AMO подписывает каждый номер версии один раз на дополнение.
+Метаданные карточки — `store/amo-metadata.json` (категория, краткое и полное описание, ссылки, лицензия, заметки для ревьюера). Шаг релиза «Submit Firefox catalogue update (AMO listed)» использует те же секреты `AMO_JWT_ISSUER` / `AMO_JWT_SECRET`; его ошибка не ломает релиз на GitHub. Скриншоты карточки AMO добавляются вручную в кабинете.

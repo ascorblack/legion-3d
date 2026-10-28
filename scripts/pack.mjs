@@ -29,6 +29,7 @@ for (const name of [store, github]) if (existsSync(name)) unlinkSync(name);
 // Store payload: the store updates the extension itself, so the GitHub update check (background worker, its relay
 // script, the api.github.com host permission and `storage`) is stripped — no unused permissions for the reviewers.
 const UPDATE_ONLY = new Set(['background.js', 'notify.js']);
+export const AMO_LISTED_ID = 'legion-3d-amo@ascorblack';
 const storeDir = `${dist}-store`;
 rmSync(storeDir, { recursive: true, force: true });
 const storeOnly = storeFiles.filter((f) => !UPDATE_ONLY.has(f));
@@ -37,6 +38,9 @@ const sm = JSON.parse(JSON.stringify(manifest));
 delete sm.background; delete sm.host_permissions;
 if (Array.isArray(sm.permissions)) { sm.permissions = sm.permissions.filter((x) => x !== 'storage'); if (!sm.permissions.length) delete sm.permissions; }
 sm.content_scripts = (sm.content_scripts || []).filter((c) => !(c.js || []).some((j) => UPDATE_ONLY.has(j)));
+// Firefox: the AMO-listed add-on is a SEPARATE add-on (its own ID): AMO signs every version number once per add-on,
+// and the self-distributed .xpi on GitHub (legion-3d@ascorblack) is signed at release time without review.
+if (browser === 'firefox' && sm.browser_specific_settings?.gecko) sm.browser_specific_settings.gecko.id = AMO_LISTED_ID;
 writeFileSync(join(storeDir, 'manifest.json'), JSON.stringify(sm, null, 2) + '\n');
 try { execFileSync('zip', ['-q', '-X', `../${store}`, ...storeOnly], { cwd: storeDir }); }
 finally { rmSync(storeDir, { recursive: true, force: true }); }

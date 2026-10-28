@@ -1,0 +1,28 @@
+{
+  "categories": {
+    "firefox": [
+      "games-entertainment"
+    ]
+  },
+  "summary": {
+    "ru": "Неофициальный 3D-режим для игры «Легион»: гуляй по городу, заходи в лавки и шахту, встречай игроков.",
+    "en-US": "Unofficial 3D mode for the Legion game: explore the city, meet players, enter shops and visit the mine."
+  },
+  "description": {
+    "ru": "Legion 3D превращает сайт игры «Легион» (play.multidonate.ru) в настоящую 3D-игру. Гуляй по ночной ярмарке от первого или третьего лица — вокруг живые игроки в своих обликах, а их сообщения из чата всплывают над головами.\n\nЧто умеет:\n• 3D-город по карте сайта: кузня, шатёр, ворота, башня звездочёта, лестницы, канал и мосты\n• Первое лицо с лапами и оружием в руках, третье лицо за плечом, настоящие прыжки\n• 3D-лавки: ходишь между полками, наводишь прицел — подсвечивается ровно тот товар, который купишь, с карточкой и подтверждением\n• 3D-шахта: подходишь к камню и копаешь киркой, скупщик, снабженец, поручения, чат шахты\n• Снаряжение с облётом камеры вокруг героя, сумка, характеристики, журнал, карта с «Идти сюда»\n• Панель похода: что происходит и что писать в чат\n• Звуки ночной ярмарки, шагов, дверей и покупок (тихо по умолчанию)\n• Фоторежим (F9) и праздничное оформление (Хэллоуин)\n• «Драки с котиками» — смешные удары и падения, видны только тебе\n• Подстраивается под слабые видеокарты; F8 — вернуться к обычному сайту\n\nУправление: WASD — идти, Shift — бежать, Space — прыжок, мышь — осмотр, V — камера, E — действие, Tab — меню, M — карта, Enter — чат, F9 — фоторежим, F8 — классический сайт.\n\nКак начать: открой страницу канала https://play.multidonate.ru/c/<канал>/ и войди через Twitch — 3D запустится само.\n\nВажно: это неофициальный фанатский проект, не связанный с авторами «Легиона» и MultiDonate. Расширение работает только на страницах каналов игры, не собирает данные и не использует аналитику. Единственный запрос в сеть, кроме самой игры, — установка из GitHub раз в 12 часов читает номер последней версии на api.github.com (без cookies и без данных о вас); в магазинной версии его нет, отключается в настройках. Все игровые действия идут через обычный клиент сайта. Исходный код: https://github.com/ascorblack/legion-3d",
+    "en-US": "Walk through the Legion game's night-time city on play.multidonate.ru in first or third person. See other players and their in-game chat bubbles. Explore 3D shops and the mine; use equipment, bag, map and journal menus. Adaptive quality scales to your computer. Chat and game actions use the website's ordinary client.\n\nControls: WASD to move, Shift to run, Space to jump, mouse to look, V to switch camera, E to interact, Tab for menus, Enter for chat and F8 to return to the classic website. Open a game channel at `https://play.multidonate.ru/c/<channel>/` and sign in as usual; Chrome 111+.\n\n**Disclaimer:** unofficial fan project, not affiliated with the Legion game's developers or MultiDonate. It runs only on game channel pages. No data collection or analytics; preferences remain local. The only other network request is made by installs from GitHub (never by store installs): once every 12 hours it reads the latest version number from api.github.com — anonymous, no cookies, nothing about you — and can be switched off in settings. [Privacy policy](https://github.com/ascorblack/legion-3d/blob/main/docs/PRIVACY.md).\n\n- Suggested category: Fun.\n- Single purpose: add an optional 3D game mode and interface to the Legion game website.\n- Host match justification: `https://play.multidonate.ru/c/*` contains the game's City view. Two packaged content scripts render 3D and read the current page's game state for synchronization. No other websites are accessed.\n- Remote code: no. All executable code and artwork ship with the extension.\n- Data usage answers: no user data collected, sold or transferred; only preferences remain in the website's localStorage. Game data is processed locally on the page; the site's own client communicates with its game servers."
+  },
+  "homepage": {
+    "en-US": "https://github.com/ascorblack/legion-3d"
+  },
+  "support_url": {
+    "en-US": "https://github.com/ascorblack/legion-3d/issues"
+  },
+  "tags": [
+    "games"
+  ],
+  "version": {
+    "license": "MIT",
+    "approval_notes": "Source: the attached archive (git archive of the tagged commit). Build: npm ci && node scripts/build.mjs --browser=firefox --prod --only=ext && node scripts/pack.mjs --browser=firefox -> legion-3d-<version>-firefox-store.zip (esbuild bundles TypeScript from src/; three.js from npm). The add-on runs only on https://play.multidonate.ru/c/* (the Legion game), makes no network requests of its own and collects no data."
+  }
+}
