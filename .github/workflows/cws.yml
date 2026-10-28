@@ -1,0 +1,28 @@
+name: Chrome Web Store upload
+# Manual retry of the Chrome Web Store step for an existing tag (e.g. when the previous version was still in review
+# at release time). Builds the store zip from the tag; the upload script comes from the default branch.
+on:
+  workflow_dispatch:
+    inputs:
+      tag: { description: 'Release tag, e.g. v0.4.4', required: true }
+permissions:
+  contents: read
+jobs:
+  cws:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.tag }}', path: rel }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci && node scripts/build.mjs --prod && node scripts/pack.mjs
+        working-directory: rel
+      - name: Upload and publish
+        env:
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: node scripts/cws-publish.mjs "rel/legion-3d-${TAG#v}-store.zip"

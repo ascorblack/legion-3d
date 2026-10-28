@@ -71,30 +71,16 @@ jobs:
             --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" \
             --amo-metadata amo-metadata.gen.json --upload-source-code "legion-3d-$v-source.zip" --approval-timeout 0
       # First submission and store listing are created manually. These steps update an existing item only.
+      # Upload goes to the /upload/ endpoint (the item URL itself answers 400 to a PUT). A failure here never blocks the
+      # GitHub release above; retry with the «Chrome Web Store upload» workflow (cws.yml) for the same tag.
       - name: Upload and publish Chrome Web Store update (optional)
+        continue-on-error: true
         env:
           CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
           CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
           CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
           CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
-        run: |
-          if [[ -z "$CWS_EXTENSION_ID" || -z "$CWS_CLIENT_ID" || -z "$CWS_CLIENT_SECRET" || -z "$CWS_REFRESH_TOKEN" ]]; then
-            echo 'Chrome Web Store secrets missing; skipping.'; exit 0
-          fi
-          set -euo pipefail
-          file="legion-3d-${GITHUB_REF_NAME#v}-store.zip"
-          token=$(curl -fsS --retry 2 https://oauth2.googleapis.com/token \
-            -d grant_type=refresh_token --data-urlencode "client_id=$CWS_CLIENT_ID" \
-            --data-urlencode "client_secret=$CWS_CLIENT_SECRET" \
-            --data-urlencode "refresh_token=$CWS_REFRESH_TOKEN" | jq -er '.access_token')
-          base="https://www.googleapis.com/chromewebstore/v1.1/items/$CWS_EXTENSION_ID"
-          upload=$(curl -fsS --retry 2 -X PUT -H "Authorization: Bearer $token" -H 'x-goog-api-version: 2' \
-            -T "$file" "$base")
-          echo "$upload" | jq -e '.uploadState == "SUCCESS"' >/dev/null
-          publish=$(curl -fsS --retry 2 -X POST -H "Authorization: Bearer $token" -H 'x-goog-api-version: 2' \
-            "$base/publish?publishTarget=default")
-          echo "$publish" | jq -e '.status | index("OK") or index("PUBLISHED_WITH_FRICTION")' >/dev/null
-          echo 'Chrome Web Store update submitted for review.'
+        run: node scripts/cws-publish.mjs "legion-3d-${GITHUB_REF_NAME#v}-store.zip"
       - name: Upload and submit Edge Add-ons update (optional)
         env:
           EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
