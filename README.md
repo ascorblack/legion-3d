@@ -1,5 +1,8 @@
 # Legion 3D
 
+**[⬇ Установить из Chrome Web Store](https://chromewebstore.google.com/detail/chlcndeaohnmjoeoppfdfchmfkllkemk)** — ставится в один клик и обновляется сам (Chrome, Edge, Яндекс Браузер, Opera).
+Firefox и ручная установка — на [странице релизов](https://github.com/ascorblack/legion-3d/releases/latest).
+
 **Неофициальное** расширение для Chrome и Firefox, которое превращает сайт игры «Легион»
 ([play.multidonate.ru](https://play.multidonate.ru)) в 3D-игру: гуляй по городу от первого или третьего лица,
 смотри на других игроков в 3D, читай их сообщения над головами, переодевайся в игровом меню и заходи в лавки,
