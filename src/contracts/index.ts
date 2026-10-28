@@ -153,7 +153,7 @@ export interface World3D {
 
 export interface ChatMsg {
   id: string; login: string; name: string; text: string; at: number;
-  kind?: 'g' | 'tr' | 'dm' | 'ev' | 'sys'; role?: string; roleName?: string; to?: string;
+  kind?: 'g' | 'tr' | 'dm' | 'ev' | 'sys'; role?: string; roleName?: string; to?: string; /** chat role own / mod (site m.r) */ r?: string;
 }
 
 /** A character in the world (other players and me). Positions in px (2D city space). */

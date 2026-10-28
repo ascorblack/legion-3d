@@ -26,7 +26,7 @@ export interface FakeOpts {
 }
 /** econ: the stones keep a measured dig rate and diggers (the captured `bl` re-based to now, synthesized for front stones without one), so the estimate sign has real numbers;
  *  (new front stones get one too when a stone breaks); news: «Пока тебя не было» summary; qc: shared weekly quest (prog / ready = done for me and not taken / nomin = done but own share too small / cl = taken); limit: daily cap (low = 40 min left, full = used up). */
-export interface FakeDemo { econ?: boolean; news?: boolean; qc?: 'prog' | 'ready' | 'nomin' | 'cl'; limit?: 'low' | 'full'; /** me.fx.q: the stone queue (site testers' flag). */ fxq?: boolean; /** a made-up last week in st.hist («Итоги шахты»). */ hist?: boolean }
+export interface FakeDemo { /** ?chatmod=own|mod: I moderate the mine chat (mchat.mod; /api/mine/chat/mod answers). */ chatmod?: 'own' | 'mod'; econ?: boolean; news?: boolean; qc?: 'prog' | 'ready' | 'nomin' | 'cl'; limit?: 'low' | 'full'; /** me.fx.q: the stone queue (site testers' flag). */ fxq?: boolean; /** a made-up last week in st.hist («Итоги шахты»). */ hist?: boolean }
 /** ?econ=1 &news=1 &qc=prog|ready|nomin|cl &limit=low|full of the dev page (dev/mine.ts). */
 export function demoFromQuery(search: string): FakeDemo {
   const q = new URLSearchParams(search), d: FakeDemo = {};
@@ -34,6 +34,7 @@ export function demoFromQuery(search: string): FakeDemo {
   if (q.get('news') === '1') d.news = true;
   if (q.get('fxq') === '1') d.fxq = true;
   if (q.get('hist') === '1') d.hist = true;
+  const cm = q.get('chatmod'); if (cm === 'own' || cm === 'mod') d.chatmod = cm;
   const qc = q.get('qc'); if (qc === 'prog' || qc === 'ready' || qc === 'nomin' || qc === 'cl') d.qc = qc;
   const lim = q.get('limit'); if (lim === 'low' || lim === 'full') d.limit = lim;
   return d;
@@ -73,6 +74,8 @@ export function applyEconDemo(st: MineView, now = Date.now(), initial = true): v
 /** Fake game server. api(path, body) answers like the real one (shapes as in docs/MINE.md). */
 export class FakeMine {
   st: MineView; me: MineMe; calls: { p: string; b: unknown }[] = [];
+  /** Mine chat moderation (demo chatmod): my role, moderators, mutes / bans. */
+  chatMod: { role: 'own' | 'mod' | null; mods: string[]; bans: { l: string; until: number; by: string }[] } = { role: null, mods: [], bans: [] };
   private econ = false; private o: FakeOpts; private timers: any[] = []; private resN = 0; private bots: { l: string; x: number; y: number; tx: number; ty: number }[] = [];
   constructor(o: FakeOpts) {
     this.o = o;
@@ -85,6 +88,7 @@ export class FakeMine {
     o.hero.mn = { ...(o.hero.mn || {}), [o.enter.c || 'home']: this.me };
     this.st.front = frontOf(this.dugA(), this.st.fl!.c.map((c) => c[0]));
     if (demo.econ) { this.econ = true; applyEconDemo(this.st); }
+    if (demo.chatmod) this.chatMod = { role: demo.chatmod, mods: ['miner_mod'], bans: [{ l: 'miner_spam', until: Date.now() + 25 * 60000, by: o.login }] };
     if (demo.hist && !(this.st.hist && this.st.hist.length)) this.st.hist = [{ floor: 31, players: 520, top: (this.st.top || []).slice(0, 5).map(([l, u]) => ({ l, u: Math.round(u * 1.2) })) }];
     if (o.bots !== false) this.startBots();
     // the server finishes stones: tick every 500 ms
@@ -102,7 +106,28 @@ export class FakeMine {
     await new Promise((r) => setTimeout(r, 30));
     const path = p.replace(/\?.*$/, ''), L = this.o.login;
     switch (path) {
-      case '/api/mine/enter': return { ...this.o.enter, ok: true, sid: 'fake-sid', me: this.me, st: this.view(true), a: this.presenceA() };
+      case '/api/mine/enter': {
+        const r: any = { ...this.o.enter, ok: true, sid: 'fake-sid', me: this.me, st: this.view(true), a: this.presenceA() };
+        if (this.chatMod.role && r.mchat) {   // demo: I moderate this chat; one line of a moderator
+          const chat = (r.mchat.chat || []).map((x: any, k: number) => (k === 1 ? { ...x, r: 'mod' } : x));
+          r.mchat = { ...r.mchat, chat, mod: this.chatMod.role };
+        }
+        return r;
+      }
+      case '/api/mine/chat/mod': {   // site chatAct / chatPanel (moderators only)
+        const M = this.chatMod; if (!M.role) return { ok: false, error: 'forbidden' };
+        if (!b) return { ok: true, role: M.role, bans: M.bans, mods: M.role === 'own' ? M.mods : undefined };
+        const login = String(b.login || '');
+        switch (b.op) {
+          case 'del': this.o.bus.emit('sse:mine', { chatRoom: 'mine', chatDel: [b.id] }); return { ok: true, id: b.id };
+          case 'mute': M.bans = [...M.bans.filter((x) => x.l !== login), { l: login, until: Date.now() + (+b.min || 30) * 60000, by: L }]; return { ok: true, login };
+          case 'ban': M.bans = [...M.bans.filter((x) => x.l !== login), { l: login, until: 0, by: L }]; return { ok: true, login, gone: [] };
+          case 'unban': M.bans = M.bans.filter((x) => x.l !== login); return { ok: true, login };
+          case 'mod': if (M.role !== 'own') return { ok: false, error: 'forbidden' }; if (!M.mods.includes(login)) M.mods.push(login); return { ok: true, login };
+          case 'unmod': if (M.role !== 'own') return { ok: false, error: 'forbidden' }; M.mods = M.mods.filter((x) => x !== login); return { ok: true, login };
+        }
+        return { ok: false, error: 'bad op' };
+      }
       case '/api/mine/state': {
         const v = /[?&]v=(\d+)/.exec(p);
         const r: MinePayload = { ok: true, n: this.bots.length, c: this.o.enter.c, here: 40 + this.bots.length, hw: Object.keys(this.st.dg || {}).length * 2, hm: 30, me: this.me };

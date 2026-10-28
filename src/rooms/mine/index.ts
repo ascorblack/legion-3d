@@ -141,6 +141,11 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     on: (fn) => client.on((e) => { if (e.type === 'chat') fn(e.lines); }),
     say: (t) => client.say(t),
     me: () => login,
+    // moderation (site parity): role / mute from the enter's mchat and the live chatMe, deletions, GET / POST /api/mine/chat/mod?c=
+    state: () => client.chat.st,
+    onLive: (fn) => client.on((e) => { if (e.type === 'chatLive') fn({ chatDel: e.del, chatMe: e.me }); }),
+    api,
+    q: client.chatQ,
   }) : () => { /* no mine chat */ };
   const offEv = client.on((e) => {
     if (e.type === 'state') {

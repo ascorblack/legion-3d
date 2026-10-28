@@ -94,3 +94,16 @@ or when the site's chat element is missing).
 In the 3D mine both get a «⛏ Шахта» tab (`attachMineChat`, state in `MineChatTab`): its own list and field are inserted
 next to the site's (`.l3d-mine-l` / `.l3d-mine-f`, shown via `.l3d-mine-on` on the chat box) and re-attached by the
 0.5 s scan if the site rebuilt its DOM.
+
+### Moderation (`chat-mod.ts`)
+Parity with the site's chat module («22.10: модерация»): for a moderator of a chat (role `own` / `mod` from the enter's
+chat state, the addressed `chatMe`, the answer of `GET <base>/mod`) — «⋯» on other people's lines (delete, mute
+5 мин…7 дней, ban, make / unmake moderator for `own`), «⚙» → moderation window (restrict by nick, mutes / bans with
+«Снять», moderators with «×» + add form for `own`), role icons 👑/🛡, the muted field («Мут ещё N мин») and the
+commands /help /mods /mod /unmod /mute /ban /unban (never sent to the feed). One request per action, exactly the site's:
+`POST <base>/mod<q> {op, id, login, min}`, `GET <base>/mod<q>`; base `/api/city/chat` or `/api/mine/chat` + `?c=<mine>`.
+- Docked City chat: the site's own «⋯» opens our menu whose items press the site's own `[data-cact]` buttons (its chatAct
+  does the request / status / list); its ⚙ window and commands are the site's.
+- «⛏ Шахта» tab (dock and fallback) and the fallback City panel: `Moderator` (requests) + `ModUi` (menu / window in a
+  Shadow DOM host `#l3d-chatmod`: keyboard, Esc / click outside close, input modal `chat:mod` = pointer free, gameplay off).
+- Tests: `test/chat-mod.test.ts`; parity against the real site module: `.local/chatmod/parity.mjs` (needs a saved site copy).

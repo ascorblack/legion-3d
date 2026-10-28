@@ -19,7 +19,9 @@ function walk(dir) { for (const item of readdirSync(dir, { withFileTypes: true }
 } }
 walk(dist);
 const allowed = (file) => file === 'manifest.json' || /^(bridge|game|background|notify)\.js$/.test(file) || /^icons\/(16|48|128)\.png$/.test(file) || /^sounds\/[\w./-]+\.(ogg|mp3|wav)$/.test(file);
-const unwanted = files.filter((f) => !allowed(f) && f !== 'INSTALL-RU.txt');
+// web-ext sign (unlisted step) leaves its .amo-upload-uuid in the source dir — a tool file, never packed
+const TOOL_FILES = new Set(['INSTALL-RU.txt', '.amo-upload-uuid']);
+const unwanted = files.filter((f) => !allowed(f) && !TOOL_FILES.has(f));
 const storeFiles = files.filter((f) => allowed(f));
 if (unwanted.length) throw new Error(`Unexpected dist files (use scripts/build.mjs --prod): ${unwanted.join(', ')}`);
 for (const f of ['manifest.json', 'bridge.js', 'game.js', 'background.js', 'notify.js', 'icons/16.png', 'icons/48.png', 'icons/128.png']) if (!files.includes(f)) throw new Error(`Missing ${f}`);

@@ -284,6 +284,7 @@ export const mountUi = (root: HTMLElement, host: UiHost): GameUi => {
     update(dt: number) { hud.update(dt); chat.update(dt); if (opened) menus.tick(dt); },
     dispose() {
       menus.dispose();
+      try { chat.dispose(); } catch { /* */ }
       for (const u of unsubs) { try { u(); } catch { /* */ } }
       if (opened) host.input.setGameplay(true);
       hostEl.remove();

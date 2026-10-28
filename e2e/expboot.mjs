@@ -33,6 +33,7 @@ const shot = async (name) => {
   console.log('shot', join(OUT, name));
 };
 
+await p.addInitScript(() => { try { localStorage.setItem('l3d.start', '3d'); } catch {} });   // 0.5.1: 2D by default
 await p.goto(`http://127.0.0.1:${PORT}/c/test?at=${process.env.AT || 50}`);
 await p.waitForFunction(() => !!window.__l3dGame?.ctx?.dev?.expedition?.active, null, { timeout: 90000 });
 await p.waitForTimeout(7000);

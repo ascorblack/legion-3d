@@ -3,6 +3,9 @@
  * through the real DelayBuffer → adapter → scene path. Nothing touches the network.
  *   ?speed=2 (default)  ?dl=4 stream delay the fake reports (s)  ?at=SEC start at plan second SEC  ?spec=1 spectator
  *   ?role=archer|legionary|mage|priest…  ?q=0..3 quality  ?n=50 big party (extra cats)
+ *   ?hud=battle|battle-tele|map-vote|rune-door|rune-vote|pz-cups|pz-riddle|skeldance|gob-bet|gob-shell|ev-traveler|ev-dice|gather
+ *     the quest HUD (src/quest) over a FAKE site «Поход» tab (src/quest/fake-site.ts: the site's markup and handlers, presses are
+ *     logged to window.__site.log, never sent); &qa=0 = a hero without the site's button flag (→ «пиши в чат стрима»)
  * Mouse drag: look around · wheel: zoom.  window.__exp = { view, engine, fake, seek(sec), pause(on), step(n), stats(), shot() }.
  */
 import * as THREE from 'three';
@@ -14,6 +17,8 @@ import { mockById } from '../src/debug/questMocks';
 import type { Role, QuestPayload } from '../src/quest/model';
 import { ExpeditionView } from '../src/expedition';
 import meFx from '../test/fixtures/me.json';
+import { mountQuestHud } from '../src/quest';
+import { FakeSite, FAKE_MOCK, type FakeStage } from '../src/quest/fake-site';
 
 const Q = new URLSearchParams(location.search);
 const host = document.getElementById('app') as HTMLElement;
@@ -49,7 +54,8 @@ const widen = (v: QuestPayload): QuestPayload => {
   return { ...v, n: bigN, b: { ...v.b, form, fighters: bigN } };
 };
 /* ---- ?demo=… : a fixed synthetic view for the stages the FakeQuest does not visit (vignettes) ---- */
-const DEMO = Q.get('demo');
+const HUD = Q.get('hud') as FakeStage | null;
+const DEMO = Q.get('demo') || (HUD ? FAKE_MOCK[HUD] || null : null);
 const demo = (k: string): QuestPayload => {
   const mock = mockById(k);
   if (mock) return mock.build({ login: LOGIN, role: ROLE, now: now() });
@@ -80,8 +86,32 @@ const demo = (k: string): QuestPayload => {
     default: return { ...base, k: 'rest', t: 'Привал', ter: 'Курган' };
   }
 };
+/* ---- ?hud=… : the quest HUD over a fake site tab (hidden, painted on the HUD's request like the real one) ---- */
+let hudQuest: QuestPayload | null = null;
+const hudFns = new Set<() => void>();
+if (HUD) {
+  const tab = document.createElement('section'); tab.id = 'tab-quest'; tab.className = 'tab'; tab.hidden = true; document.body.appendChild(tab);
+  const site = new FakeSite(tab, { stage: HUD, qa: Q.get('qa') !== '0', answerMs: +(Q.get('answer') ?? 1500) });
+  site.decline = Q.get('decline') === '1';
+  (window as any).LGQuest = site.api;
+  (window as any).__site = site;
+  const toastEl = document.createElement('div');
+  toastEl.style.cssText = 'position:fixed;left:50%;bottom:54px;transform:translateX(-50%);padding:8px 14px;border-radius:10px;background:rgba(20,16,42,.92);font:600 13px system-ui;color:#ffe9a8;z-index:300;display:none';
+  document.body.appendChild(toastEl);
+  let tt = 0;
+  const toast = (t: string, bad?: boolean) => { toastEl.textContent = t; toastEl.style.color = bad ? '#ff9aa8' : '#ffe9a8'; toastEl.style.display = 'block'; clearTimeout(tt); tt = window.setTimeout(() => { toastEl.style.display = 'none'; }, 3500); };
+  const qaHero = { ...hero, role: ROLE, qa: Q.get('qa') !== '0' ? 1 : 0 } as Hero;
+  const store = {
+    get hero() { return qaHero; }, get me() { return { login: LOGIN } as any; }, walkers: new Map(), chat: [], online: 1, layout: null,
+    get quest() { return hudQuest as any; },
+    on: (_ev: string, fn: () => void) => { hudFns.add(fn); return () => hudFns.delete(fn); },
+  };
+  const actions = { openSitePanel: (t: string) => toast(`[dev] открыть вкладку сайта: ${t}`), post: async () => { throw new Error('the HUD must not post'); } } as any;
+  mountQuestHud(document.body, { store: store as any, actions, toast });
+  window.dispatchEvent(new CustomEvent('l3d:expedition', { detail: { active: true, onAir: true, expOnly: true } }));
+}
 const tick = () => {
-  if (DEMO) { view.push(demo(DEMO), now()); return; }
+  if (DEMO) { const v = demo(DEMO); if (HUD) { hudQuest = v; hudFns.forEach((f) => f()); } view.push(v, now()); return; }
   const el = now() - start; const v = widen(fake.at(el)); view.push(rebase(v, start - fake.t0), now());
 };
 tick();

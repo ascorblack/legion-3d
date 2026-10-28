@@ -47,6 +47,7 @@ import update from './update';
 import hwcity from './hwcity';
 import debugMode from './debug-mode';
 import compassVis from './compass-vis';
+import startMode from './start-mode';
 import mineStatus from './mine-status';
 import travel from './travel';
 import expeditionOnly from './expedition-only';
@@ -72,6 +73,7 @@ export const FEATURES: (Feature | CoreFeature)[] = [
   travel,
   expeditionOnly,
   restyle,
+  startMode,
 ];
 
 /** Run every feature's setup in order. A failing feature is logged and skipped (the game still starts). */

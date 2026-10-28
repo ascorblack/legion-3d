@@ -10,7 +10,11 @@ const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) =>
 const out = args.find((a) => !a.startsWith('--')) || '.local/relshots'; mkdirSync(out, { recursive: true });
 const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const SHOTS = [
+const SHOTS = opt.set === '051' ? [
+  ['expedition', 'hud=battle&qa=1', 'quest-buttons', 8000],
+  ['expedition', 'hud=skeldance&qa=1', 'quest-dance', 8000],
+  ['mine', 'dig=20&bots=0&chatmod=own', 'mine-chatmod', 9000],
+] : [
   ['expedition', 'demo=gob-shell', 'gob-shell', 8000],
   ['expedition', 'demo=hw-skeldance-show', 'skeldance', 9000],
   ['expedition', 'demo=hw-cauldron', 'cauldron', 8000],

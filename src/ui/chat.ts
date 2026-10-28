@@ -16,6 +16,8 @@ import type { ChatMsg, Hero } from '../contracts';
 import { type Ctx, h } from './ctx';
 import { esc } from './data';
 import { SITE_CHAT_CSS } from './styles';
+import { ModUi, Moderator, canMod, menuItems, roleIco, type ModApi, type ModLine, type UiItem, type ModOp } from './chat-mod';
+import type { ModalInput } from '../core/modal';
 
 /* ================================================================ pure logic (site-chat.js parity, tested) */
 
@@ -116,14 +118,21 @@ function swallowField(inp: HTMLInputElement | null | undefined): boolean {
 
 /* ================================================================ mine chat tab (⛏ Шахта) */
 
-/** One line of the mine room's chat (the game's `mchat` format). */
-export interface MineLine { id: string; l: string; n?: string; t: string; at?: number }
+/** One line of the mine room's chat (the game's `mchat` format; r = the author's chat role own / mod, sys = a local answer to a command). */
+export interface MineLine { id: string; l: string; n?: string; t: string; at?: number; r?: string; k?: string; sys?: boolean }
 /** What the mine room hands to the chat dock (no import of rooms/ from ui/). Reading only; say() is called by the dock only when the player sends. */
 export interface MineChatSource {
   lines(): readonly MineLine[];
   on(fn: (fresh: MineLine[]) => void): () => void;
   say(text: string): Promise<{ ok?: boolean; error?: string } | null | undefined | unknown>;
   me(): string;
+  /** Moderation (site parity, src/ui/chat-mod.ts) — all optional: chat state of the enter (`mchat`: mod, muted), */
+  state?(): { mod?: unknown; muted?: unknown } | null;
+  /** live deletions / the addressed chatMe, */
+  onLive?(fn: (d: { chatDel?: string[]; chatMe?: any }) => void): () => void;
+  /** the site API for GET / POST /api/mine/chat/mod and the mine query ('?c=<id>'). */
+  api?: ModApi;
+  q?: string;
 }
 const MINE_KEEP = 80;
 export const MINE_PH = 'Написать в чат шахты…';
@@ -138,9 +147,45 @@ export class MineChatTab {
   unread = 0;
   /** Tab that was active when the mine tab took over (restored on leave if the player did not choose another meanwhile). */
   prev: string | null = null;
+  /** Moderation of the mine chat (null when the source has no API: then nothing changes for the tab). */
+  readonly mod: Moderator | null;
+  /** A status / error line to show (moderation results, «Модератор запретил…»). */
+  onNote: ((text: string, ok: boolean) => void) | null = null;
+  /** Lines removed / re-roled, sys line added, role or mute changed: re-render. */
+  onChange: (() => void) | null = null;
   private seen = new Set<string>();
   private list: MineLine[] = [];
-  constructor(readonly src: MineChatSource) { this.take(src.lines()); }
+  constructor(readonly src: MineChatSource) {
+    this.take(src.lines());
+    this.mod = src.api ? new Moderator('/api/mine/chat', src.q || '', src.api, {
+      remove: (ids) => this.remove(ids),
+      setRole: (l, r) => { for (const x of this.list) if (x.l === l) x.r = r; this.onChange?.(); },
+      note: (t, ok) => this.onNote?.(t, !!ok),
+      sys: (t) => this.sys(t),
+    }) : null;
+    if (this.mod) { try { this.mod.st.enter(src.state?.() || null); } catch { /* */ } }
+  }
+  /** Lines deleted by a moderator (site chatApply chatDel). */
+  remove(ids: readonly string[]) {
+    if (!ids.length) return;
+    const del = new Set(ids), n = this.list.length;
+    this.list = this.list.filter((x) => !del.has(x.id));
+    if (this.list.length !== n) this.onChange?.();
+  }
+  /** A local line (answer to a command): shown, never sent (site chatSys). */
+  sys(t: string) {
+    const l: MineLine = { id: 'sys' + Date.now() + Math.random().toString(36).slice(2, 6), l: '', t, at: Date.now(), sys: true };
+    this.seen.add(l.id); this.list.push(l);
+    if (this.list.length > MINE_KEEP) this.list = this.list.slice(-MINE_KEEP);
+    this.onChange?.();
+  }
+  /** Live moderation of the mine chat: deletions and my own mute / role (site chatApply). */
+  live(d: { chatDel?: readonly string[]; chatMe?: any }) {
+    if (d.chatDel && d.chatDel.length) this.remove(d.chatDel.map(String));
+    if (d.chatMe && this.mod) { const note = this.mod.st.me(d.chatMe); if (note) this.onNote?.(note, false); this.onChange?.(); }
+  }
+  /** Placeholder while I am muted here (the field is disabled), else null. */
+  mutedPh(now = Date.now()): string | null { return this.mod ? this.mod.st.placeholder(now) : null; }
   private take(ls: readonly MineLine[]): MineLine[] {
     const fresh: MineLine[] = [];
     for (const l of ls) { if (!l || this.seen.has(l.id)) continue; this.seen.add(l.id); this.list.push(l); fresh.push(l); }
@@ -163,12 +208,15 @@ export class MineChatTab {
   deselect() { this.selected = false; }
   /** Mine left: the tab to restore (null when the player already chose another one). */
   leave(): string | null { const r = this.selected ? this.prev : null; this.selected = false; return r; }
-  /** Send what the player typed (blank → null, nothing posted). */
-  async send(text: string): Promise<{ ok: boolean; error?: string } | null> {
+  /** Send what the player typed (blank → null, nothing posted). «/…» is a moderation command (site chatSend: never posted). */
+  async send(text: string): Promise<{ ok: boolean; error?: string; cmd?: boolean } | null> {
     const t = String(text || '').trim(); if (!t) return null;
     if (runChatCommand(t)) return { ok: true };   // a local command: never posted
+    if (this.mod && t.startsWith('/')) return { ok: await this.mod.cmd(t), cmd: true };
+    const ph = this.mutedPh(); if (ph) return { ok: false, error: ph };
     const r = await this.src.say(t) as { ok?: boolean; error?: string } | null | undefined;
-    return r && r.ok === false ? { ok: false, error: r.error } : { ok: true };
+    if (r && r.ok === false) { if (this.mod && /запретил/.test(String(r.error || ''))) { this.mod.st.refused(); this.onChange?.(); } return { ok: false, error: r.error }; }
+    return { ok: true };
   }
 }
 
@@ -181,8 +229,12 @@ export function attachMineChat(src: MineChatSource): () => void {
 }
 
 const hhmm = (at?: number) => { if (!at) return ''; const d = new Date(at); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-const mineLi = (l: MineLine, me: string) =>
-  `<li${String(l.l).toLowerCase() === me ? ' class="me"' : ''} title="${esc(hhmm(l.at))}"><b data-nick="${esc(l.l)}" style="color:${nickColor(l.l)}">${esc(l.n || l.l)}</b> <span>${esc(l.t)}</span></li>`;
+/** A mine line in the docked chat: role icon, nick, text, and «⋯» (data-cm) for a moderator — the site's chatLi look. */
+const mineLi = (l: MineLine, me: string, mod: Moderator | null) => {
+  if (l.sys) return `<li class="cy-chat-sys">${esc(l.t)}</li>`;
+  const nm = esc(l.n || l.l), cm = mod && canMod(mod.role, me, l as ModLine) ? `<button type="button" class="cy-chat-m l3d-cm" data-cm="${esc(l.id)}" aria-label="Модерация: ${nm}">⋯</button>` : '';
+  return `<li${String(l.l).toLowerCase() === me ? ' class="me"' : l.r ? ' class="md"' : ''} title="${esc(hhmm(l.at))}">${roleIco(l.r)}<b data-nick="${esc(l.l)}" style="color:${nickColor(l.l)}">${nm}</b> <span>${esc(l.t)}</span>${cm}</li>`;
+};
 
 /* ================================================================ controller */
 
@@ -228,6 +280,16 @@ export class Chat {
   private dTabsEl: HTMLElement | null = null;
   private boxMo: MutationObserver | null = null;
   private mineSending = false;
+  private dGear: HTMLButtonElement | null = null;          // dock: our ⚙ for the mine chat (the site's ⚙ is the City's)
+  // moderation (src/ui/chat-mod.ts): one popup (menu / window); the City chat's role, mute and local changes (fallback panel)
+  private modUi: ModUi;
+  private city: Moderator;
+  private cityGone = new Set<string>();
+  private cityRole = new Map<string, string | undefined>();
+  private citySys: ChatMsg[] = [];
+  private gear: HTMLButtonElement;
+  private offs: (() => void)[] = [];
+  private noteT = 0;
 
   constructor(c: Ctx) {
     this.c = c;
@@ -272,7 +334,7 @@ export class Chat {
     this.el.addEventListener('focusin', () => { if (!this.focused) this.onFocus(true); });
     this.el.addEventListener('focusout', () => setTimeout(() => {
       const a = this.c.shadow.activeElement;
-      if (this.focused && !(a && this.el.contains(a))) this.onFocus(false);
+      if (this.focused && !this.modUi.open && !(a && this.el.contains(a))) this.onFocus(false);
     }, 0));
     this.el.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
@@ -287,14 +349,123 @@ export class Chat {
     });
     this.input.addEventListener('keyup', (e) => e.stopPropagation());
     this.input.addEventListener('keypress', (e) => e.stopPropagation());
+    // moderation: the popup (menu / ⚙ window) and the City chat's moderator (fallback panel; docked, the site's own chat moderates)
+    this.modUi = new ModUi(() => this.c.host.input as unknown as ModalInput);
+    this.modUi.onChange = (open) => {
+      if (open || !this.focused) return;
+      setTimeout(() => { const a = this.c.shadow.activeElement; if (this.focused && !this.modUi.open && !(a && this.el.contains(a))) this.onFocus(false); }, 0);
+    };
+    const api: ModApi = (p, b) => (b === undefined ? this.c.host.actions.get(p) : this.c.host.actions.post(p, b));
+    this.city = new Moderator('/api/city/chat', '', api, {
+      remove: (ids) => { for (const id of ids) this.cityGone.add(id); if (!this.box) this.rerender(); },
+      setRole: (l, r) => { this.cityRole.set(l, r); if (!this.box) this.rerender(); },
+      note: (t, ok) => this.note(t, !!ok),
+      sys: (t) => { this.citySys.push({ id: 'sys' + Date.now() + Math.random().toString(36).slice(2, 6), login: '', name: '', text: t, at: Date.now(), kind: 'sys' }); if (this.citySys.length > 20) this.citySys.shift(); if (!this.box) this.rerender(); },
+    });
+    this.gear = h('button', 'gear', '⚙︎'); this.gear.type = 'button'; this.gear.hidden = true;
+    this.gear.setAttribute('aria-label', 'Модерация чата'); this.gear.title = 'Модерация чата';
+    this.gear.addEventListener('mousedown', (e) => e.preventDefault());
+    this.gear.addEventListener('click', () => this.openPanel(this.gear, this.el, this.mineSel));
+    this.log.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-cm]'); if (!b) return;
+      e.stopPropagation(); this.openMenu(b, b.dataset.cm!, this.mineSel);
+    }, true);
+    // the City chat's moderation state, from the same answers the site reads: enter (mod, muted), live / polled chatMe
+    const B = (typeof window !== 'undefined' ? (window as any).__L3D_BUS : null) as { on?(t: string, f: (d: any) => void): () => void; last?: Record<string, any> } | null;
+    if (B && typeof B.on === 'function') {
+      const enter = (r: any) => { if (r && r.ok !== false) { this.city.st.enter(r); this.modSync(); } };
+      const live = (d: any) => { if (!d || !d.chatMe) return; const n = this.city.st.me(d.chatMe); if (n && !this.box) this.note(n, false); this.modSync(); };
+      this.offs.push(B.on('city:enter', enter), B.on('sse:city', live), B.on('city:state', (d) => { if (d && d.ok) live(d); }));
+      if (B.last && B.last['city:enter']) enter(B.last['city:enter']);
+    }
     this.renderTabs();
     mineSubs.add(() => this.mineSync());
     this.mineSync();
   }
 
+  /* ------------------------------------------------------------ moderation (src/ui/chat-mod.ts) */
+
+  /** Moderator of the chat shown now: the mine tab's or the City's. */
+  private get curMod(): Moderator | null { return this.mineSel ? (this.mine?.mod || null) : this.city; }
+
+  /** A status line: docked → the site's own status line of the chat box; fallback → a toast. */
+  private note(t: string, ok: boolean) {
+    const e = this.box?.querySelector<HTMLElement>('.cy-chat-e');
+    if (e) {
+      e.textContent = t; e.classList.toggle('ok', ok);
+      window.clearTimeout(this.noteT); this.noteT = window.setTimeout(() => { if (e.textContent === t) e.textContent = ''; }, 4000);
+    } else this.c.toast(t, !ok);
+  }
+
+  /** Role / mute changed: redraw what shows it. */
+  private modSync() {
+    if (this.box) { this.dockMineView(); return; }
+    this.rerender();
+  }
+
+  /** «⋯» of a line (mine or City, our own rendering): the menu of the site's items for my role. */
+  private openMenu(from: HTMLElement, id: string, mine: boolean) {
+    const mod = mine ? this.mine?.mod : this.city; if (!mod || !mod.role) return;
+    let line: ModLine | null = null;
+    if (mine) { const l = this.mine!.lines().find((x) => x.id === id); if (l) line = l as ModLine; }
+    else { const m = this.c.host.store.chat.find((x) => x.id === id); if (m) line = { id: m.id, l: m.login, n: m.name, r: this.roleOf(m), k: m.kind }; }
+    if (!line || !canMod(mod.role, this.me(), line)) return;
+    this.modUi.menu(from, line.n || line.l, menuItems(mod, line));
+  }
+
+  /** ⚙: the moderation window of the chat shown now. */
+  private openPanel(from: HTMLElement, anchor: HTMLElement, mine: boolean) {
+    const mod = mine ? this.mine?.mod : this.city; if (!mod || !mod.role) return;
+    this.modUi.panel(from, anchor, { title: mine ? 'Модерация чата шахты' : 'Модерация чата города', load: () => mod.info(), act: (op, o) => mod.act(op, o) });
+  }
+
+  /** The chat role of a City line's author: what the site sent (m.r), or what a mod / unmod of mine changed. */
+  private roleOf(m: ChatMsg): string | undefined {
+    return this.cityRole.has(m.login) ? this.cityRole.get(m.login) : ((m as unknown as { r?: string }).r || undefined);
+  }
+
+  /**
+   * Docked City chat: the site's «⋯» (button[data-cmod]) opens OUR menu whose items press the site's own buttons
+   * ([data-cact] of the same line, found again at the moment of the press) — the site's chatAct does the request, the
+   * status line and the list update, so the City's moderation is the site's own. Ban is confirmed in our menu (a second
+   * press) and the site's confirm() is answered for it. A button the site has re-rendered away → the same request by us.
+   */
+  private siteMenu(btn: HTMLElement) {
+    const b = this.box, li = btn.closest('li'), list = b?.querySelector<HTMLElement>('.cy-chat-l:not(.l3d-mine-l)');
+    if (!b || !li || !list) return;
+    const nick = li.querySelector<HTMLElement>('b[data-nick]');
+    const title = (nick?.textContent || '').trim() || nick?.dataset.nick || '';
+    const sel = (x: HTMLElement) => {
+      const d = x.dataset, q = (k: string, v: string | undefined) => (v == null ? '' : `[data-${k}="${CSS.escape(v)}"]`);
+      return `[data-cact="${CSS.escape(d.cact || '')}"]${q('id', d.id)}${q('l', d.l)}${q('min', d.min)}`;
+    };
+    const items: UiItem[] = [];
+    for (const x of li.querySelectorAll<HTMLElement>('.cy-chat-mm [data-cact]')) {
+      const op = x.dataset.cact as ModOp, s0 = sel(x), args = { id: x.dataset.id, login: x.dataset.l, n: x.dataset.n, min: +(x.dataset.min || '') || undefined };
+      items.push({
+        label: (x.textContent || '').trim(), bad: x.classList.contains('bad') || op === 'ban', mute: op === 'mute',
+        confirm: op === 'ban' ? `Точно забанить ${args.n || args.login}?` : undefined,
+        run: () => {
+          const cur = this.box?.querySelector<HTMLElement>(`.cy-chat-l:not(.l3d-mine-l) ${s0}`);
+          if (!cur) return this.city.act(op, op === 'ban' ? { ...args, sure: true } : args);
+          const w = window as unknown as { confirm: (m?: string) => boolean }, c0 = w.confirm;
+          if (op === 'ban') w.confirm = () => true;   // confirmed in our menu already
+          try { cur.click(); } finally { if (op === 'ban') w.confirm = c0; }
+        },
+      });
+    }
+    if (items.length) this.modUi.menu(btn, title, items);
+  }
+
+  dispose() {
+    for (const f of this.offs.splice(0)) f();
+    this.modUi.dispose();
+    this.undock();
+  }
+
   /** The site's chat is docked over the game (instead of our panel). */
   get docked() { return !!this.box; }
-  get typing() { return this.box ? this.dockFocus : this.focused; }
+  get typing() { return (this.box ? this.dockFocus : this.focused) || this.modUi.open; }
 
   focus(prefill?: string) {
     try { document.exitPointerLock?.(); } catch { /* ignore */ }
@@ -332,7 +503,8 @@ export class Chat {
     const f = this.flags();
     if (!tabOk(this.tab, f)) this.tab = 'g';
     const ms = this.mineSel, hasMine = !!this.mine && !this.box;
-    const any = f.tr || f.dm || hasMine;
+    const cm = this.curMod, gearOn = !!(cm && cm.role);
+    const any = f.tr || f.dm || hasMine || gearOn;
     this.tabsEl.hidden = !any;
     for (const b of this.tabsEl.querySelectorAll<HTMLElement>('[data-t]')) {
       const t = b.dataset.t as ChatTab, u = this.un[t] || 0, bn = b.querySelector('.tn') as HTMLElement;
@@ -361,9 +533,14 @@ export class Chat {
       this.toEl.innerHTML = (peers.length ? `<button type="button" data-peer="" aria-pressed="${!this.peer}">Все</button>` + peers.map((p) => `<button type="button" data-peer="${esc(p)}" aria-pressed="${this.peer === p}" style="color:${nickColor(p)}">${esc(p)}</button>`).join('') : '')
         + (this.peer ? `<span class="tw">Кому: <b>${esc(this.peer)}</b></span>` : peers.length ? '<span class="tw">Выбери, кому писать</span>' : '');
     }
+    // ⚙ (moderators of the chat shown): the moderation window
+    this.gear.hidden = !gearOn;
+    if (this.gear.parentElement !== this.tabsEl || this.tabsEl.lastElementChild !== this.gear) this.tabsEl.appendChild(this.gear);
     this.form.hidden = this.tab === 'ev' && !ms;   // Достижения: read only
-    this.input.disabled = this.tab === 'dm' && !this.peer && !ms;
-    this.input.placeholder = ms ? MINE_PH : this.tab === 'dm' ? (this.peer ? `Лично для ${this.peer}…` : 'Выбери собеседника: «✉» у ника') : TAB_PH[this.tab];
+    // muted by a moderator (site chatRender): the field is off, the placeholder says how long
+    const mph = cm ? cm.st.placeholder() : null;
+    this.input.disabled = !!mph || (this.tab === 'dm' && !this.peer && !ms);
+    this.input.placeholder = mph || (ms ? (cm && cm.role ? 'Написать… (/help — команды)' : MINE_PH) : this.tab === 'dm' ? (this.peer ? `Лично для ${this.peer}…` : 'Выбери собеседника: «✉» у ника') : this.tab === 'g' && cm && cm.role ? 'Написать… (/help — команды)' : TAB_PH[this.tab]);
   }
 
   private onFocus(on: boolean) {
@@ -386,13 +563,23 @@ export class Chat {
     if (this.sending) return;
     if (runChatCommand(t)) { this.input.value = ''; this.cnt.textContent = ''; this.input.blur(); return; }   // local command: never sent
     if (this.mineSel) { await this.mineSend(this.input, () => { this.cnt.textContent = ''; this.input.blur(); }); return; }
+    // site chatSend: «/…» in Общий is a moderation command — handled here, never sent to the feed
+    if (t.startsWith('/') && this.tab === 'g') {
+      this.sending = true;
+      try { if (await this.city.cmd(t)) { this.input.value = ''; this.cnt.textContent = ''; } } finally { this.sending = false; }
+      return;
+    }
+    if (this.city.st.isMuted()) { this.renderTabs(); return; }
     if (this.tab === 'dm' && !this.peer) { this.c.toast('Кому? Нажми «✉» у ника в ленте', true); return; }
     this.sending = true;
     try {
       const o = this.tab === 'tr' ? { k: 'tr' as const } : this.tab === 'dm' && this.peer ? { to: this.peer } : undefined;
       const r = await this.c.host.actions.say(t, o);
       if (r && r.ok) { this.input.value = ''; this.cnt.textContent = ''; this.input.blur(); }
-      else this.c.toast((r && r.error) || 'Сообщение не отправлено', true);
+      else {
+        if (r && /запретил/.test(String(r.error || ''))) { this.city.st.refused(); this.renderTabs(); }
+        this.c.toast((r && r.error) || 'Сообщение не отправлено', true);
+      }
     } catch {
       this.c.toast('Нет связи с сайтом — сообщение не отправлено', true);
     } finally { this.sending = false; }
@@ -407,7 +594,8 @@ export class Chat {
       const ico = m.role ? `<i class="cls emo" title="${esc(m.roleName || m.role)}">${CLS_ICO[m.role] || '◆'}</i>` : '';
       const to = k === 'dm' && m.login === me && m.to ? ` → <b data-nick="${esc(m.to)}" class="n" style="color:${nickColor(m.to)}">${esc(m.to)}</b>` : '';
       const dmB = f.dm && k !== 'dm' && m.login !== me ? `<button type="button" class="dmb" data-dm="${esc(m.login)}" title="Написать лично" aria-label="Написать лично: ${esc(m.name)}">✉</button>` : '';
-      el.innerHTML = `${ico}<b class="n" data-nick="${esc(m.login)}" style="color:${nickColor(m.login)}">${esc(m.name)}</b>${to}${dmB} <span>${esc(m.text)}</span>`;
+      const r = this.roleOf(m), cm = canMod(this.city.role, me, { id: m.id, l: m.login, r, k }) ? `<button type="button" class="cm" data-cm="${esc(m.id)}" aria-label="Модерация: ${esc(m.name)}">⋯</button>` : '';
+      el.innerHTML = `${roleIco(r)}${ico}<b class="n" data-nick="${esc(m.login)}" style="color:${nickColor(m.login)}">${esc(m.name)}</b>${to}${dmB} <span>${esc(m.text)}</span>${cm}`;
       if (m.login === me) el.classList.add('me');
     }
     (el as any)._at = m.at;
@@ -445,7 +633,10 @@ export class Chat {
   private syncList(toEnd: boolean) {
     if (this.mineSel) { this.syncMineList(toEnd); return; }
     const f = this.flags();
-    let list = chatVis(this.c.host.store.chat, this.tab, f, this.tab === 'dm' ? this.peer : null, EMPTY_SET);
+    const all = this.cityGone.size || this.citySys.length
+      ? [...this.c.host.store.chat.filter((m) => !this.cityGone.has(m.id)), ...this.citySys].sort((a, b) => a.at - b.at)
+      : this.c.host.store.chat;
+    let list = chatVis(all, this.tab, f, this.tab === 'dm' ? this.peer : null, EMPTY_SET);
     if (list.length > KEEP) list = list.slice(list.length - KEEP);
     const ids = new Set(list.map((m) => m.id));
     for (const [id, el] of this.rendered) if (!ids.has(id)) { el.remove(); this.rendered.delete(id); }
@@ -492,7 +683,7 @@ export class Chat {
     this.box = b;
     this.el.style.display = 'none';
     if (this.focused) this.input.blur();
-    const inChat = (x: Element | null) => !!x && (b.contains(x) || !!x.closest?.('.cy-nm'));
+    const inChat = (x: Element | null) => !!x && (b.contains(x) || !!x.closest?.('.cy-nm') || x.id === ModUi.HOST_ID);
     const onIn = () => { if (!this.dockFocus && DOC!.documentElement.classList.contains('l3d-on')) { this.dockFocus = true; this.gameplayFor(true); this.lastAct = Date.now(); this.setIdle(false); } };
     const onOut = () => {
       // the site re-renders its list (a focused nick may vanish) and opens the nick menu outside the box: decide later
@@ -537,6 +728,14 @@ export class Chat {
     window.addEventListener('keydown', onCmd, true);
     window.addEventListener('submit', onCmd, true);
     window.addEventListener('click', onCmd, true);
+    // the site's «⋯» of a City line: our menu (delegating to the site's own buttons) instead of its inline row
+    const onCmod = (e: Event) => {
+      const t = e.target as HTMLElement | null, m = t?.closest?.<HTMLElement>('[data-cmod]');
+      if (!m || !b.contains(m) || m.closest('.l3d-mine-l')) return;
+      e.preventDefault(); e.stopPropagation();
+      this.siteMenu(m);
+    };
+    b.addEventListener('click', onCmod, true);
     const onLeave = () => { if (this.idle) { const l = this.curList(); if (l) l.scrollTop = l.scrollHeight; } };
     const onLock = () => { if (document.pointerLockElement && this.dockFocus) (document.activeElement as HTMLElement | null)?.blur?.(); };
     b.addEventListener('focusin', onIn);
@@ -553,6 +752,8 @@ export class Chat {
     this.lastAct = Date.now();
     this.boxOff = () => {
       b.removeEventListener('focusin', onIn); b.removeEventListener('focusout', onOut); b.removeEventListener('keydown', onKey, true); b.removeEventListener('mouseleave', onLeave);
+      b.removeEventListener('click', onCmod, true);
+      this.modUi.close();
       window.removeEventListener('keydown', onCmd, true); window.removeEventListener('submit', onCmd, true); window.removeEventListener('click', onCmd, true);
       document.removeEventListener('pointerlockchange', onLock);
       mo?.disconnect();
@@ -617,7 +818,10 @@ export class Chat {
       this.mineTeardown();
       const m = this.mine = new MineChatTab(src);
       m.enter(this.box ? this.siteTabName() : this.tab);   // selected on entering the mine; the previous tab stays as it was and comes back on exit
-      this.mineOff = src.on((f) => this.mineLines(f));
+      m.onNote = (t, ok) => this.note(t, ok);
+      m.onChange = () => { if (this.mine !== m) return; if (this.box) this.dockMineView(); else this.rerender(); };
+      const offA = src.on((f) => this.mineLines(f)), offB = src.onLive ? src.onLive((d) => m.live(d)) : null;
+      this.mineOff = () => { offA(); offB?.(); };
       if (this.box) this.dockMineAttach(); else this.rerender();
     } else if (!src && this.mine) {
       this.mineTeardown();
@@ -627,6 +831,8 @@ export class Chat {
   private mineTeardown() {
     const m = this.mine; if (!m) return;
     this.mineOff?.(); this.mineOff = null;
+    m.onChange = null; m.onNote = null;
+    if (this.modUi.open) this.modUi.close();
     const prev = m.leave();
     this.mine = null;
     this.dockMineDetach();
@@ -647,8 +853,11 @@ export class Chat {
   }
 
   private mineLine(l: MineLine): HTMLElement {
-    const el = h('div', 'ln g' + (String(l.l).toLowerCase() === this.mine!.src.me() ? ' me' : ''));
-    el.innerHTML = `<b class="n" data-nick="${esc(l.l)}" style="color:${nickColor(l.l)}">${esc(l.n || l.l)}</b> <span>${esc(l.t)}</span>`;
+    if (l.sys) { const e = h('div', 'ln sys'); e.textContent = l.t; (e as any)._at = l.at; return e; }
+    const me = this.mine!.src.me(), mod = this.mine!.mod;
+    const el = h('div', 'ln g' + (String(l.l).toLowerCase() === me ? ' me' : ''));
+    const cm = mod && canMod(mod.role, me, l as ModLine) ? `<button type="button" class="cm" data-cm="${esc(l.id)}" aria-label="Модерация: ${esc(l.n || l.l)}">⋯</button>` : '';
+    el.innerHTML = `${roleIco(l.r)}<b class="n" data-nick="${esc(l.l)}" style="color:${nickColor(l.l)}">${esc(l.n || l.l)}</b> <span>${esc(l.t)}</span>${cm}`;
     el.title = hhmm(l.at); (el as any)._at = l.at;
     return el;
   }
@@ -677,8 +886,8 @@ export class Chat {
     try {
       const r = await m.send(inp.value);
       if (!r) inp.blur();
-      else if (r.ok) { inp.value = ''; done(); }
-      else this.c.toast(r.error || 'Сообщение не отправлено', true);
+      else if (r.ok) { inp.value = ''; if (r.cmd) { try { inp.dispatchEvent(new Event('input', { bubbles: true })); } catch { /* */ } } else done(); }
+      else if (!r.cmd) this.c.toast(r.error || 'Сообщение не отправлено', true);   // a command shows its own note
     } catch { this.c.toast('Нет связи с сайтом — сообщение не отправлено', true); }
     finally { this.mineSending = false; }
   }
@@ -704,6 +913,21 @@ export class Chat {
       form.addEventListener('submit', (e) => { e.preventDefault(); void this.mineSend(inp, () => { /* the dock blurs once the field is empty */ }); });
       for (const t of ['keydown', 'keyup', 'keypress'] as const) inp.addEventListener(t, (e) => e.stopPropagation());   // game keys never fire while typing
       ol.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+      ol.addEventListener('click', (e) => {
+        const t = e.target as HTMLElement;
+        const cm = t.closest<HTMLElement>('[data-cm]');
+        if (cm) { e.stopPropagation(); this.openMenu(cm, cm.dataset.cm!, true); return; }
+        // site: a nick → «@ник » in the field (not my own)
+        const n = t.closest<HTMLElement>('b[data-nick]'), nk = n?.dataset.nick;
+        if (nk && nk.toLowerCase() !== this.mine?.src.me() && !inp.disabled) {
+          inp.value = `@${nk} ${inp.value.replace(/^@[\w]+\s*/, '')}`;
+          try { inp.focus({ preventScroll: true }); inp.setSelectionRange(inp.value.length, inp.value.length); } catch { /* */ }
+        }
+      });
+      const gear = h('button', 'l3d-mine-sh', '⚙︎'); gear.type = 'button'; gear.hidden = true;
+      gear.setAttribute('aria-label', 'Модерация чата шахты'); gear.title = 'Модерация чата шахты';
+      gear.addEventListener('click', (e) => { e.stopPropagation(); if (this.box) this.openPanel(gear, this.box.querySelector<HTMLElement>('.cy-chat-b') || this.box, true); });
+      this.dGear = gear;
       this.dBtn = btn; this.dList = ol; this.dForm = form; this.dInput = inp;
       if (typeof MutationObserver === 'function') {
         this.boxMo = new MutationObserver(() => { this.lastAct = Date.now(); if (this.idle) this.setIdle(false); });
@@ -711,6 +935,8 @@ export class Chat {
       }
     }
     if (this.dBtn.parentElement !== tabs) tabs.appendChild(this.dBtn);
+    const sh = b.querySelector<HTMLElement>('.cy-chat-h .cy-chat-sh');   // our ⚙ right after the site's (which is the City's)
+    if (sh && this.dGear && this.dGear.previousElementSibling !== sh) sh.after(this.dGear);
     if (this.dList!.previousElementSibling !== sl || this.dList!.parentElement !== sl.parentElement) sl.after(this.dList!);
     if (this.dForm!.previousElementSibling !== sf || this.dForm!.parentElement !== sf.parentElement) sf.after(this.dForm!);
     if (this.dTabsEl !== tabs) {
@@ -738,13 +964,18 @@ export class Chat {
     const bn = btn.querySelector('.cy-chat-tn') as HTMLElement; bn.hidden = !m.unread || sel; bn.textContent = m.unread > 99 ? '99+' : String(m.unread);
     const tabs = this.dTabsEl; if (tabs && tabs.hidden && b.querySelector<HTMLElement>('.cy-chat-p')?.hidden !== false) tabs.hidden = false;
     const stick = ol.scrollHeight - ol.scrollTop - ol.clientHeight < 40;
+    // moderation of the mine chat: our ⚙ (shown for a moderator of THIS chat), the field off while I am muted
+    if (this.dGear) this.dGear.hidden = !(m.mod && m.mod.role);
+    const inp = this.dInput;
+    if (inp) { const ph = m.mutedPh(); inp.disabled = !!ph; const sb = this.dForm?.querySelector('button'); if (sb) sb.disabled = !!ph; inp.placeholder = ph || (m.mod && m.mod.role ? 'Написать… (/help — команды)' : MINE_PH); }
     const me = m.src.me(), lines = m.lines();
-    const html = lines.length ? lines.map((l) => mineLi(l, me)).join('') : `<li class="cy-chat-0">${MINE_EMPTY}</li>`;
+    const html = lines.length ? lines.map((l) => mineLi(l, me, m.mod)).join('') : `<li class="cy-chat-0">${MINE_EMPTY}</li>`;
     if ((ol as any)._k !== html) { (ol as any)._k = html; ol.innerHTML = html; if (stick || sel) ol.scrollTop = ol.scrollHeight; }
   }
 
   private dockMineDetach() {
-    this.dBtn?.remove(); this.dList?.remove(); this.dForm?.remove();
+    this.dBtn?.remove(); this.dList?.remove(); this.dForm?.remove(); this.dGear?.remove(); this.dGear = null;
+    if (this.modUi.open) this.modUi.close();
     // we un-hid the tab row for a lone «Общий»: give it back (the site re-renders it with its own flags anyway)
     const tb = this.dTabsEl;
     if (tb && !tb.hidden && tb.querySelectorAll('button:not([hidden])').length < 2) tb.hidden = true;

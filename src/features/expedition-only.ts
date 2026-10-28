@@ -21,7 +21,7 @@ import { coreFeature } from './types';
 /** Features that run in the expedition-only game (the rest need the city world, the site's City client or walkers). */
 export const EXP_ONLY_FEATURES: ReadonlySet<string> = new Set([
   'settings', 'item-models', 'menus', 'camera', 'controls', 'classic', 'quest', 'sound', 'debug', 'whatsnew',
-  'closeguard', 'update', 'netstatus', 'quality-info', 'snapshot', 'compassVis', 'expedition', 'expedition-only',
+  'closeguard', 'update', 'netstatus', 'quality-info', 'snapshot', 'compassVis', 'startMode', 'expedition', 'expedition-only',
 ]);
 
 export type ExpCard = 'none' | 'wait' | 'over' | 'open';

@@ -49,7 +49,8 @@ export interface MinePayload {
   mchat?: { chat?: ChatLine[]; c?: number }; chat?: ChatLine[]; chatRoom?: string;
   crafts?: unknown; open?: string[]; town?: string; same?: number;
 }
-export interface ChatLine { id: string; s?: number; l: string; n: string; t: string; at: number; c?: string; cn?: string }
+/** r: the author's chat role ('own' админ / 'mod' модератор — site ROLE_ICO), k: kind. */
+export interface ChatLine { id: string; s?: number; l: string; n: string; t: string; at: number; c?: string; cn?: string; r?: string; k?: string }
 
 /* ============================================================ derived floor */
 

@@ -58,6 +58,7 @@ p.on('response', async (r) => {
   if (!/\/api\/city\/go/.test(r.url())) return;
   try { const j = await r.json(); if (!j.ok) { net.slow.push(j.error || JSON.stringify(j)); console.log(ts(), '[go !ok]', JSON.stringify(j).slice(0, 200)); } } catch { /* */ }
 });
+await p.addInitScript({ content: "try { localStorage.setItem('l3d.start', '3d'); } catch (e) {}" });   // 0.5.1: 2D by default
 await p.addInitScript({ content: readFileSync((opt.dist || 'dist') + '/bridge.js', 'utf8') });
 // page-side timing of /api/city/go calls (Node-side request events clump when the machine is loaded)
 await p.addInitScript({ content: `(() => { const f0 = window.fetch; window.__goT = []; window.fetch = function (u, i) { try { if (/\\/api\\/city\\/go/.test(String(u && u.url || u))) { const t = Math.round(performance.now()); window.__goT.push(t); const r = f0.apply(this, arguments); (window.__goLog = window.__goLog || []).push(t + ' ' + (i && i.body)); r.then((x) => { if (!x.ok) window.__goLog.push(t + ' -> ' + x.status); }, () => {}); return r; } } catch (e) {} return f0.apply(this, arguments); }; })();` });

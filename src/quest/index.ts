@@ -2,10 +2,16 @@
  * Expedition («Поход») HUD: a card on the right side that tells what is happening and what to type in chat.
  * Data: SSE `q` (store.quest), shown with the stream delay like the site does (docs/GAME-DESIGN.md §7).
  * Fair play: never sends anything by itself; reaction words are drawn on a canvas (not copyable).
+ * Commands (src/quest/siteui.ts): what the site's own «Поход» tab offers this user is mirrored — PRESSED commands as buttons that click
+ * the site's own button, TYPED ones as a line fed into the site's own «Команда в поход»; without the site's flag (`hero.qa`) the
+ * card says «пиши в чат стрима» with the commands as copyable chips. No request is ever built here.
  */
 import type { Store, Actions, QuestView } from '../contracts';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
 import { bossName, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
+import { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, type SiteControls, type SiteBtn } from './siteui';
+export { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, findSite, qaSig, siteScope } from './siteui';
+export type { SiteControls, SiteBtn, SiteGroup, SiteLine, SiteHist, SiteSay } from './siteui';
 
 const KIND_RU: Record<string, string> = { battle: 'Бой', trap: 'Ловушка', treasure: 'Сокровищница', lair: 'Логово', rest: 'Привал', shop: 'Лавка', event: 'Событие', map: 'Карта', travel: 'В пути', town: 'Город', gather: 'Сбор отряда', boss: 'Босс', dungeon: 'Данж', bossgen: 'Босс', puzzle: 'Головоломка' };
 const SIDE_RU: Record<string, string> = { L: 'левое крыло', R: 'правое крыло', F: 'дальнее крыло' };
@@ -159,6 +165,7 @@ const CSS = `
 .q{position:fixed;right:18px;top:120px;width:380px;pointer-events:auto;font-family:'Golos Text','Nunito',sans-serif;color:#f5f2ff;
   background:linear-gradient(180deg,rgba(32,22,66,.92),rgba(18,12,40,.92));border:2px solid rgba(255,201,77,.55);border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.06);overflow:hidden;transform-origin:top right;transition:transform .25s,opacity .25s}
+.q{display:flex;flex-direction:column;max-height:calc(100vh - 136px)}.q .b{overflow-y:auto;min-height:0;flex:0 1 auto}.q .h,.q .sy{flex:none}
 .q.hide{opacity:0;transform:scale(.96);pointer-events:none}
 .q.min .b{display:none}
 .h{display:flex;align-items:center;gap:8px;padding:9px 12px;background:linear-gradient(90deg,rgba(255,201,77,.18),transparent);border-bottom:1px solid rgba(255,201,77,.25);cursor:pointer}
@@ -197,6 +204,47 @@ canvas.word{display:block;height:32px}
 .sqb.arm{color:#fff;background:linear-gradient(180deg,#ff7b8a,#e8455c);box-shadow:0 0 0 2px rgba(80,10,20,.6);animation:glow 1s ease-in-out infinite}
 .sqb[disabled]{opacity:.55;cursor:default;animation:none}
 .sqn{font-size:12px;color:#cfc6ef}.sqn.ok{color:#9fe39a}.sqn.wait{color:#ffe9a8}.sqn.bad{color:#ff9aa8}
+.cmd{display:grid;gap:6px}
+.cmd .gt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#cfc6ef}
+.cmd .row{display:flex;flex-wrap:wrap;gap:6px}
+.cmd .row.pad{display:grid;grid-template-columns:repeat(5,1fr)}
+.sb{all:unset;position:relative;box-sizing:border-box;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:34px;padding:6px 11px;border-radius:9px;cursor:pointer;
+  font:700 13px/1.15 'Golos Text',sans-serif;color:#f5f2ff;background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);text-align:center}
+.sb:hover{background:rgba(255,255,255,.16)}.sb:focus-visible{outline:2px solid #ffc94d;outline-offset:2px}
+.sb small{font:600 11px 'Golos Text',sans-serif;color:#d8d0f5}
+.sb.big{flex:1 1 40%;min-height:40px;font-size:14px}
+.sb.main{color:#2a1606;background:linear-gradient(180deg,#ffe27a,#ffc94d);box-shadow:0 0 0 2px rgba(58,36,16,.45)}.sb.main small{color:#5a3a12}
+.sb.warn{color:#ffd0d8;background:rgba(232,69,92,.16);box-shadow:inset 0 0 0 1px rgba(232,69,92,.7)}
+.sb.urge{color:#fff;background:linear-gradient(180deg,#ff7b8a,#e8455c);animation:glow 1s ease-in-out infinite}
+.sb.on,.sb[aria-pressed="true"]{box-shadow:inset 0 0 0 2px #ffc94d;background:rgba(255,201,77,.22);color:#ffe9a8}
+.sb.wait{box-shadow:inset 0 0 0 2px #ffe9a8;background:transparent;color:#ffe9a8}
+.sb.ok{color:#0f2a10;background:linear-gradient(180deg,#b6f0b0,#4cc95a);box-shadow:none}
+.sb.bad{color:#fff;background:#e8455c;box-shadow:none}
+.sb[disabled]{opacity:.62;cursor:default;animation:none}.sb.ok[disabled]{opacity:.9}
+.sb kbd{position:absolute;top:-6px;left:-6px;min-width:15px;height:15px;border-radius:5px;background:#2a1606;color:#ffe9a8;font:800 10px/15px 'Golos Text',sans-serif;text-align:center;box-shadow:0 0 0 1px rgba(255,201,77,.6)}
+.cmd .row.pad .sb{padding:6px 0}
+.sst{margin:0;font-size:12.5px;line-height:1.35;padding:5px 9px;border-radius:8px;background:rgba(255,255,255,.06)}
+.sst.ok{color:#9fe39a;background:rgba(76,201,90,.12)}.sst.wait{color:#ffe9a8;background:rgba(255,201,77,.1)}.sst.bad{color:#ff9aa8;background:rgba(232,69,92,.14)}.sst.warn{color:#fff;background:rgba(232,69,92,.3)}
+.sdp{font:700 14px 'Golos Text',sans-serif;color:#ffe9a8;letter-spacing:.04em}
+.shint{font-size:11.5px;color:#a99fd0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chipc{all:unset;cursor:copy;padding:4px 10px;border-radius:999px;font:800 17px 'Golos Text',sans-serif;color:#ffe9a8;background:rgba(255,201,77,.14);box-shadow:inset 0 0 0 1px rgba(255,201,77,.5)}
+.chipc::after{content:' ⧉';font-size:12px;opacity:.7}
+.chipc:hover{background:rgba(255,201,77,.28)}.chipc:focus-visible{outline:2px solid #ffc94d}
+.u em{display:block;margin-top:6px;font-style:normal;font-size:12px;color:#d8d0f5}
+.sy{padding:0 12px 12px;display:grid;gap:6px}.sy[hidden]{display:none}.q.min .sy{display:none}
+.syf{display:flex;gap:6px;align-items:center}
+.syl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.syf input{all:unset;flex:1;min-width:0;box-sizing:border-box;padding:8px 10px;border-radius:9px;font:600 14px 'Golos Text',sans-serif;color:#fff;background:rgba(0,0,0,.35);box-shadow:inset 0 0 0 1px rgba(255,201,77,.45)}
+.syf input:focus{box-shadow:inset 0 0 0 2px #ffc94d}.syf input::placeholder{color:#9b91c4}
+.syf button{all:unset;cursor:pointer;width:36px;height:36px;border-radius:9px;text-align:center;font:800 16px/36px 'Golos Text',sans-serif;color:#2a1606;background:linear-gradient(180deg,#ffe27a,#ffc94d)}
+.syf button.busy{opacity:.55}
+.syt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#ffc94d}
+.syh{list-style:none;margin:0;padding:0;display:grid;gap:3px}
+.syh li{display:flex;gap:8px;justify-content:space-between;font-size:12px;color:#cfc6ef}.syh li b{color:#f5f2ff;font-weight:700}
+.syh li.ok span{color:#9fe39a}.syh li.no span{color:#ff9aa8}.syh li.wait span{color:#ffe9a8}.syh li.note{color:#ffe9a8}
+.syn{margin:0;font-size:11.5px;color:#b9b0de}
+.syw{margin:0;font-size:12px;font-weight:700;color:#fff;background:rgba(232,69,92,.35);padding:5px 9px;border-radius:8px}.syw[hidden]{display:none}
 .lock{position:fixed;left:50%;top:14px;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:rgba(18,12,40,.9);border:1px solid rgba(255,201,77,.5);
   font:600 13px 'Golos Text',sans-serif;color:#ffe9a8;pointer-events:none}
 `;
@@ -205,8 +253,9 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
   const box = document.createElement('div'); box.className = 'l3d-quest'; box.style.cssText = 'position:fixed;inset:0;z-index:140;pointer-events:none;';
   root.appendChild(box);
   const sh = box.attachShadow({ mode: 'open' });
-  sh.innerHTML = `<style>${CSS}</style><div class="q hide" role="status" aria-live="polite"><div class="h"><i></i><b></b><span></span></div><div class="b"></div></div><div class="lock" hidden>Вы в походе — следите за ним здесь</div>`;
+  sh.innerHTML = `<style>${CSS}</style><div class="q hide" role="status" aria-live="polite"><div class="h"><i></i><b></b><span></span></div><div class="b"></div><div class="sy" hidden></div></div><div class="lock" hidden>Вы в походе — следите за ним здесь</div>`;
   const el = sh.querySelector('.q') as HTMLElement, H = sh.querySelector('.h') as HTMLElement, B = sh.querySelector('.b') as HTMLElement, lock = sh.querySelector('.lock') as HTMLElement;
+  const SY = sh.querySelector('.sy') as HTMLElement;
   // 3D expedition view (src/features/expedition.ts): «Смотреть в 3D [Q]» while the expedition runs
   // v3dFixed: the expedition-only boot (detail.expOnly) — the 3D view is the whole page, there is nothing to leave to
   let v3d = false, v3dOn = false, v3dFixed = false;
@@ -217,6 +266,94 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
   el.classList.toggle('min', min);
 
   const W = window as any;
+
+  /* ---- the site's own quest tab: buttons (pressed) and «Команда в поход» (typed), src/quest/siteui.ts ---- */
+  const siteTab = () => document.getElementById('tab-quest');
+  let site: SiteControls = readSite(null), qa = false, primedAt = 0, hot: SiteBtn[] = [], voteHot: { n: number; vid: number; label: string }[] = [];
+  // the site paints its tab only while «shown» (its tab switch): ask it to paint behind the 3D view; a site tab switch resets that
+  const ensurePainted = (force = false) => {
+    const tab = siteTab(); if (!tab) return;
+    if (force || !primedAt || (!site.painted && Date.now() - primedAt > 3000)) { if (primeSite(W, tab)) primedAt = Date.now(); }
+  };
+  const onSiteTab = (e: Event) => { const t = e.target as Element | null; if (t && t.closest && t.closest('.tabs button')) primedAt = 0; };
+  document.addEventListener('click', onSiteTab, true);
+  const pressKey = (key: string, label: string) => {
+    let r = pressSite(siteTab(), key);
+    if (r === 'missing') { ensurePainted(true); r = pressSite(siteTab(), key); }
+    if (r === 'missing') { host.actions.openSitePanel('quest'); host.toast(`Открыл вкладку «Поход» сайта — нажми там «${label}»`); }
+    key = ''; tick();
+  };
+  const copyChip = (t: string) => {
+    const done = () => host.toast(`Скопировано «${t}» — вставь в чат стрима`);
+    try { const p = navigator.clipboard?.writeText(t); if (p) p.then(done, () => host.toast(`Напиши в чат стрима: ${t}`)); else host.toast(`Напиши в чат стрима: ${t}`); }
+    catch { host.toast(`Напиши в чат стрима: ${t}`); }
+  };
+  // the command line: built once (typing and focus survive the card's repaints); fed into the site's own line
+  SY.innerHTML = `<div class="syt">Команда в поход</div><p class="syw" role="alert" hidden></p><ol class="syh" aria-live="polite" aria-label="Твои последние строки и нажатия"></ol>`
+    + `<form class="syf" autocomplete="off"><label class="syl" for="l3dQSay">Команда в поход</label><input id="l3dQSay" type="text" maxlength="100" enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Команда в поход"><button type="submit" aria-label="Отправить">➤</button></form><p class="syn"></p>`;
+  const sIn = SY.querySelector('input') as HTMLInputElement, sForm = SY.querySelector('form') as HTMLFormElement, sBtn = SY.querySelector('button') as HTMLButtonElement;
+  const recall: string[] = []; let ri = -1, keyS = '';
+  // the site's rule (streamer's decision): words are typed by hand — no paste, no drop
+  const noPaste = (e: Event) => { e.preventDefault(); host.toast('Вставлять нельзя — напечатай сам', true); };
+  sIn.addEventListener('paste', noPaste); sIn.addEventListener('drop', noPaste);
+  sIn.addEventListener('beforeinput', (e) => { if (/^insertFrom(Paste|Drop|PasteAsQuotation)$/.test((e as InputEvent).inputType || '')) noPaste(e); });
+  const stopKeys = (e: KeyboardEvent) => {
+    e.stopPropagation();   // the game must not walk / open menus while typing here (the shadow root hides the input from isTyping)
+    if (e.type !== 'keydown') return;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (!recall.length) return; e.preventDefault();
+      ri = e.key === 'ArrowUp' ? Math.min(recall.length - 1, ri + 1) : Math.max(-1, ri - 1);
+      sIn.value = ri < 0 ? '' : recall[ri];
+    } else if (e.key === 'Escape') { sIn.value = ''; ri = -1; sIn.blur(); }
+  };
+  sIn.addEventListener('keydown', stopKeys); sIn.addEventListener('keyup', stopKeys); sIn.addEventListener('keypress', stopKeys);
+  sForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const line = sIn.value.replace(/\s+/g, ' ').trim().slice(0, 100); if (!line) return;
+    let r = feedSiteSay(siteTab(), line);
+    if (r === 'missing') { ensurePainted(true); r = feedSiteSay(siteTab(), line); }
+    if (r === 'sent') { sIn.value = ''; ri = -1; if (recall[0] !== line) { recall.unshift(line); if (recall.length > 8) recall.pop(); } }
+    else if (r === 'missing') { host.actions.openSitePanel('quest'); host.toast('Строки команд на сайте сейчас нет — открыл вкладку «Поход»', true); }
+    key = ''; keyS = ''; tick();
+  });
+  const sayPaint = (show: boolean) => {
+    const S = site.say;
+    const k = show ? JSON.stringify([S, site.hist]) : '-';
+    if (k === keyS) return; keyS = k;
+    SY.hidden = !show; if (!show) return;
+    sIn.placeholder = S?.placeholder || 'Команда в поход: удар, лечить, 2…';
+    (SY.querySelector('.syt') as HTMLElement).textContent = S?.label || 'Команда в поход';
+    (SY.querySelector('.syn') as HTMLElement).textContent = S?.hint || 'Как сообщение в чат Twitch, только видит его одна игра. Enter — отправить, ↑ — прошлое.';
+    const w = SY.querySelector('.syw') as HTMLElement; w.hidden = !S?.warn; w.textContent = S?.warn || '';
+    sBtn.classList.toggle('busy', !!S?.busy);
+    (SY.querySelector('.syh') as HTMLElement).innerHTML = site.hist.map((x) => x.st === 'note' ? `<li class="note">${esc(x.msg)}</li>` : `<li class="${x.st}"><b>${x.btn ? '▸ ' : ''}${esc(x.line)}</b><span>${esc(x.st === 'wait' ? 'в пути…' : x.msg)}</span></li>`).join('');
+  };
+  const btnHtml = (b: SiteBtn) => {
+    const n = hot.indexOf(b);
+    return `<button type="button" class="sb ${b.cls.join(' ')}" data-sk="${esc(b.key)}"${b.pressed != null ? ` aria-pressed="${b.pressed}"` : ''}${b.disabled ? ' disabled' : ''}${b.tip ? ` title="${esc(b.tip)}"` : ''}>${n >= 0 ? `<kbd>${n + 1}</kbd>` : ''}${esc(b.label)}${b.sub ? `<small>${esc(b.sub)}</small>` : ''}</button>`;
+  };
+  const siteHtml = (S: SiteControls) => {
+    if (!S.groups.length && !S.lines.length && !S.displays.length) return '';
+    let h = '<div class="cmd" role="group" aria-label="Кнопки похода (как на сайте)">';
+    h += S.lines.map((l) => `<p class="sst ${l.cls}" role="status">${esc(l.text)}</p>`).join('');
+    h += S.displays.map((d) => `<div class="sdp" aria-live="polite">${esc(d)}</div>`).join('');
+    if (S.hint) h += `<div class="shint">${esc(S.hint)}</div>`;   // the site's own words, as it shows them: above the buttons
+    for (const g of S.groups) h += `${g.title ? `<div class="gt">${esc(g.title)}</div>` : ''}<div class="row ${g.kind}">${g.btns.map(btnHtml).join('')}</div>`;
+    return h + '</div>';
+  };
+  // number keys 1–4: the first buttons (or the path vote options) — only when not typing and the mouse is free (not aiming)
+  const onKey = (e: KeyboardEvent) => {
+    if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    const m = /^(?:Digit|Numpad)([1-4])$/.exec(e.code); if (!m) return;
+    const t0 = (e.composedPath?.()[0] || e.target) as HTMLElement | null;
+    if (t0 && (t0.tagName === 'INPUT' || t0.tagName === 'TEXTAREA' || t0.tagName === 'SELECT' || t0.isContentEditable)) return;
+    if (document.pointerLockElement || el.classList.contains('hide') || el.classList.contains('min')) return;
+    const i = +m[1] - 1;
+    if (hot.length) { const b = hot[i]; if (!b) return; e.preventDefault(); pressKey(b.key, b.label); return; }
+    const o = voteHot[i]; if (!o) return; e.preventDefault(); pressKey(`qv:${o.vid}:${o.n}`, `${o.n}. ${o.label}`);
+  };
+  window.addEventListener('keydown', onKey);
+
   const baseCmd = (r: string) => { try { return W.LGGameData?.baseCmd?.(r) || 'удар'; } catch { return 'удар'; } };
   const adj = () => { try { return Math.max(-10, Math.min(30, +(localStorage.getItem(ADJ_KEY) || 0) || 0)); } catch { return 0; } };
   // stream-delay buffer: show each view when its time + delay has come
@@ -251,6 +388,7 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
       arm = Date.now(); clearTimeout(armT); armT = window.setTimeout(() => { arm = 0; key = ''; tick(); }, 4050); key = ''; tick(); return;
     }
     arm = 0; clearTimeout(armT);
+    if (!siteSquadButton(document, k)) ensurePainted(true);   // the site paints its tab only while shown
     const r = pressSiteSquad(document, k, () => host.actions.openSitePanel('quest'));
     if (r === 'clicked') { pend = { k, at: Date.now() }; done = null; }
     else host.toast('Открыл вкладку «Поход» сайта — нажми там «' + (k === 'join' ? 'Вступить в поход' : 'Покинуть отряд') + '»');
@@ -275,24 +413,35 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     if ((v3dOn || v3d) && !v3dFixed) h += `<button type="button" class="v3d${v3d ? ' on' : ''}" data-v3d>${v3d ? 'Выйти из 3D-похода' : c.empty ? '🎥 Сбор окончен — смотреть в 3D' : '🎥 Поход идёт — смотреть в 3D'} <kbd>Q</kbd></button>`;
     if (c.where) h += `<div class="chip ${c.inParty ? 'in' : ''}">${esc(c.where)}</div>`;
     if (c.hp != null && c.hp >= 0) h += `<div class="hp"><i style="width:${Math.max(2, Math.round(c.hp * 100))}%"></i></div>`;
+    // typed commands: with the site's flag — the line below (the site's own «Команда в поход»); without it — the stream chat
+    const S = site, btns = qa && (S.groups.length > 0 || !!(c.opts?.length && c.inParty));   // the path vote: its options are buttons
     if (c.urge) {
-      const lab = c.urge.kind === 'say' ? 'Пиши в чат стрима' : c.urge.kind === 'word' ? 'Пиши в чат слово' : c.urge.kind === 'silent' ? 'Внимание' : c.urge.kind === 'ok' ? 'Готово' : 'Что происходит';
-      h += `<div class="u ${c.urge.kind}"><small>${lab}</small><div class="say">${c.urge.kind === 'word' ? '' : esc(c.urge.kind === 'say' ? '«' + c.urge.text + '»' : c.urge.text)}</div></div>`;
+      const lab = c.urge.kind === 'say' ? (qa ? (btns ? 'Жми кнопку — или напечатай в строке команд' : 'Напечатай в строке команд (или в чат)') : 'Пиши в чат стрима')
+        : c.urge.kind === 'word' ? (qa ? 'Напечатай в строке команд слово' : 'Пиши в чат стрима слово') : c.urge.kind === 'silent' ? 'Внимание' : c.urge.kind === 'ok' ? 'Готово' : 'Что происходит';
+      const chips = c.urge.kind === 'say' && !qa ? chatChips(c.urge.text) : [];
+      const body = chips.length ? `<div class="chips">${chips.map((t) => `<button type="button" class="chipc" data-copy="${esc(t)}" title="Скопировать">${esc(t)}</button>`).join('')}</div><em>нажми — скопируется, вставь в чат стрима (кнопок похода сайт тебе не показывает)</em>`
+        : `<div class="say">${c.urge.kind === 'word' ? '' : esc(c.urge.kind === 'say' ? '«' + c.urge.text + '»' : c.urge.text)}</div>`;
+      // the site's buttons ARE the commands now: no second «what to type» box (it would repeat or contradict the pressed one)
+      if (!(c.urge.kind === 'say' && btns)) h += `<div class="u ${c.urge.kind}"><small>${lab}</small>${body}</div>`;
     }
+    if (qa) h += siteHtml(S);
     if (c.opts?.length) {
       const tot = c.opts.reduce((s, o) => s + o.votes, 0) || 1;
       h += `<div class="opts">${c.opts.map((o) => `<button type="button" class="opt${o.my ? ' my' : ''}" data-n="${o.n}"><i style="width:${Math.round(o.votes / tot * 100)}%"></i><b>${o.n}</b>${esc(o.label)}<em>${o.votes}</em></button>`).join('')}</div>`;
+      if (!c.inParty) h += `<div class="shint">Голосует отряд: номер — в чат стрима</div>`;
     }
     if (c.note) h += `<div class="note">${esc(c.note)}</div>`;
     h += squadHtml(c.squad || null);
     h += `<div class="f"><span>как на стриме · <b class="dl"></b> с <button data-adj="-1">−</button> <button data-adj="1">+</button></span><button data-full>Поход полностью ↗</button></div>`;
     B.innerHTML = h;
     if (c.urge?.kind === 'word') B.querySelector('.u .say')!.appendChild(wordCanvas(c.urge.text));
-    B.querySelectorAll<HTMLButtonElement>('.opt').forEach((b) => b.onclick = async () => {
+    // the path vote: the site's own option button ([data-qv] → its X.vote, the same as the number in chat)
+    B.querySelectorAll<HTMLButtonElement>('.opt').forEach((b) => b.onclick = () => {
       if (!c.inParty || c.voteId == null) { host.toast('Голосовать кнопкой можно только в отряде — пиши номер в чат', true); return; }
-      const r = await host.actions.post('/api/qvote', { vid: c.voteId, n: +b.dataset.n! });
-      host.toast(r && r.ok ? 'Голос принят' : (r && r.error) || 'Не получилось', !(r && r.ok));
+      pressKey(`qv:${c.voteId}:${+b.dataset.n!}`, `${b.dataset.n}`);
     });
+    B.querySelectorAll<HTMLButtonElement>('.sb').forEach((b) => b.onclick = () => { const k = b.dataset.sk!; const sb = hot.find((x) => x.key === k); pressKey(k, sb ? sb.label : (b.textContent || '').trim()); });
+    B.querySelectorAll<HTMLButtonElement>('.chipc').forEach((b) => b.onclick = () => copyChip(b.dataset.copy || ''));
     B.querySelectorAll<HTMLButtonElement>('[data-adj]').forEach((b) => b.onclick = () => { try { localStorage.setItem(ADJ_KEY, String(Math.max(-10, Math.min(30, adj() + +b.dataset.adj!)))); } catch { /* */ } });
     (B.querySelector('[data-full]') as HTMLButtonElement).onclick = () => host.actions.openSitePanel('quest');
     const sb = B.querySelector('[data-sq]') as HTMLButtonElement | null;
@@ -311,7 +460,13 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     const c = cardOf(merged && (merged as any).on ? ({ ...merged, party } as QuestView) : merged, me, baseCmd, newest);
     squadState(party);
     if (c) c.squad = squadOf(merged, party);
-    const k = JSON.stringify(c) + (v3d ? '|3d' : v3dOn ? '|on' : '') + (v3dFixed ? '|fixed' : '') + `|${pend ? pend.k : ''}|${done ? done.text : ''}|${arm ? 1 : 0}`;
+    // the site's flag and what its own tab offers now (read back from its DOM, painted behind the 3D view)
+    qa = siteQaOn(host.store.hero);
+    if (c && !c.empty) { ensurePainted(); site = readSite(siteTab()); } else { site = readSite(null); if (!c) primedAt = 0; }
+    hot = qa ? hotButtons(site) : [];
+    voteHot = c?.opts && c.inParty && c.voteId != null ? c.opts.slice(0, 4).map((o) => ({ n: o.n, vid: c.voteId!, label: o.label })) : [];
+    sayPaint(!!(c && !c.empty && qa));
+    const k = JSON.stringify(c) + (qa ? JSON.stringify([site.groups, site.lines, site.displays, site.hint]) : '') + (v3d ? '|3d' : v3dOn ? '|on' : '') + (v3dFixed ? '|fixed' : '') + `|${pend ? pend.k : ''}|${done ? done.text : ''}|${arm ? 1 : 0}`;
     if (k !== key) { key = k; render(c); }
     const sp = H.children[2] as HTMLElement;
     if (c?.until) { const s = Math.max(0, Math.ceil((c.until + dl - now) / 1000)); sp.textContent = `${c.right ? c.right + ' · ' : ''}${s} с`; sp.classList.toggle('hot', s <= 5); }
@@ -320,5 +475,5 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     lock.hidden = v3d || !(shown && (shown as any).on && (shown as any).party === 'in');
   };
   const iv = window.setInterval(tick, 250); tick();
-  return { el: box, dispose() { clearInterval(iv); clearTimeout(armT); unsub(); window.removeEventListener('l3d:expedition', onV3d); box.remove(); } };
+  return { el: box, dispose() { clearInterval(iv); clearTimeout(armT); unsub(); window.removeEventListener('l3d:expedition', onV3d); window.removeEventListener('keydown', onKey); document.removeEventListener('click', onSiteTab, true); box.remove(); } };
 };

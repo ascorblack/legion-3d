@@ -227,7 +227,7 @@ const CSS = String.raw`
 .emo { font-family: 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif; font-style: normal; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-.win { position: absolute; right: 14px; top: 58px; bottom: 96px; width: min(430px, calc(100vw - 28px)); display: flex; flex-direction: column;
+.win { position: absolute; right: 14px; top: 92px;   /* below the online pill and the «нет связи / резерв» badge (top 58) */ bottom: 96px; width: min(430px, calc(100vw - 28px)); display: flex; flex-direction: column;
   background: linear-gradient(180deg, rgba(42,32,48,.97), rgba(29,22,32,.97)); border-radius: 20px;
   box-shadow: 0 0 0 2px var(--line), 0 0 0 5px rgba(29,22,32,.8), 0 22px 60px rgba(0,0,0,.55); overflow: hidden; }
 .win[hidden], .card[hidden] { display: none; }
@@ -241,7 +241,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outl
 .hbtn { display: flex; gap: 6px; }
 .x { width: 32px; height: 32px; border-radius: 50%; border: 0; background: rgba(255,255,255,.07); box-shadow: 0 0 0 1.5px var(--line); }
 .x:hover { background: rgba(255,143,163,.25); }
-.tabs { display: flex; gap: 4px; padding: 4px 12px 10px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.tabs { display: flex; gap: 4px; padding: 4px 12px 10px; flex-wrap: wrap; row-gap: 6px; }
 .tab { flex: none; border: 0; padding: 6px 8px; border-radius: 999px; background: rgba(255,255,255,.05); box-shadow: 0 0 0 1.5px rgba(255,207,106,.14); font-weight: 800; font-size: 11.5px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 .tab.on { background: linear-gradient(#ffe39a, var(--gold)); color: #2a1d18; box-shadow: 0 2px 0 var(--gold-d); }
 .body { flex: 1; overflow: auto; padding: 0 16px 12px; scrollbar-width: thin; scrollbar-color: #5a4a66 transparent; }

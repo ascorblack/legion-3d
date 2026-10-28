@@ -41,6 +41,8 @@ export type MineEvent =
   | { type: 'burst'; bursts: Burst[] }
   | { type: 'tip'; text: string; bad?: boolean }
   | { type: 'chat'; lines: ChatLine[] }
+  /** Mine chat moderation, live (site chatApply): deleted lines and the addressed chatMe (mute / moderator role). */
+  | { type: 'chatLive'; del: string[]; me: { mod?: unknown; muted?: unknown } | null }
   | { type: 'other'; on: boolean }
   | { type: 'busy' }
   | { type: 'error'; text: string };
@@ -76,7 +78,8 @@ export class MineClient {
   /** Own stone queue as we last sent it (site S.qq); the game's me.qq wins when it has one (see queue()). */
   qq: number[] = [];
   busyOp = false;
-  chat: { on: boolean; c: number; lines: ChatLine[] } = { on: false, c: 0, lines: [] };
+  /** Mine chat: lines, counter and the chat state of enter (`mchat.mod` / `mchat.muted` — site chatEnter). */
+  chat: { on: boolean; c: number; lines: ChatLine[]; st: { mod?: unknown; muted?: unknown } | null } = { on: false, c: 0, lines: [], st: null };
   private o: MineClientOpts;
   private T: Timers;
   private now: () => number;
@@ -120,7 +123,7 @@ export class MineClient {
     this.sent = { x: Math.round(start.x), y: Math.round(start.y) };
     this.entered = true; this.other = false;
     this.apply(r, true);
-    if (r.mchat) { this.chat.on = true; this.chatIn(r.mchat); }
+    if (r.mchat) { this.chat.on = true; this.chat.st = { mod: (r.mchat as any).mod, muted: (r.mchat as any).muted }; this.chatIn(r.mchat); }
     this.T.clearInterval(this.pollT); this.T.clearInterval(this.pingT); this.T.clearInterval(this.goneT);
     this.pollT = this.T.setInterval(() => { void this.poll(); }, 3000);
     this.pingT = this.T.setInterval(() => { if (!this.hidden()) void this.o.api('/api/mine/ping' + this.q(), {}); }, 60000);
@@ -147,7 +150,7 @@ export class MineClient {
   /** Live channel event 'mine': new view (st) and/or presence (a, m, g), counters, chat. */
   onEvent(d: MinePayload): void {
     if (this.closed || !d) return;
-    if (d.chatRoom === 'mine') { if (this.chat.on && d.chat) this.chatIn({ chat: d.chat, c: (d as any).c }); return; }
+    if (d.chatRoom === 'mine') { if (this.chat.on) this.chatIn({ chat: d.chat, c: (d as any).c, chatDel: (d as any).chatDel, chatMe: (d as any).chatMe }); return; }
     if (d.c && d.c !== this.c) return;
     if (d.here != null) { this.model.hereOf(d); this.emit({ type: 'here' }); if (!d.st && !d.a && !d.m && !d.g && d.n == null) return; }
     if (!this.entered) return;
@@ -173,8 +176,18 @@ export class MineClient {
   private setOther(on: boolean): void { if (on !== this.other) { this.other = on; if (on) this.model.want = null; this.emit({ type: 'other', on }); } }
   /** «Копать здесь»: the mine is open in another tab — take over (site: enter(true)). */
   takeOver(): void { if (this.pos) void this.enter(this.pos, true); }
-  private chatIn(m: { chat?: ChatLine[]; c?: number }): void {
-    const lines = (m && m.chat) || []; if (!lines.length && m.c == null) return;
+  private chatIn(m: { chat?: ChatLine[]; c?: number; chatDel?: unknown[]; chatMe?: any }): void {
+    if (!m) return;
+    // site chatApply: deleted lines (moderation) and my own mute / moderator role, addressed to me
+    const del = Array.isArray(m.chatDel) ? m.chatDel.map(String) : [];
+    if (del.length) this.chat.lines = this.chat.lines.filter((x) => !del.includes(x.id));
+    if (m.chatMe && typeof m.chatMe === 'object') {
+      const st = this.chat.st || (this.chat.st = {});
+      if ('muted' in m.chatMe) st.muted = m.chatMe.muted;
+      if ('mod' in m.chatMe && st.mod !== 'own') st.mod = m.chatMe.mod;
+    }
+    if (del.length || m.chatMe) this.emit({ type: 'chatLive', del, me: m.chatMe && typeof m.chatMe === 'object' ? m.chatMe : null });
+    const lines = m.chat || []; if (!lines.length && m.c == null) return;
     const known = new Set(this.chat.lines.map((x) => x.id)), fresh = lines.filter((x) => !known.has(x.id));
     if (m.c != null) this.chat.c = Math.max(this.chat.c, +m.c || 0);
     for (const x of fresh) if (x.s != null) this.chat.c = Math.max(this.chat.c, x.s);
@@ -182,6 +195,8 @@ export class MineClient {
     this.chat.lines = [...this.chat.lines, ...fresh].slice(-60);
     this.emit({ type: 'chat', lines: fresh });
   }
+  /** '?c=<mine id>' — the query every /api/mine/chat… request carries (site chatX). */
+  get chatQ(): string { return this.q(); }
   /** POST /api/mine/chat/say?c= {text} (site chat module, room 'mine'). */
   async say(text: string): Promise<any> { const t = String(text || '').trim(); if (!t) return null; return this.o.api('/api/mine/chat/say' + this.q(), { text: t }); }
   /** Results of mine actions come with the hero snapshot (results[].x.op = mine…). */

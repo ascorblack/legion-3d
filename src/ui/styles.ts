@@ -168,6 +168,13 @@ button { font: inherit; color: inherit; }
 .chat.open .log { max-height: 240px; background: rgba(20,14,24,.86); box-shadow: 0 0 0 1.5px var(--line), 0 12px 30px #0008; pointer-events: auto; overflow-y: auto; -webkit-mask: none; mask: none; }
 .chat.open .ln.fade { opacity: 1; }
 .chat.open .in { width: 100%; height: 36px; opacity: 1; background: rgba(29,22,32,.94); box-shadow: 0 0 0 2px var(--l3d-gold), 0 8px 20px #0008; }
+/* moderation (src/ui/chat-mod.ts): role icon, «⋯» on others' lines, ⚙ in the tab row — only for moderators */
+.chat .ln .l3d-cr { font-style: normal; margin-right: 3px; font-size: 12px; }
+.chat .ln .cm { pointer-events: auto; float: right; margin-left: 6px; min-width: 24px; height: 20px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: #ffcf6aee; font: 800 15px/1 system-ui, sans-serif; cursor: pointer; }
+.chat .ln .cm:hover, .chat .ln .cm:focus-visible { color: #fff; background: #ffcf6a2e; outline: 0; }
+.chat:not(.open) .ln .cm { visibility: hidden; }
+.chat .tabs .gear { margin-left: auto; padding: 0; width: 26px; height: 26px; justify-content: center; font: 15px/1 system-ui, sans-serif; color: var(--l3d-ink); }
+.chat .tabs .gear[hidden] { display: none; }
 .chat .log::-webkit-scrollbar { width: 6px; } .chat .log::-webkit-scrollbar-thumb { background: #ffcf6a55; border-radius: 6px; }
 
 /* ============================================================= toasts */
@@ -606,4 +613,14 @@ html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-l { margin: 0; padding: 0; list-sty
 html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-l li.me b { text-decoration: underline dotted #fff6; }
 html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-l .cy-chat-0 { color: #bfaab7; }
 html.l3d-on .cy-nm { z-index: 165 !important; }
+/* moderation in the dock (src/ui/chat-mod.ts): the site's «⋯» opens our menu (never the inline row), our ⚙ for the mine chat */
+html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-l li .cy-chat-mm { display: none !important; }
+html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-l li .cy-chat-m { top: 1px; width: 26px; height: 22px; color: #ffcf6aee; font: 800 16px/1 system-ui, sans-serif; text-shadow: none; }
+html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-l li .cy-chat-m:hover, html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-l li .cy-chat-m:focus-visible { color: #fff; background: #ffcf6a2e; outline: 0; }
+html.l3d-on.l3d-chat-dock .cy-chat .l3d-cr { font-style: normal; margin-right: 3px; font-size: 12px; }
+html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-sh { margin-left: auto; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: rgba(255,255,255,.1); color: #fff; font: 16px/1 system-ui; cursor: pointer; }
+html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-sh:hover, html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-sh:focus-visible { background: rgba(255,255,255,.25); outline: 2px solid #fff; outline-offset: 0; }
+html.l3d-on .cy-chat .l3d-mine-sh[hidden], html.l3d-on .cy-chat:not(.l3d-mine-on) .l3d-mine-sh { display: none !important; }
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-mine-on .cy-chat-h .cy-chat-sh { display: none !important; }
+html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-f input:disabled, html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-f button:disabled { opacity: .5; cursor: not-allowed; }
 `;

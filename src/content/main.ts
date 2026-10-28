@@ -20,6 +20,7 @@ import { startGame, type Game } from './game';
 import CSS from './main.css';
 
 const LS_AUTO = 'l3d.auto';
+const LS_START = 'l3d.start';
 const SS_NOGL = 'l3d.noWebGL';
 const W = window as any;
 
@@ -52,7 +53,10 @@ function launcher() {
   W.addEventListener(RETURN_EVENT, () => { void returnToCity(); });
   W.addEventListener('l3d:contextlost', () => gpuNotice(true));
   W.addEventListener('l3d:contextrestored', () => gpuNotice(false));
-  let auto = true; try { auto = localStorage.getItem(LS_AUTO) !== '0'; } catch { /* default on */ }
+  // what opens on entering the channel page (Настройки → Прочее → «При входе открывать»): '2d' (default) — the
+  // classic site, 3D by the button / F8; '3d' — always 3D; 'last' — the mode used last time (F8 remembers it)
+  let auto = false;
+  try { const m = localStorage.getItem(LS_START) || '2d'; auto = m === '3d' || (m === 'last' && localStorage.getItem(LS_AUTO) !== '0'); } catch { /* default 2D */ }
   if (auto && !ssGet(SS_NOGL)) setTimeout(() => { if (!game && !booting) toggle(); }, 600);
 }
 

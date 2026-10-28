@@ -195,7 +195,7 @@ const lookKeyOf = (e: any) => JSON.stringify([e.lk, e.g, e.gh, e.n, e.lv]);
  *  trade (k:'tr'), DMs (k:'dm'); local system lines (m.sys). The UI maps 'ev' to «Достижения» or «Общий» by hero flags. */
 export const chatKind = (m: any): NonNullable<ChatMsg['kind']> => (m.sys ? 'sys' : m.tb === 'ev' || m.tb === 'tr' || m.tb === 'dm' ? m.tb : m.tb === 'g' ? 'g'
   : m.ev ? 'ev' : m.k === 'tr' ? 'tr' : m.k === 'dm' ? 'dm' : 'g');
-export const toChat = (m: any): ChatMsg => ({ id: String(m.id), login: String(m.l || ''), name: String(m.n || m.l || ''), text: String(m.t || ''), at: +m.at || Date.now(), kind: chatKind(m), role: m.c, roleName: m.cn, to: m.to });
+export const toChat = (m: any): ChatMsg => ({ id: String(m.id), login: String(m.l || ''), name: String(m.n || m.l || ''), text: String(m.t || ''), at: +m.at || Date.now(), kind: chatKind(m), role: m.c, roleName: m.cn, to: m.to, r: m.r === 'own' || m.r === 'mod' ? m.r : undefined });
 /** Does a fresh line get a bubble over its author — site chatApply(): not for ignored players, not for «Достижения» /
  *  events, not for DMs (and our own system lines); history (older than a minute) neither. */
 export const bubbleFor = (m: ChatMsg, ign: ReadonlySet<string>, now: number): boolean =>
