@@ -1,6 +1,7 @@
 # Legion 3D
 
 **[⬇ Установить из Chrome Web Store](https://chromewebstore.google.com/detail/chlcndeaohnmjoeoppfdfchmfkllkemk)** — ставится в один клик и обновляется сам (Chrome, Edge, Яндекс Браузер, Opera).
+> ⏳ Каждую новую версию магазин сначала проверяет, поэтому обновления в Chrome Web Store появляются с задержкой — обычно от 4 до 24 часов после релиза на GitHub. Нужно сразу — поставь архив со [страницы релизов](https://github.com/ascorblack/legion-3d/releases/latest).
 Firefox и ручная установка — на [странице релизов](https://github.com/ascorblack/legion-3d/releases/latest).
 
 **Неофициальное** расширение для Chrome и Firefox, которое превращает сайт игры «Легион»
