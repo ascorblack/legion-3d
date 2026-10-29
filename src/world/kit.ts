@@ -106,6 +106,21 @@ export function gableRoof(k: Ctx, roofCol: string, wallMat: BatchKey, wallCol: s
   rbox(k, 'roof', shade(roofCol, -0.25), cx, yBase + h + 0.02, cz, w + 0.04, 0.16, 0.22, 0, 0, 0, 1);
   // eave boards close the slot between the slope and its underside along both eaves (no see-through edge)
   for (const s of [-1, 1]) box(k, 'wood', shade(roofCol, -0.45), cx - w / 2 + 0.006, cx + w / 2 - 0.006, yBase - 0.073, yBase + 0.017, cz + s * d / 2 - 0.023, cz + s * d / 2 + 0.023, 1);
+  if (k.pal.horns) for (const s of [-1, 1]) ridgeHorn(k, cx + s * (w / 2 - 0.05), yBase + h + 0.1, cz, s, 0, Math.max(0.6, Math.min(1.2, w / 3)));
+}
+/**
+ * Quarter theme «horns» (site cityart.js K.horns: «рожки на коньке», cherts / ugabugi): a curved bone horn at a ridge end —
+ * two stacked tapered pieces bending outward (dx, dz = outward direction), with a dark ring at the root.
+ */
+export function ridgeHorn(k: Ctx, x: number, y: number, z: number, dx: number, dz: number, s = 1): void {
+  const c = k.pal.hornC || '#e8d8b8', r = 0.11 * s, l1 = 0.36 * s, l2 = 0.32 * s;
+  const t1 = 0.55, t2 = 1.15;   // tilt from vertical of the lower / upper piece (rad)
+  const rz = -dx * t1, rx = dz * t1;
+  const x1 = x + dx * Math.sin(t1) * l1 / 2, z1 = z + dz * Math.sin(t1) * l1 / 2, y1 = y + Math.cos(t1) * l1 / 2;
+  k.b.add('stone', GEO.cyl8, M(x1, y1, z1, r * 2, l1, r * 2, rx, 0, rz), c, 0.5);
+  k.b.add('metal', GEO.cyl8, M(x, y + 0.02 * s, z, r * 2.5, 0.06 * s, r * 2.5, rx, 0, rz), '#2a0d14', 0.5);
+  const xe = x + dx * Math.sin(t1) * l1, ze = z + dz * Math.sin(t1) * l1, ye = y + Math.cos(t1) * l1;
+  k.b.add('stone', GEO.cone12, M(xe + dx * Math.sin(t2) * l2 / 2, ye + Math.cos(t2) * l2 / 2, ze + dz * Math.sin(t2) * l2 / 2, r * 2, l2, r * 2, dz * t2, 0, -dx * t2), c, 0.5);
 }
 /** Gable roof with ridge along Z (gable facing the street): over [x0,x1]×[z0,z1]. */
 export function gableRoofZ(k: Ctx, roofCol: string, wallMat: BatchKey, wallCol: string, x0: number, x1: number, z0: number, z1: number, yBase: number, h: number, over = 0.25): void {
@@ -123,6 +138,7 @@ export function gableRoofZ(k: Ctx, roofCol: string, wallMat: BatchKey, wallCol: 
   }
   rbox(k, 'roof', shade(roofCol, -0.25), cx, yBase + h + 0.02, cz, 0.22, 0.16, d + 0.04, 0, 0, 0, 1);
   for (const s of [-1, 1]) box(k, 'wood', shade(roofCol, -0.45), cx + s * w / 2 - 0.023, cx + s * w / 2 + 0.023, yBase - 0.073, yBase + 0.017, cz - d / 2 + 0.006, cz + d / 2 - 0.006, 1);
+  if (k.pal.horns) for (const s of [-1, 1]) ridgeHorn(k, cx, yBase + h + 0.1, cz + s * (d / 2 - 0.05), 0, s, Math.max(0.6, Math.min(1.2, d / 3)));
 }
 /** Pyramid (4-sided) roof over a square-ish footprint. */
 export function pyramidRoof(k: Ctx, roofCol: string, cx: number, cz: number, w: number, d: number, yBase: number, h: number): void {

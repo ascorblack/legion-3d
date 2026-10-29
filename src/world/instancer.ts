@@ -18,6 +18,8 @@ export class Instancer {
   private inst = new Map<string, THREE.Matrix4[]>();
 
   registerKind(kind: string, parts: PartDef[]): void { this.kinds.set(kind, parts); }
+  /** Another name for a registered kind (same parts; e.g. village props whose solids come from the site's footprints). */
+  alias(kind: string, of: string): void { const p = this.kinds.get(of); if (p) this.kinds.set(kind, p); }
   has(kind: string): boolean { return this.kinds.has(kind); }
 
   /** Placements (any kind name; resolved at build time by the kit or the placeholder kinds). */
@@ -56,7 +58,7 @@ export class Instancer {
 
   /** Geometries are owned by the kinds; call once when the world is disposed. */
   dispose(): void {
-    for (const parts of this.kinds.values()) for (const p of parts) p.geo.dispose();
+    for (const parts of new Set(this.kinds.values())) for (const p of parts) p.geo.dispose();
     this.kinds.clear(); this.inst.clear(); this.placed.clear();
   }
 }

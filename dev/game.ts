@@ -7,7 +7,7 @@ import type { SiteSession } from '../src/contracts/modules';
 import { createStore } from '../src/store/store';
 import { appearanceFrom } from '../src/avatar';
 import { startGame } from '../src/content/game';
-import { fixtureLayout, campFixtureLayout } from './fixtures';
+import { fixtureLayout, campFixtureLayout, villageFixtureLayout } from './fixtures';
 import { SX, SZ } from '../src/world/coords';
 import me from '../test/fixtures/me.json';
 import session from '../test/fixtures/city-session.json';
@@ -21,9 +21,10 @@ import { createMineRoom } from '../src/rooms/mine';
 import type { DemoData } from '../src/debug/places';
 import { QUEST_MOCKS } from '../src/debug/questMocks';
 
-// ?town=camp: the start camp «Перепутье» (test/fixtures/camp-map.json), otherwise the fair
+// ?town=camp: the start camp «Перепутье» (test/fixtures/camp-map.json); ?town=village: a hand-made village ★1
+// (test/fixtures/village-map.json); otherwise the fair
 const TOWN = new URLSearchParams(location.search).get('town');
-const layout = TOWN === 'camp' ? campFixtureLayout() : fixtureLayout();
+const layout = TOWN === 'camp' ? campFixtureLayout() : TOWN === 'village' ? villageFixtureLayout() : fixtureLayout();
 // ?sky=dusk: an evening sky for photos (the site's own style sky otherwise)
 if (new URLSearchParams(location.search).get('sky') === 'dusk') layout.sky = 'linear-gradient(#1b1640 0%, #3e2f6e 38%, #9a5a86 72%, #f0a070 100%)';
 const SPAWN: [number, number] = (layout as any).spawn || [layout.QW + 660, 1010];

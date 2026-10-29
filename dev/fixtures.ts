@@ -5,7 +5,8 @@
 import type { CityLayout, Building, Obstacle } from '../src/contracts';
 import map from '../test/fixtures/fair-map.json';
 import camp from '../test/fixtures/camp-map.json';
-import { campScene } from '../src/net/town';
+import village from '../test/fixtures/village-map.json';
+import { campScene, villageScene } from '../src/net/town';
 
 export function fixtureLayout(): CityLayout {
   const m = map as any;
@@ -61,6 +62,52 @@ export function campFixtureLayout(styleId = 'cats'): CityLayout {
     obstacles: m.OBST as Obstacle[], buildings: (m.BUILDINGS as Building[]).map((b) => ({ ...b, door: { ...b.door } })),
     sky: 'linear-gradient(#0f0d2a 0%, #1d1a4a 40%, #3a2f6e 75%, #5a3a7a 100%)',
     free, nearest, camp: campScene({ ...m, FENCE: m.FENCE }), spawn: [m.spawn[0], m.spawn[1]] as [number, number],
+  };
+  return L as CityLayout;
+}
+
+/**
+ * A hand-made village ★1 (test/fixtures/village-map.json: an original test village laid out by the site's own
+ * towngen.js buildHand, + its walk grid): lower-street buildings, polyline streets, a pond, a brook with a bridge,
+ * cottages. `?town=village` in dist-dev/game.html. BFS path on the grid (bots, click-to-go).
+ */
+export function villageFixtureLayout(styleId = 'cats'): CityLayout {
+  const m = village as any;
+  const { C, cols, rows } = m.grid as { C: number; cols: number; rows: number }, G: string = m.grid.G;
+  const y0 = m.AREA.y0;
+  const ok = (c: number, r: number) => c >= 0 && r >= 0 && c < cols && r < rows && G.charCodeAt(r * cols + c) === 49;
+  const free = (x: number, y: number) => {
+    if (x < m.AREA.x0 || x > m.AREA.x1 || y < m.AREA.y0 || y > m.AREA.y1) return false;
+    return ok(Math.floor(x / C), Math.floor((y - y0) / C));
+  };
+  const nearest = (x: number, y: number): [number, number] => {
+    if (free(x, y)) return [x, y];
+    const c0 = Math.floor(x / C), r0 = Math.floor((y - y0) / C);
+    for (let d = 1; d < 80; d++) for (let r = r0 - d; r <= r0 + d; r++) for (let c = c0 - d; c <= c0 + d; c++) {
+      if (Math.max(Math.abs(c - c0), Math.abs(r - r0)) !== d) continue;
+      if (ok(c, r)) return [c * C + C / 2, y0 + r * C + C / 2];
+    }
+    return [m.spawn[0], m.spawn[1]];
+  };
+  const path = (a: [number, number], b: [number, number]): [number, number][] => {
+    const [ax, ay] = nearest(a[0], a[1]), [bx, by] = nearest(b[0], b[1]);
+    const s = Math.floor((ay - y0) / C) * cols + Math.floor(ax / C), t = Math.floor((by - y0) / C) * cols + Math.floor(bx / C);
+    const prev = new Int32Array(cols * rows).fill(-1); prev[s] = s;
+    const q = [s];
+    for (let i = 0; i < q.length && prev[t] < 0; i++) {
+      const u = q[i], c = u % cols, r = (u / cols) | 0;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const v = (r + dr) * cols + c + dc; if (ok(c + dc, r + dr) && prev[v] < 0) { prev[v] = u; q.push(v); } }
+    }
+    if (prev[t] < 0) return [a];
+    const out: [number, number][] = [];
+    for (let u = t; u !== s; u = prev[u]) out.push([(u % cols) * C + C / 2, y0 + ((u / cols) | 0) * C + C / 2]);
+    out.push(a); out.reverse();
+    return out.filter((_, i) => i === 0 || i === out.length - 1 || i % 3 === 0);
+  };
+  const L = {
+    id: m.id, styleId, W: m.W, H: m.H, QW: 0, area: m.AREA,
+    obstacles: m.OBST as Obstacle[], buildings: (m.BUILDINGS as Building[]).map((b) => ({ ...b, door: { ...b.door } })),
+    free, nearest, path, village: villageScene(m), spawn: [m.spawn[0], m.spawn[1]] as [number, number],
   };
   return L as CityLayout;
 }

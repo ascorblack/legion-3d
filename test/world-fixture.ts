@@ -1,5 +1,5 @@
 /** Test helper: the static city built in node (no DOM): fake sign atlas, every Batch piece recorded. */
-import { fixtureLayout, campFixtureLayout } from '../dev/fixtures';
+import { fixtureLayout, campFixtureLayout, villageFixtureLayout } from '../dev/fixtures';
 import type { CityLayout } from '../src/contracts';
 import { Batch } from '../src/world/batch';
 import { groundSpec, makeGroundAt } from '../src/world/ground';
@@ -30,3 +30,6 @@ export function staticCity(debug = false, layout?: CityLayout) {
 
 /** The start camp «Перепутье» built the same way (test/fixtures/camp-map.json). */
 export const staticCamp = (debug = false) => staticCity(debug, campFixtureLayout());
+
+/** A hand-made village ★1 (test/fixtures/village-map.json) built the same way. */
+export const staticVillage = (debug = false, styleId = 'cats') => staticCity(debug, villageFixtureLayout(styleId));

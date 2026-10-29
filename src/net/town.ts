@@ -194,3 +194,82 @@ export function townsView(inp: TownsInput): TownsView {
       : 'Города округов откроются, когда канал захватит округ; на стриме — пока отряд стоит в округе (участникам отряда).';
   return { rows, note };
 }
+
+/* ------------------------------------------------------------------ hand-made villages ★1 (site 28.10, towngen.js buildHand) */
+/**
+ * Since 28.10 some district towns («деревни ★1», towngen.js HAND) are drawn by hand: the page loads
+ * `/site/villages/<id>.js` (window.LGVillages[id], LGTownGen.prep) and LGTownGen.generate() builds the same layout L as the
+ * generator from it (TL.hand = id). The differences that matter in 3D:
+ *   - buildings not only in the back row: a lot with `B > 800` stands lower down the street (base y = B, depth scale `s`,
+ *     its obstacle `{ b, bld }` cannot be walked through, behind it you can walk — the 2D art hides you);
+ *     gate, forge (+ its anvil awning «Заточка») and mine stay in the back row;
+ *   - streets are arbitrary polylines `{ k, w, pts }`, plazas ellipses, water any rects / ellipses, bridges where the artist put them;
+ *   - cottages (`houses`, not enterable) are obstacles too; props carry their kind, scale and footprint.
+ * villageScene() copies what the 3D builder needs as plain, validated data (any missing / malformed field → empty list).
+ */
+export interface VillageRoad { k: string; w: number; pts: [number, number][] }
+export interface VillagePlaza { k: string; x: number; y: number; rx: number; ry: number; rect: boolean; green: boolean; mark: string | null }
+export type VillageWater = { k: string; e: [number, number, number, number] } | { k: string; b: [number, number, number, number] };
+export interface VillageBridge { x0: number; x1: number; y0: number; y1: number }
+/** A building lot: `B` (base y, > 800) and `s` (depth scale) only for a building lower down the street. */
+export interface VillageLot { k: string; x0: number; x1: number; B?: number; s?: number }
+export interface VillageHouse { x0: number; x1: number; base: number; s: number }
+export interface VillageProp { k: string; x: number; y: number; s: number; tall: number; foot: [number, number] | null; water: boolean }
+export interface VillageScene {
+  id: string; biome: string;
+  roads: VillageRoad[]; plazas: VillagePlaza[]; water: VillageWater[]; bridges: VillageBridge[];
+  lots: VillageLot[]; houses: VillageHouse[]; props: VillageProp[];
+}
+const num = (v: unknown): number | null => { const n = +(v as number); return typeof v !== 'boolean' && v !== null && v !== '' && Number.isFinite(n) ? n : null; };
+const quad = (a: unknown): [number, number, number, number] | null => {
+  if (!Array.isArray(a) || a.length < 4) return null;
+  const q = a.slice(0, 4).map(num); return q.every((v) => v !== null) ? q as [number, number, number, number] : null;
+};
+const list = (a: unknown): any[] => (Array.isArray(a) ? a.filter((x) => x && typeof x === 'object') : []);
+const kindOf = (v: unknown, d: string) => (typeof v === 'string' && /^[\w-]{1,24}$/.test(v) ? v : d);
+
+/** The hand-village scene of a towngen layout (TL.hand set), or null for a generated town / no layout. */
+export function villageScene(TL: any): VillageScene | null {
+  if (!TL || typeof TL !== 'object' || !TL.hand) return null;
+  const roads: VillageRoad[] = [];
+  for (const r of list(TL.roads)) {
+    const pts = (Array.isArray(r.pts) ? r.pts : []).map((p: unknown) => (Array.isArray(p) ? [num(p[0]), num(p[1])] : [null, null]))
+      .filter((p: (number | null)[]) => p[0] !== null && p[1] !== null) as [number, number][];
+    if (pts.length >= 2) roads.push({ k: kindOf(r.k, 'lane'), w: Math.max(8, Math.min(120, num(r.w) ?? 36)), pts });
+  }
+  const plazas: VillagePlaza[] = [];
+  for (const p of list(TL.plazas)) {
+    const x = num(p.x), y = num(p.y), rx = num(p.rx), ry = num(p.ry);
+    if (x === null || y === null || !rx || !ry || rx < 0 || ry < 0) continue;
+    plazas.push({ k: kindOf(p.k, 'plaza'), x, y, rx, ry, rect: p.shape === 'rect', green: !!p.green, mark: typeof p.mark === 'string' ? kindOf(p.mark, '') || null : null });
+  }
+  const water: VillageWater[] = [];
+  for (const w of list(TL.water)) {
+    const e = quad(w.e), b = quad(w.b);
+    if (e && e[2] > 0 && e[3] > 0) water.push({ k: kindOf(w.k, 'pond'), e });
+    else if (b && b[2] > b[0] && b[3] > b[1]) water.push({ k: kindOf(w.k, 'water'), b });
+  }
+  const bridges: VillageBridge[] = [];
+  for (const b of list(TL.bridges)) {
+    const q = quad(b.b) || [num(b.x0), num(b.y0), num(b.x1), num(b.y1)];
+    if (q.every((v) => v !== null) && q[2]! > q[0]! && q[3]! > q[1]!) bridges.push({ x0: q[0]!, y0: q[1]!, x1: q[2]!, y1: q[3]! });
+  }
+  const lots: VillageLot[] = [];
+  for (const l of list(TL.lots)) {
+    const x0 = num(l.x0), x1 = num(l.x1), B = num(l.B), s = num(l.s);
+    if (x0 === null || x1 === null || x1 <= x0 || typeof l.k !== 'string') continue;
+    lots.push({ k: kindOf(l.k, 'lot'), x0, x1, ...(B !== null && B > 800 ? { B, s: s && s > 0.5 && s < 3 ? s : 1 } : {}) });
+  }
+  const houses: VillageHouse[] = [];
+  for (const c of list(TL.cottages)) {
+    const x0 = num(c.x0), x1 = num(c.x1), base = num(c.base), s = num(c.s);
+    if (x0 !== null && x1 !== null && base !== null && x1 > x0) houses.push({ x0, x1, base, s: s && s > 0.5 && s < 3 ? s : 1 });
+  }
+  const props: VillageProp[] = [];
+  for (const p of list(TL.props)) {
+    const x = num(p.x), y = num(p.y); if (x === null || y === null) continue;
+    const s = num(p.s) || 1, e = quad(p.ob?.e);
+    props.push({ k: kindOf(p.k, 'thing'), x, y, s, tall: num(p.tall) ?? 0, foot: e ? [e[2], e[3]] : null, water: !!p.ob?.water });
+  }
+  return { id: String(TL.hand).slice(0, 32), biome: kindOf(TL.biome, 'meadow'), roads, plazas, water, bridges, lots, houses, props };
+}

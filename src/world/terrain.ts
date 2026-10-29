@@ -114,7 +114,7 @@ export function buildTerrain(k: Ctx, L: CityLayout, s: GroundSpec): TerrainOut {
 }
 
 /** Low front wall with battlements at the end of the lower street, side walls, gate towers in the corners. */
-function cityWalls(k: Ctx, W: number, lowH: number, zEnd: number): void {
+export function cityWalls(k: Ctx, W: number, lowH: number, zEnd: number): void {
   const st = '#8b7f8f', P = k.pal;
   const zf = zEnd + 0.4, h = 2.4;
   box(k, 'stone', st, -2, W + 2, lowH - 0.2, lowH + h, zf, zf + 1.2, 0.8);
@@ -135,10 +135,10 @@ function cityWalls(k: Ctx, W: number, lowH: number, zEnd: number): void {
 }
 
 /** Second row of houses behind the street + far silhouettes (cheap, flat-shaded) + hills ring. */
-export function buildBackdrop(k: Ctx, L: CityLayout, cx: number, cz: number): void {
+export function buildBackdrop(k: Ctx, L: CityLayout, cx: number, cz: number, row = true): void {
   const P = k.pal, W = toX(L.W), r = k.rnd;
-  // second row of houses (real geometry, few windows)
-  let x = -1;
+  // second row of houses (real geometry, few windows) — a village has its tree belt there instead (village.ts)
+  let x = row ? -1 : W + 1;
   while (x < W + 1) {
     const w = 2.4 + r() * 2.6, h = 3.6 + r() * 3.2, z0 = -7.5 - r() * 2.5;
     const col = r() < 0.5 ? P.brick : r() < 0.5 ? P.plaster : shade(P.wall, 0.25);
@@ -154,12 +154,12 @@ export function buildBackdrop(k: Ctx, L: CityLayout, cx: number, cz: number): vo
     x += w + r() * 0.3;
   }
   // far silhouettes: rings of house blocks (back material = flat colour, fogged)
-  const back = P.backHouse, roof = P.backRoof;
+  const back = P.backHouse, roof = P.backRoof, hell = P.back === 'cliffs';
   for (let i = 0; i < 160; i++) {
-    const a = (i / 160) * Math.PI * 2 + r() * 0.02, R = 70 + r() * 35;
+    const a = (i / 160) * Math.PI * 2 + r() * 0.02, R = hell ? 40 + r() * 12 : 70 + r() * 35;   // cherts: the quarter ends at the cliffs
     const hx = cx + Math.cos(a) * R * 1.25, hz = cz + Math.sin(a) * R;
     if (hz > -18 && hz < 34 && hx > -10 && hx < W + 10) continue;
-    const w = 4 + r() * 6, h = 4 + r() * 12;
+    const w = 4 + r() * 6, h = hell ? 4 + r() * 7 : 4 + r() * 12;
     const ry = -a + Math.PI / 2;
     k.b.add('back', GEO.box, M(hx, h / 2 - 2, hz, w, h, 5, 0, ry, 0), back, 1);
     k.b.add('back', GEO.cone4, M(hx, h - 2 + 1.5, hz, w * 1.05, 3, 5.2, 0, ry, 0), roof, 1);
@@ -172,6 +172,7 @@ export function buildBackdrop(k: Ctx, L: CityLayout, cx: number, cz: number): vo
       k.b.add('back', GEO.cone12, M(hx + 2, h + 7.5, hz, 3.2, 4, 3.2), roof, 1);
     }
   }
+  if (P.back === 'cliffs') { hellCliffs(k, cx, cz, W); return; }
   // hills ring (jagged band)
   const segs = 96, R = 190;
   const pos: number[] = [];
@@ -184,4 +185,51 @@ export function buildBackdrop(k: Ctx, L: CityLayout, cx: number, cz: number): vo
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
   k.b.add('back', g, new THREE.Matrix4(), P.hill, 1);
   g.dispose();
+}
+
+/**
+ * «Котельный квартал» backdrop (site cityart.js K.back === 'cliffs', cherts): basalt cliffs in two planes round the city
+ * instead of the hills, lavafalls pouring down their inner face (emissive ribbons + glow at the foot) and boiler chimneys
+ * with a glowing mouth rising between the far houses. All in the static batch ('back' / 'emit'), fogged like the hills.
+ */
+export function hellCliffs(k: Ctx, cx: number, cz: number, W: number): void {
+  const P = k.pal;
+  const band = (R: number, base: number, amp: number, seed: number, col: string) => {
+    const segs = 120, pos: number[] = [];
+    const hAt = (i: number) => base + amp * (0.55 + 0.45 * Math.sin(i * 0.9 + seed) * Math.sin(i * 0.37 + seed * 2)) + (i % 3 === 0 ? amp * 0.35 : 0);
+    for (let i = 0; i < segs; i++) {
+      const a0 = i / segs * Math.PI * 2, a1 = (i + 1) / segs * Math.PI * 2, h0 = hAt(i), h1 = hAt(i + 1);
+      const p = (a: number, y: number) => [cx + Math.cos(a) * R * 1.15, y, cz + Math.sin(a) * R];
+      pos.push(...p(a0, -10), ...p(a1, -10), ...p(a1, h1), ...p(a0, -10), ...p(a1, h1), ...p(a0, h0));
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+    k.b.add('back', g, new THREE.Matrix4(), col, 1); g.dispose();
+    return hAt;
+  };
+  // close enough to read through the fog at every quality (fog far 120 m at q0)
+  // tall enough to stand over the far houses (≤ 12 m) seen from the street
+  const far = band(84, 40, 22, 1.3, shade(P.hill, -0.25));
+  const near = band(60, 24, 14, 4.1, P.hill);
+  // lavafalls on the inner face of the near band (the ones facing the city), with a glowing pool at the foot
+  for (let i = 0; i < 9; i++) {
+    const seg = 120, idx = Math.round((0.62 + i * 0.035 + (i % 2) * 0.012) * seg) % seg;   // the far side behind the facades (−Z)
+    const a = idx / seg * Math.PI * 2, R = 59.3, top = near(idx) - 0.5;
+    const x = cx + Math.cos(a) * R * 1.15, z = cz + Math.sin(a) * R, ry = -a - Math.PI / 2;
+    const w = 3.2 + (i % 3) * 1.2;
+    k.b.add('emit', GEO.plane, M(x, top / 2 - 4, z, w, top + 8, 1, 0, ry, 0), '#ff6a12', 1);
+    k.b.add('emit', GEO.plane, M(x - Math.cos(a) * 0.05, top / 2 - 4, z - Math.sin(a) * 0.05, w * 0.4, top + 8, 1, 0, ry, 0), '#ffd23a', 1);
+    k.glows.push(x - Math.cos(a) * 2, 1.5, z - Math.sin(a) * 2, 9, 1, 0.42, 0.12);
+    for (const t of [0.35, 0.7, 0.95]) k.glows.push(x - Math.cos(a) * 1, top * t, z - Math.sin(a) * 1, 7, 1, 0.5, 0.15);
+  }
+  void far;
+  // boiler chimneys between the far houses: dark iron stacks with bands, a glowing mouth
+  for (let i = 0; i < 14; i++) {
+    const a = Math.PI * (1.08 + i * 0.06) + (i % 2) * 0.02, R = 44 + (i % 4) * 4;
+    const x = cx + Math.cos(a) * R * 1.25, z = cz + Math.sin(a) * R, h = 13 + (i % 5) * 3;
+    if (z > -18 && x > -10 && x < W + 10) continue;
+    k.b.add('back', GEO.cyl8, M(x, h / 2 - 2, z, 1.8, h, 1.8), '#3a3346', 1);
+    for (const t of [0.35, 0.7]) k.b.add('back', GEO.cyl8, M(x, h * t - 2, z, 2.5, 0.5, 2.5), '#5a5470', 1);
+    k.b.add('emit', GEO.cyl8, M(x, h - 1.9, z, 2.0, 0.3, 2.0), '#ff7a1a', 1);
+    k.glows.push(x, h - 1.2, z, 7, 1, 0.45, 0.14);
+  }
 }

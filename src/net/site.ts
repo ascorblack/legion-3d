@@ -13,7 +13,8 @@ import CONTRACT from '../data/site-contract.json';
 import { runtimeContract, describeFails, type ContractCheck } from './contract';
 import { reportDrift } from '../core/drift';
 import { npcPlaces, makeOpts } from '../events/halloween/hwnpc';
-import { CAMP, campScene, detectTown, readTownSignals, townMeta, type CampScene, type HeroTownFlags } from './town';
+import { CAMP, campScene, detectTown, readTownSignals, townMeta, villageScene, type CampScene, type HeroTownFlags } from './town';
+import { readSitePals } from '../world/palette';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
 const W = (typeof window !== 'undefined' ? window : globalThis) as any;   // importable in node tests (pure helpers below)
@@ -133,6 +134,8 @@ function buildLayout(hero: Hero | null, town: string, townMetaOf: any): CityLayo
     sky: skyM ? skyM[1] : undefined, art,
     free: (x, y) => hold.map.free(x, y), nearest: (x, y) => hold.map.nearest(x, y), path: (a, b) => hold.map.path(a, b),
   };
+  // the site's quarter palettes (cityart.js LGCityArt.PAL, per style since 28.10): src/world/palette.ts paletteOf
+  (out as CityLayout & { sitePals?: unknown }).sitePals = safe(() => readSitePals(W.LGCityArt?.PAL), undefined);
   hwGrids.set(out, (on) => { if (on === hold.on) return; try { hold.map = mk(on); hold.on = on; } catch (e) { console.warn('[legion-3d] hw NPC grid', e); } });
   return out;
 }
@@ -160,6 +163,9 @@ function buildTownLayout(hero: Hero | null, id: string, meta: any): CityLayout |
   // generate(townMeta(entry of /api/city/towns)) gives the same layout and walk grid as the site (city.js townPrep/buildTown).
   try {
     const TG = W.LGTownGen; if (!TG) return null;
+    // hand-made village ★1 (site 28.10): the page loads /site/villages/<id>.js (LGTownGen.prep) before it builds the town;
+    // until it has, generate() would give the generator's town — a different layout than the site walks on: wait
+    if (typeof TG.prepFiles === 'function' && safe(() => TG.prepFiles(id).length, 0) > 0) { console.info('[legion-3d] village file not loaded yet:', id); return null; }
     const TL = TG.generate(townMeta(meta));
     const MS = !!(hero as any)?.ms;
     const map = TG.map(TL, { magic: MS });
@@ -168,6 +174,9 @@ function buildTownLayout(hero: Hero | null, id: string, meta: any): CityLayout |
       obstacles: (map.OBST || TL.OBST || []) as Obstacle[], buildings: townBuildings(TL.BUILDINGS, hero, MS),
       free: (x, y) => map.free(x, y), nearest: (x, y) => map.nearest(x, y), path: (a, b) => map.path(a, b),
       ...(Array.isArray(TL.spawn) ? { spawn: [+TL.spawn[0], +TL.spawn[1]] } : {}),
+      // a hand-made village ★1 (TL.hand, site 28.10): streets, water, lower-street buildings → src/world/village.ts
+      ...(TL.hand ? { village: safe(() => villageScene(TL), null) } : {}),
+      sitePals: safe(() => readSitePals(W.LGCityArt?.PAL), undefined),
     } as CityLayout;
   } catch (e) { console.warn('[legion-3d] district town layout', id, e); return null; }
 }
@@ -264,6 +273,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   let layoutKey = '';
   let mapRef: CityLayout | null = null as CityLayout | null;
   let townNow = 'fair', townVia = 'default', townWant = '';
+  const townRetry: Record<string, number> = {};
   const refreshLayout = () => {
     const h = store.hero;
     const t = currentTown(h); townNow = t.id; townVia = t.via;
@@ -278,7 +288,12 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
         if (currentTown(store.hero).id !== t.id) return;   // switched again meanwhile
         const meta = list.find((x) => x && x.id === t.id);
         const L = meta && buildLayout(store.hero, t.id, meta);
-        if (!L) { console.warn('[legion-3d] district town not available:', t.id); return; }
+        if (!L) {
+          console.warn('[legion-3d] district town not available:', t.id);
+          // e.g. the hand village's file is still loading on the page: look again a few times (no requests of our own)
+          if ((townRetry[t.id] = (townRetry[t.id] || 0) + 1) <= 5) window.setTimeout(refreshLayout, 1500);
+          return;
+        }
         layoutKey = key; store.setLayout(L); mapRef = L;
       });
       return;

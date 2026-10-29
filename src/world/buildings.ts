@@ -452,9 +452,14 @@ export function modelOf(b: Building): BuildingModel {
  *  walk grid may allow walking right in front of a facade where the fair model projects (tent, shop, anvil), so the
  *  model is moved back until its solid front clears the first walkable row (src/world/static.ts fitFronts). */
 export const BUILDING_DZ = new WeakMap<Building, number>();
+/** A building built away from the back row (hand villages, src/world/village.ts buildDeepBuilding): its virtual back-row
+ *  twin, the depth map of the model (source z → world z) and the scale — door hit boxes follow (entranceZ, worldExt.ts). */
+export const BUILDING_XF = new WeakMap<Building, { virt: Building; z: (z: number) => number; s: number }>();
 /** Estimated solid front (m) of a building's model at dz = 0 (attachments up to +0.3 m). */
 export function solidFrontOf(b: Building): number {
-  const m = modelOf(b); return -0.15 + (m.solidFront ?? m.front ?? 0) + 0.3;
+  const m = modelOf(b), f = -0.15 + (m.solidFront ?? m.front ?? 0) + 0.3;
+  // a «soon» hall has the scaffolding in front (its solid reaches 1.05 m out, scaffolding())
+  return b.soon && b.id === 'hall' ? Math.max(f, -0.15 + 1.05) : f;
 }
 
 export function buildBuilding(k: Ctx, b: Building): void {
@@ -489,6 +494,7 @@ export function buildBuilding(k: Ctx, b: Building): void {
  * adit frame / board / gate front on the lower street. Used for the door hit volumes.
  */
 export function entranceZ(b: Building): number {
+  const xf = BUILDING_XF.get(b); if (xf) return xf.z(entranceZ(xf.virt));
   if (isUpper(b)) return -0.15 + (BUILDING_DZ.get(b) ?? 0) + (modelOf(b).front ?? 0);
   return lowEntranceZ(b);
 }

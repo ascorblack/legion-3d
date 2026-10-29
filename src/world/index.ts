@@ -26,6 +26,11 @@ import { PropKit, PROP_KINDS, disposePropKit, type PropKind } from './props';
 import { PoolLights } from './lightPools';
 import { campOf, type CampLayout } from './camp';
 import { campThemeOf } from './camp-themes';
+import { villageOf, villageGround, VK } from './village';
+import type { SitePals } from './palette';
+
+/** The city palette of a layout: its style + the page's own quarter colours (layout.sitePals, read by the site adapter). */
+export const layoutPalette = (L: CityLayout) => paletteOf(L.styleId, (L as CityLayout & { sitePals?: SitePals }).sitePals);
 
 export { createSvgArt } from './svgArt';
 export { groundSpec, makeGroundAt } from './ground';
@@ -58,7 +63,8 @@ function buildGarlands(spans: THREE.Vector3[][], glowTex: THREE.Texture): THREE.
 }
 
 function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.Material> {
-  const P = paletteOf(L.styleId), camp = !!campOf(L), CT = camp ? campThemeOf(L.styleId) : null;
+  const P = layoutPalette(L), camp = !!campOf(L), CT = camp ? campThemeOf(L.styleId) : null;
+  const V = villageOf(L), VG = V ? villageGround(V.biome) : null;   // a hand village: the biome's grass and road soil
   const std = (kind: Parameters<typeof getTexture>[0], o: { rough?: number; ns?: number; colors?: string[]; neutral?: boolean; seed?: number; side?: THREE.Side; size?: number } = {}) => {
     const t = getTexture(kind, { neutral: o.neutral ?? true, colors: o.colors, seed: o.seed, size: o.size });
     const m = new THREE.MeshStandardMaterial({
@@ -74,7 +80,8 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
   const water = getTexture('water', { colors: [P.water, P.waterD, '#dff4ff'] });
   const wMap = water.map.clone(); wMap.needsUpdate = true;
   const wNor = water.normalMap ? water.normalMap.clone() : null; if (wNor) wNor.needsUpdate = true;
-  const waterMat = new THREE.MeshStandardMaterial({ map: wMap, normalMap: wNor, roughness: 0.15, metalness: 0.1, emissive: new THREE.Color(P.waterD), emissiveIntensity: 0.45, vertexColors: true });
+  // the cherts quarter (P.hell): the canal / ponds are lava — rough, strongly self-lit
+  const waterMat = new THREE.MeshStandardMaterial({ map: wMap, normalMap: wNor, roughness: P.hell ? 0.7 : 0.15, metalness: P.hell ? 0 : 0.1, emissive: new THREE.Color(P.hell ? P.water : P.waterD), emissiveIntensity: P.hell ? 0.9 : 0.45, vertexColors: true });
   const mats: Record<BatchKey, THREE.Material> = {
     brick: std('brick', { rough: 0.95 }),
     plaster: std('plaster', { rough: 0.95, ns: 0.5 }),
@@ -85,9 +92,9 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
     metal: Object.assign(std('metal', { rough: 0.6, ns: 0.4 }), { metalness: 0.35 }),
     canvas: std('canvas', { colors: ['#ffffff', '#f2f2f2'], rough: 0.95, ns: 0.4, side: THREE.DoubleSide }),
     // the camp: 'paving' = night grass, 'lowPaving' = trodden soil of the trails
-    paving: camp ? std('grass', { neutral: false, colors: CT ? [...CT.grass] : ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.35 })
+    paving: camp || VG ? std('grass', { neutral: false, colors: VG ? VG[0] : CT ? [...CT.grass] : ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.35 })
       : std('cobble', { neutral: false, colors: [P.ground, shade(P.ground, 0.08), P.mortar, P.groundL], rough: 1, ns: 0.7, size: 1024 }),
-    lowPaving: camp ? std('soil', { neutral: false, colors: CT ? [...CT.soil] : ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.7, seed: 3 })
+    lowPaving: camp || VG ? std('soil', { neutral: false, colors: VG ? VG[1] : CT ? [...CT.soil] : ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.7, seed: 3 })
       : std('cobble', { neutral: false, colors: [P.lowA, P.lowB, P.lowMortar, P.groundL], rough: 1, ns: 0.7, seed: 3, size: 1024 }),
     leaf: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),
     flat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
@@ -121,7 +128,7 @@ export { BUILDING_MODELS } from './buildings';
 
 export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<CityWorld> => {
   const L = layout;
-  const P = paletteOf(L.styleId);
+  const P = layoutPalette(L);
   const root = new THREE.Group(); root.name = 'world';
   const renderer = opts.renderer;
   const maxAniso = renderer?.capabilities?.getMaxAnisotropy?.() ?? 4;
@@ -211,7 +218,8 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const BLOB_R: Record<string, number> = { lamp: 0.55, bench: 0.9, barrel: 0.5, crate: 0.55, bed: 1.1, tree: 1.5, bush: 0.8, mast: 0.4,
     fountain: 1.9, well: 1.5, statue: 1.2, dummy: 0.6, signpost: 0.5, cart: 1.4, noticeBoard: 1.0, chest: 0.6, planter: 0.6, stall: 1.8 };
   let blobN = 0;
-  for (const [kind, list] of inst.placed) if (BLOB_R[kind]) blobN += list.length;
+  const blobR = (kind: string) => BLOB_R[kind.replace(/^v:/, '')];
+  for (const [kind, list] of inst.placed) if (blobR(kind)) blobN += list.length;
   const blobGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
   const blobMat = new THREE.MeshBasicMaterial({ map: getTexture('glow').map, color: '#000000', transparent: true, opacity: 0.7, depthWrite: false,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, fog: true });
@@ -221,12 +229,13 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   {
     const bm = new THREE.Matrix4(); let i = 0;
     for (const [kind, list] of inst.placed) {
-      const r = BLOB_R[kind]; if (!r) continue;
+      const r = blobR(kind); if (!r) continue;
       for (const p of list) { const s = r * (p.scale || 1); bm.makeScale(s, 1, s).setPosition(p.x, groundAt(fromX(p.x), fromZ(p.z)) + 0.015, p.z); blobs.setMatrixAt(i++, bm); }
     }
     blobs.count = i; blobs.instanceMatrix.needsUpdate = true; blobs.computeBoundingSphere();
   }
   props.add(blobs);
+  for (const [of, as] of Object.entries(VK)) inst.alias(as, of);   // village props: same look, own footprint solids
   const usedKit = new Set(kitGroups.map((g) => g.name.replace('props:', '')));
   for (const m of inst.build(mats as unknown as Record<string, THREE.Material>, (kind) => !usedKit.has(kind))) props.add(m);
   // garlands
@@ -241,7 +250,8 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   root.add(glows);
 
   const CTh = campOf(L) ? campThemeOf(L.styleId) : null;   // a per-style camp has its own sky and light mood
-  const skyCss = CTh?.sky || L.sky || P.sky;
+  // a themed quarter with its own mood (cherts: crimson «hell» sky) keeps it over the fair's CSS sky
+  const skyCss = CTh?.sky || (P.hell ? P.sky : L.sky) || P.sky;
   const sky = skyDome(skyCss);
   root.add(sky);
   const starPts = stars(opts.quality >= 1 ? 900 : 350, dot);
@@ -256,6 +266,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const horizon = new THREE.Color(grad[grad.length - 1].c), zenith = new THREE.Color(grad[0].c);
   // fog = the sky's (brightened) horizon band, so distant structures fade into the glow, nearer ones silhouette
   const fogCol = (sky.userData.horizon as THREE.Color | undefined)?.clone() ?? horizon.clone();
+  if (P.hell) fogCol.lerp(new THREE.Color('#2a0a10'), 0.55);   // cherts: a smoky dark-red haze (the cliffs and lavafalls read through it)
   const fog = new THREE.Fog(fogCol, 34, 260);
 
   // the camp has only the fire, torches and tent lanterns (no street lamps): a little more moonlight on the meadow

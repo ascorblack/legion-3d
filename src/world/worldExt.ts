@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import type { CityLayout } from '../contracts';
 import type { Interactable } from '../contracts/ext';
 import { toX, toZ } from './coords';
-import { entranceZ, modelOf } from './buildings';
+import { entranceZ, modelOf, BUILDING_XF } from './buildings';
 
 /**
  * One interactable per site building: a Box3 over the door opening (from the entrance plane 0.45 m into the building
@@ -14,7 +14,7 @@ import { entranceZ, modelOf } from './buildings';
  */
 export function doorInteractables(L: CityLayout, groundAt: (x: number, y: number) => number, onDoor: () => ((id: string) => void) | undefined): Interactable[] {
   return L.buildings.map((b) => {
-    const m = modelOf(b), hw = m.door?.hw ?? 0.7, h = m.door?.h ?? 2.3;
+    const m = modelOf(b), sc = BUILDING_XF.get(b)?.s ?? 1, hw = (m.door?.hw ?? 0.7) * sc, h = (m.door?.h ?? 2.3) * sc;   // a building lower down the street is drawn bigger
     const x = toX(b.door.x), zE = entranceZ(b), g = groundAt(b.door.x, b.door.y);
     const top = g + (b.soon ? Math.max(h, 3.4) : h);
     const hit = new THREE.Box3(new THREE.Vector3(x - hw, g, zE - 0.45), new THREE.Vector3(x + hw, top, zE + 0.3));

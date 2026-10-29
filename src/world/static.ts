@@ -13,6 +13,8 @@ import { buildTerrain, buildBackdrop } from './terrain';
 import { placeProps, type Placed } from './place';
 import { campOf, buildCampTerrain, buildCampProps } from './camp';
 import { campThemeOf } from './camp-themes';
+import { villageOf, depthOf, buildDeepBuilding, buildVillageGround, buildCottages, placeVillageProps, villageBackdrop } from './village';
+import { cityWalls } from './terrain';
 
 /** A building; on a layout without the lower street (camp, district towns) the lower-street models (storage barn,
  *  mine…) get a virtual retaining wall 3 m behind their front, so they keep their depth instead of collapsing to 0. */
@@ -28,7 +30,7 @@ const LOW_MODELS = new Set(['storage', 'mine', 'mineboard']);
  *  front of them (every go() point the site accepts must be reachable in 3D). */
 function fitFronts(L: CityLayout): void {
   for (const b of L.buildings) {
-    if (!isUpper(b)) continue;
+    if (!isUpper(b) || depthOf(L, b)) continue;
     let yFree = Infinity;
     for (let x = b.hit[0] + 24; x <= b.hit[1] - 24; x += 8) {
       for (let y = Math.max(L.area.y0, 790); y < b.door.y + 40; y += 4) if (L.free(x, y)) { yFree = Math.min(yFree, y); break; }
@@ -55,13 +57,26 @@ export function buildStatic(k: Ctx, L: CityLayout, spec: GroundSpec, groundAt: (
       return buildCampProps(k, camp, L.styleId);
     } finally { k.b.tag = ''; k.pal = P0; }
   }
+  const village = villageOf(L);
   k.b.tag = 'terrain';
-  buildTerrain(k, L, spec);
+  if (village) {
+    // hand-made village ★1 (src/world/village.ts): biome ground, the artist's streets, plazas, water, bridges
+    buildVillageGround(k, L, village);
+    cityWalls(k, toX(L.W), 0, toZ(L.area.y1) + 0.8);
+  } else buildTerrain(k, L, spec);
   k.b.tag = 'backdrop';
-  buildBackdrop(k, L, toX(L.W) / 2, 6);
+  if (village) villageBackdrop(k, L);
+  buildBackdrop(k, L, toX(L.W) / 2, 6, !village);
 
-  const upper = L.buildings.filter(isUpper).sort((a, b) => a.hit[0] - b.hit[0]);
-  for (const b of L.buildings) { k.b.tag = b.id; buildOnFlat(k, b, spec); }
+  const deep = new Set<Building>();
+  for (const b of L.buildings) {
+    k.b.tag = b.id;
+    const d = depthOf(L, b);
+    // a building lower down the street (hand village): carried to its own base line, scale and obstacle band
+    if (d && buildDeepBuilding(k, L, b, d, (virt) => buildOnFlat(k, virt, spec))) { deep.add(b); continue; }
+    buildOnFlat(k, b, spec);
+  }
+  const upper = L.buildings.filter((b) => isUpper(b) && !deep.has(b)).sort((a, b) => a.hit[0] - b.hit[0]);
   // fillers between upper buildings → a continuous street facade
   let x = 0;
   const W = L.W;
@@ -98,7 +113,8 @@ export function buildStatic(k: Ctx, L: CityLayout, spec: GroundSpec, groundAt: (
   for (const b of upper) { if (b.hit[0] > x) fill(x, b.hit[0]); x = Math.max(x, b.hit[1]); }
   if (x < W) fill(x, W);
   k.b.tag = 'props';
-  const placed = placeProps(k, L, spec, groundAt, lampHead);
+  if (village) { k.b.tag = 'cottages'; buildCottages(k, L, village); k.b.tag = 'props'; }
+  const placed = village ? placeVillageProps(k, L, village, lampHead) : placeProps(k, L, spec, groundAt, lampHead);
   k.b.tag = '';
   return placed;
 }
