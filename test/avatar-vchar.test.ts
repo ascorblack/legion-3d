@@ -85,3 +85,17 @@ describe('character cel shading', () => {
     expect(TOON_SHADE_VM.uRim.value).toBeGreaterThan(TOON_SHADE.uRim.value);
   });
 });
+
+describe('contact shadow keeps the canvas opaque', () => {
+  it('blends alpha as dst (never punches a hole in the transparent canvas)', async () => {
+    const THREE = await import('three');
+    const { ContactShadow, shadowBatches } = await import('../src/avatar/shadows');
+    const scene = new THREE.Scene(); const root = new THREE.Object3D(); scene.add(root);
+    const cs = new ContactShadow(); cs.stamp(root, 0.5, 0.8);
+    const m = shadowBatches()[0].material as THREE.Material;
+    expect(m.blending).toBe(THREE.CustomBlending);
+    expect(m.blendSrcAlpha).toBe(THREE.ZeroFactor);
+    expect(m.blendDstAlpha).toBe(THREE.OneFactor);
+    cs.release();
+  });
+});

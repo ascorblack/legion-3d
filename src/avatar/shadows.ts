@@ -18,6 +18,8 @@ function material(): THREE.MeshBasicMaterial {
   // out = dst · (1 − src.rgb): src.rgb = darkness (instanceColor carries the per-avatar strength)
   mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, fog: false,
     blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.OneMinusSrcColorFactor,
+    // keep the canvas alpha: the canvas is transparent (alpha: true), a 0 alpha here punched a hole to the page behind it
+    blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, toneMapped: false });
   mat.dithering = false;
   mat.name = 'avatar-contact-shadow';
@@ -30,7 +32,7 @@ function material(): THREE.MeshBasicMaterial {
         float k = 0.78 * pow( 1.0 - smoothstep( 0.32, 1.0, d ), 1.2 ) + 0.2 * ( 1.0 - smoothstep( 0.0, 0.45, d ) );
         if ( d >= 1.0 || k < 0.004 ) discard; // nothing of the quad outside the disc, whatever the later chunks do
         gl_FragColor = vec4( min( vec3( 0.9 ), diffuseColor.rgb * k * 1.7 ), 1.0 );`)
-      .replace('#include <colorspace_fragment>', '').replace('#include <premultiplied_alpha_fragment>', '').replace('#include <dithering_fragment>', '');
+      .replace('#include <premultiplied_alpha_fragment>', '').replace('#include <dithering_fragment>', '');
   };
   mat.customProgramCacheKey = () => 'avatar-contact-shadow';
   return mat;
