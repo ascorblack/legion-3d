@@ -33,9 +33,12 @@ jobs:
         run: |
           curl -fsSL --retry 3 https://github.com/mozilla/geckodriver/releases/download/v0.37.0/geckodriver-v0.37.0-linux64.tar.gz | tar -xz -C "${RUNNER_TEMP}"
           echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+      # Playwright's Firefox (131) is older than the shipped strict_min_version (140): test a build with the minimum lowered
       - run: npm run build:firefox -- --prod
+        env: { L3D_FF_MIN_VERSION: '128.0' }
       - run: npm run pack:firefox
       - run: npm run build:firefox -- --only=dev
+        env: { L3D_FF_MIN_VERSION: '128.0' }
       # Firefox needs an X display to create a software WebGL context on Linux.
       - run: xvfb-run -a npm run e2e:firefox
         env: { LIBGL_ALWAYS_SOFTWARE: 1 }
