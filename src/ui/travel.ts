@@ -10,6 +10,7 @@
 import { townsView, campName, CAMP, FAIR, type TownRow, type TownsView } from '../net/town';
 import type { HeroTownFlags } from '../net/town';
 import { FindController, parseChannels, FIND_MAX_LEN, type Channel, type FindDeps, type FindState } from '../net/travel';
+import { setHtml } from '../core/html';
 
 export interface TravelPanelDeps {
   /** Hotkey label shown in the footer ('L'). */
@@ -104,17 +105,17 @@ export function mountTravel(el: HTMLElement, d: TravelPanelDeps, start: Tab = 't
   let findState: FindState = { q: '', status: 'idle', list: [], err: '' };
   const find = new FindController({ fetchFind: d.fetchFind, onState: (s) => { findState = s; paintResults(); }, debounceMs: d.debounceMs });
 
-  el.innerHTML = `<style>${TRAVEL_CSS}</style><div class="tv" data-tv>
+  setHtml(el, `<style>${TRAVEL_CSS}</style><div class="tv" data-tv>
     <div class="tv-top"><div class="tv-here" data-here></div>
       <span class="rt"><button type="button" class="btn ghost sm" data-act="reload" data-rl title="Спросить сайт ещё раз, какие города открыты">Обновить</button><span class="seg tv-tabs" role="tablist" aria-label="Что показать"><button type="button" role="tab" data-tab="towns">Города</button><button type="button" role="tab" data-tab="channels">Каналы</button></span></span></div>
-    <div class="tv-body" data-body></div><div class="tv-foot" data-foot></div></div>`;
+    <div class="tv-body" data-body></div><div class="tv-foot" data-foot></div></div>`);
   const q = <T extends HTMLElement>(s: string) => el.querySelector<T>(s)!;
   const body = q('[data-body]'), here = q('[data-here]'), foot = q('[data-foot]');
 
   const townName = (id: string) => towns?.rows.find((r) => r.id === id)?.name || (id === FAIR ? 'Ярмарка' : id === CAMP ? campName(d.style(), d.names()).name : id);
   const paintHere = () => {
     const ch = d.channel();
-    here.innerHTML = `<span>Путешествие · сейчас:</span><b>${esc(townName(d.currentTown()))}</b>${ch ? `<span class="ch">канал <b style="font:700 13px var(--l3d-tx);color:inherit">${esc(ch)}</b></span>` : ''}`;
+    setHtml(here, `<span>Путешествие · сейчас:</span><b>${esc(townName(d.currentTown()))}</b>${ch ? `<span class="ch">канал <b style="font:700 13px var(--l3d-tx);color:inherit">${esc(ch)}</b></span>` : ''}`);
   };
   const paintTabs = () => {
     for (const b of el.querySelectorAll<HTMLButtonElement>('[data-tab]')) { const on = b.dataset.tab === tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
@@ -140,7 +141,7 @@ export function mountTravel(el: HTMLElement, d: TravelPanelDeps, start: Tab = 't
           ${r.reason && !cur ? `<small class="why">${esc(r.reason)}</small>` : ''}<span class="go"><i>${cur ? 'ты здесь' : r.disabled ? 'закрыто' : 'в путь'}</i></span></span></button>`;
       }).join('')}</div><div class="tv-note">${esc(towns.note)}</div>`;
     }
-    body.innerHTML = h;
+    setHtml(body, h);
   };
   const loadTowns = (force = false) => {
     townsBusy = true; if (force) towns = null; paintTowns();
@@ -157,8 +158,8 @@ export function mountTravel(el: HTMLElement, d: TravelPanelDeps, start: Tab = 't
   };
   const paintConfirm = () => {
     const box = el.querySelector<HTMLElement>('[data-confirm]'); if (!box) return;
-    box.innerHTML = confirm ? `<div class="tv-confirm" role="alertdialog" aria-label="Перейти на канал"><span>Перейти на канал <b>${esc(confirm.c.name)}</b>? Страница перезагрузится, а герой окажется в городе того канала.</span>
-      <span class="btns"><button type="button" class="btn gold sm" data-act="yes">Да, перейти</button><button type="button" class="btn ghost sm" data-act="no">Остаться</button></span></div>` : '';
+    setHtml(box, confirm ? `<div class="tv-confirm" role="alertdialog" aria-label="Перейти на канал"><span>Перейти на канал <b>${esc(confirm.c.name)}</b>? Страница перезагрузится, а герой окажется в городе того канала.</span>
+      <span class="btns"><button type="button" class="btn gold sm" data-act="yes">Да, перейти</button><button type="button" class="btn ghost sm" data-act="no">Остаться</button></span></div>` : '');
     if (confirm) box.querySelector<HTMLElement>('[data-act="yes"]')?.focus();
   };
   const paintResults = () => {
@@ -170,15 +171,15 @@ export function mountTravel(el: HTMLElement, d: TravelPanelDeps, start: Tab = 't
     else if (s.status === 'busy') h = '<p class="tv-note" role="status">Ищем<span class="tv-dots"></span></p>';
     else if (s.status === 'error') h = `<p class="tv-note" role="alert">${esc(s.err)}</p>`;
     else if (s.status === 'ok') h = s.list.length ? `<p class="tv-h">Найдено</p><ul class="tv-list">${s.list.map((c) => rowHtml(c, true)).join('')}</ul>` : `<p class="tv-note">Таких стримеров в игре нет${n ? ` («${esc(n)}»)` : ''}</p>`;
-    res.innerHTML = h;
+    setHtml(res, h);
   };
   const paintMine = () => {
     if (closed || tab !== 'channels') return;
     const box = el.querySelector<HTMLElement>('[data-mine]'); if (!box) return;
-    box.innerHTML = mineBusy && !mine ? '<p class="tv-note" role="status">Загружаем твой список<span class="tv-dots"></span></p>'
+    setHtml(box, mineBusy && !mine ? '<p class="tv-note" role="status">Загружаем твой список<span class="tv-dots"></span></p>'
       : mineErr ? `<p class="tv-note" role="alert">${esc(mineErr)}</p>`
         : mine && !mine.length ? '<p class="tv-note">Твой список пуст: найди стримера по нику — после перехода он появится здесь.</p>'
-          : mine ? `<p class="tv-h">Мой список</p><ul class="tv-list">${mine.map((c) => rowHtml(c, false)).join('')}</ul>` : '';
+          : mine ? `<p class="tv-h">Мой список</p><ul class="tv-list">${mine.map((c) => rowHtml(c, false)).join('')}</ul>` : '');
   };
   const loadMine = () => {
     if (mine || mineBusy) { paintMine(); return; }
@@ -190,8 +191,8 @@ export function mountTravel(el: HTMLElement, d: TravelPanelDeps, start: Tab = 't
   const paintChannels = () => {
     if (closed) return;
     paintHere();
-    body.innerHTML = `<div class="tv-q"><input type="search" data-q maxlength="${FIND_MAX_LEN}" placeholder="Найти стримера по нику" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Найти стримера по нику"></div>
-      <div data-confirm></div><div data-res aria-live="polite"></div><div data-mine></div>`;
+    setHtml(body, `<div class="tv-q"><input type="search" data-q maxlength="${FIND_MAX_LEN}" placeholder="Найти стримера по нику" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Найти стримера по нику"></div>
+      <div data-confirm></div><div data-res aria-live="polite"></div><div data-mine></div>`);
     const inp = q<HTMLInputElement>('[data-q]');
     inp.value = findState.q;
     inp.addEventListener('input', () => find.input(inp.value));

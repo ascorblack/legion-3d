@@ -16,14 +16,19 @@ export interface MinePal {
   mush: string;
   /** Fog / far darkness colour. */
   fog: string;
+  /** Depth layer id (layers.ts: roots, clay, stone, granite, grotto, abyss, …; '' = the older palettes). */
+  layer: string;
+  /** Lantern colour of the layer (glass and light pools: warm, tinted by the layer's own lamp colour). */
+  lamp: string;
 }
-const LAYERS: (Omit<MinePal, 'mush' | 'fog'> & { from: number })[] = [
+type PalBase = Omit<MinePal, 'mush' | 'fog' | 'layer' | 'lamp'>;
+const LAYERS: (PalBase & { from: number })[] = [
   { from: 1, rock: ['#a08a72', '#c0aa90', '#73624f'], hard: ['#7e7468', '#9c9284', '#57504a'], floor: '#5e4c40', floorL: '#725e4e', wall: '#3e3240', wallL: '#54465a', moss: true },
   { from: 10, rock: ['#8e8c94', '#b0aeb8', '#62606a'], hard: ['#666874', '#848694', '#45464f'], floor: '#4a4650', floorL: '#5c5864', wall: '#2e2c3a', wallL: '#44425a' },
   { from: 30, rock: ['#5e5a72', '#7c7894', '#3e3a50'], hard: ['#45425a', '#5e5a78', '#2c2a3c'], floor: '#34303e', floorL: '#46405a', wall: '#1e1a2a', wallL: '#322c46', glow: '#9a7aff' },
 ];
-const ASH: Omit<MinePal, 'mush' | 'fog'> = { rock: ['#5c4c4a', '#7a6662', '#3e3232'], hard: ['#3a3338', '#524850', '#262126'], floor: '#2e2224', floorL: '#3e2e30', wall: '#1e1416', wallL: '#3a2224', lava: '#ff5a1a' };
-const BIO: Record<string, Omit<MinePal, 'mush' | 'fog'>> = {
+const ASH: PalBase = { rock: ['#5c4c4a', '#7a6662', '#3e3232'], hard: ['#3a3338', '#524850', '#262126'], floor: '#2e2224', floorL: '#3e2e30', wall: '#1e1416', wallL: '#3a2224', lava: '#ff5a1a' };
+const BIO: Record<string, PalBase> = {
   forest: { rock: ['#7e7a5a', '#9e9a72', '#56523a'], hard: ['#5e6248', '#7a7e60', '#3e4230'], floor: '#3e3a28', floorL: '#56502e', wall: '#22301e', wallL: '#3a4e2a', moss: true, deco: 'moss' },
   taiga: { rock: ['#8a949a', '#aeb8be', '#5e686e'], hard: ['#68727a', '#86909a', '#454e56'], floor: '#3c4248', floorL: '#5a646c', wall: '#1e2a30', wallL: '#34464e', deco: 'snow' },
   ice: { rock: ['#9cc0d8', '#d6ecf8', '#6a90a8'], hard: ['#7aa0c0', '#b0d0e8', '#4a7090'], floor: '#3a5468', floorL: '#5a7a90', wall: '#1a2c3e', wallL: '#2e4a62', deco: 'snow' },
@@ -43,9 +48,10 @@ const DEEP_GLOW = new Set(['grotto', 'crystal', 'lake', 'dwarf', 'fossil', 'mirr
  * 3-layer / per-nature palettes (kept for comparison, setting «Пласты глубины»).
  */
 export function minePal(biome: string, n: number, depth = true): MinePal {
-  let L: Omit<MinePal, 'mush' | 'fog'>;
+  let L: PalBase, layer = '', lc = '#ffd27a';
   if (depth) {
     const T = themeOf(n, biome), X = biome === 'ash' ? ASH : BIO[biome];
+    layer = T.id; lc = T.lc;
     // 3D lighting is dimmer than the site's flat SVG: lift the deepest (near-black) walls a little so the cave keeps its shape
     const lift = (c: string, k: number) => mixHex(c, T.rock[0], k);
     L = {
@@ -55,9 +61,12 @@ export function minePal(biome: string, n: number, depth = true): MinePal {
     };
   } else if (biome === 'ash') L = ASH; else if (BIO[biome]) L = BIO[biome];
   else { L = LAYERS[0]; for (const l of LAYERS) if (n >= l.from) L = l; }
-  // cool, deep fog: distance falls into blue-violet shadow (warm lanterns read against it)
-  const fog = '#' + new THREE.Color(L.wall).multiplyScalar(0.45).lerp(new THREE.Color('#121830'), 0.45).getHexString();
-  return { ...L, mush: L.glow || MUSH[biome] || MUSH.mount, fog };
+  // deep fog: distance falls into near-black shadow tinted by the layer (warm lanterns read against it); every depth
+  // layer has its own air — the lamp colour bleeds a little into the dark
+  const fog = '#' + new THREE.Color(L.wall).multiplyScalar(0.4).lerp(new THREE.Color('#0d0e16'), 0.5).lerp(new THREE.Color(lc), 0.05).getHexString();
+  // lanterns: warm flame, tinted by the layer's lamp colour (a cold layer gets a cooler, whiter flame)
+  const lamp = '#' + new THREE.Color('#ffae58').lerp(new THREE.Color(lc), 0.14).getHexString();
+  return { ...L, mush: L.glow || MUSH[biome] || MUSH.mount, fog, layer, lamp };
 }
 
 /** Ore / gem colours [main, light, dark] (mine-art.js ORE). */
@@ -112,6 +121,14 @@ export function rockGeo(kind: 'round' | 'slab' | 'hard' | 'pillar', variant: num
       let r = 1 + bumpy(d, seed, amp, kind === 'hard' ? 2.2 : 1.6);
       if (kind === 'slab') r *= 1 + 0.18 * Math.max(-0.5, Math.min(0.5, Math.round(d.x * 2) / 2 * 0.3 + Math.round(d.z * 2) / 2 * 0.2));
       let x = d.x * r, y = d.y * r, z = d.z * r;
+      if (kind === 'pillar') {
+        // rock mass, not a cypress: a superellipsoid column (flat-ish sides that close up with the neighbours, a broad
+        // top that meets the ceiling, a talus foot) with horizontal strata ledges
+        const se = (v: number, e: number) => Math.sign(v) * Math.pow(Math.abs(v), e);
+        const yn = (d.y + 1) / 2, ledge = 1 + 0.07 * Math.sign(Math.sin(yn * 19 + seed)) * (0.5 + 0.5 * Math.sin(Math.atan2(d.z, d.x) * 3 + seed));
+        const prof = (1 + 0.22 * Math.pow(1 - yn, 3) + 0.12 * Math.pow(yn, 4)) * ledge;
+        x = se(d.x, 0.55) * r * prof; z = se(d.z, 0.55) * r * prof; y = se(d.y, 0.35) * r;
+      }
       if (kind === 'slab' && y > 0.45) y = 0.45 + (y - 0.45) * 0.35;   // flat-ish top facet
       y = Math.max(y, -0.25);
       pos.setXYZ(i, x, y + 0.25, z);
@@ -132,8 +149,8 @@ export function rockGeo(kind: 'round' | 'slab' | 'hard' | 'pillar', variant: num
       // strata: tilted bands of lighter / darker rock + a few dark crack facets — detail at no extra geometry
       const fx = (p.getX(f) + p.getX(f + 1) + p.getX(f + 2)) / 3, fz = (p.getZ(f) + p.getZ(f + 1) + p.getZ(f + 2)) / 3;
       const band = Math.sin((cy + fx * 0.22 - fz * 0.12) * (kind === 'hard' ? 15 : 11) + seed);
-      const crack = hash3(fx * 3.1, cy * 2.7, fz * 3.3, seed + 9) > 0.93 && up < 0.6 ? 0.62 : 1;
-      const v = Math.min(1.2, (0.6 + cy * 0.44 + Math.max(0, up) * 0.16) * j * (1 + band * 0.07) * crack);
+      const crack = hash3(fx * 3.1, cy * 2.7, fz * 3.3, seed + 9) > 0.92 && up < 0.6 ? 0.58 : 1;
+      const v = Math.min(1.2, (0.6 + cy * 0.44 + Math.max(0, up) * 0.16) * j * (1 + band * (kind === 'pillar' ? 0.13 : 0.09)) * crack);
       const warm = 1 + band * 0.025;
       for (let k = 0; k < 3; k++) { col[(f + k) * 3] = v * warm; col[(f + k) * 3 + 1] = v; col[(f + k) * 3 + 2] = v * (1.03 - band * 0.02); }
       if (cy > 0.3 && up > -0.1 && tops.length < 400) tops.push({ p: new THREE.Vector3((p.getX(f) + p.getX(f + 1) + p.getX(f + 2)) / 3, cy, (p.getZ(f) + p.getZ(f + 1) + p.getZ(f + 2)) / 3), n: new THREE.Vector3(n.getX(f), n.getY(f), n.getZ(f)) });
@@ -164,8 +181,8 @@ export function nuggetGeo(): THREE.BufferGeometry {
 /** Glowing mushroom: stem (y 0…0.6) + cap. Two geometries (stem lit, cap glowing). */
 export function mushroomGeos(): { stem: THREE.BufferGeometry; cap: THREE.BufferGeometry } {
   return memo('mush', () => {
-    const stem = new THREE.CylinderGeometry(0.07, 0.1, 0.6, 7).translate(0, 0.3, 0);
-    const cap = new THREE.SphereGeometry(0.28, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.7, 1).translate(0, 0.56, 0);
+    const stem = new THREE.CylinderGeometry(0.07, 0.1, 0.6, 6, 1, true).translate(0, 0.3, 0);
+    const cap = new THREE.SphereGeometry(0.28, 8, 3, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.7, 1).translate(0, 0.56, 0);
     return { stem, cap };
   });
 }

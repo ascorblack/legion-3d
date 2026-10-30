@@ -17,6 +17,8 @@ import {
   type Quest, type QuestC, type MineNews, type ChatLine, type MineView,
 } from './state';
 import { layerOf, layerSpan } from './layers';
+import { liftInfo, drillsOf, drillFundable, drillLeft, drillLine, fundButtons, hmTxt, tmrTxt, objective, OreAsk, type DrillInfo, type Objective } from './fund';
+import { setHtml } from '../../core/html';
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const COIN: Record<string, string> = { g: '#f2c14e', s: '#c8ccd8', b: '#c07a44' };
@@ -28,6 +30,8 @@ const pcs = (q: number) => { const v = Math.floor(q) / 100; return (Number.isInt
 const hm = (min: number) => { const m = Math.max(0, Math.round(min)); return m < 60 ? `${m} мин` : `${Math.floor(m / 60)} ч${m % 60 ? ` ${m % 60} м` : ''}`; };
 const val = (x: number) => String(Math.round(x * 10) / 10).replace('.', ',');
 void COIN;
+/** The site's eye (city.js OTH_ICO): hidden → crossed out. */
+const EYE_ICO = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="x" d="M3 3l18 18"/></svg>';
 
 const CSS = `
 .l3m{--bg:rgba(29,22,32,.8);--bg2:rgba(42,32,48,.94);--ink:#f7eadf;--mute:#bfaab7;--gold:#ffcf6a;--goldd:#b8862a;--acc:#ff8fa3;--up:#8fe39a;--dn:#ff8f8f;
@@ -36,14 +40,16 @@ const CSS = `
 .l3m *{box-sizing:border-box}.l3m [hidden]{display:none!important}
 .l3m button{font:inherit;color:inherit}
 .l3m-box{background:var(--bg);box-shadow:0 0 0 1.5px var(--line),0 6px 18px #0006;border-radius:16px;backdrop-filter:blur(6px)}
-.l3m-hud{position:absolute;right:16px;top:50px;width:272px;pointer-events:auto;overflow:hidden}
-.l3m-mm{position:absolute;right:16px;bottom:64px;padding:6px;border-radius:12px;background:rgba(21,18,46,.72);border:1px solid rgba(242,193,78,.35);box-shadow:0 6px 18px rgba(0,0,0,.35);pointer-events:none;line-height:0}
+.l3m-hud{position:absolute;right:16px;top:50px;width:284px;pointer-events:auto;overflow:hidden}
+/* top-left under the player card and its chips (mine chip top 122, friends chip top 176 — src/ui/*-chip.ts); site: «карта этажа - слева сверху». Bottom-right was under the «Что нового» card */
+.l3m-mm{position:absolute;left:16px;top:214px;padding:6px;border-radius:12px;background:rgba(21,18,46,.72);border:1px solid rgba(242,193,78,.35);box-shadow:0 6px 18px rgba(0,0,0,.35);pointer-events:none;line-height:0}
 .l3m-mm canvas{display:block;border-radius:6px;image-rendering:pixelated}
 .l3m-mm .cap{display:block;line-height:1.2;font:700 11px/1.2 Nunito,system-ui,sans-serif;color:#f2e6d8;opacity:.85;margin:0 0 4px 2px}
-.l3m-hd{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;cursor:pointer}
-.l3m-hd .t{font:700 13px/1.15 var(--hd);color:var(--gold);white-space:nowrap}
-.l3m-hd .s{font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.l3m-hd .g{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.l3m-hd{padding:8px 8px 7px 12px;cursor:pointer}
+.l3m-hd .t{font:700 13px/1.15 var(--hd);color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.l3m-hd .t small{font:600 11px var(--tx);color:var(--mute)}
+.l3m-hd .s{font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.l3m-hd .g{display:flex;flex-direction:column;gap:4px}.l3m-hd .l1,.l3m-hd .l2{display:flex;align-items:center;gap:6px;justify-content:space-between}
+.l3m-hd .ib{display:inline-flex;gap:4px;flex:none}.l3m-hd .l3m-hb{width:22px;height:22px}.l3m-hd .l3m-jb{height:22px}
 .l3m-tg{width:24px;height:24px;border-radius:999px;border:0;background:#ffffff10;cursor:pointer;display:grid;place-items:center;transition:transform .2s;flex:none}
 .l3m-hud.min .l3m-tg{transform:rotate(-90deg)}
 .l3m-bd{padding:0 12px 10px;display:flex;flex-direction:column;gap:7px}
@@ -89,12 +95,12 @@ const CSS = `
 .l3m-in{display:flex;gap:6px;padding:0 10px 10px}
 .l3m-in input{flex:1;min-width:0;pointer-events:auto;border:0;border-radius:999px;padding:7px 12px;background:#0006;color:var(--ink);font:600 12.5px/1.2 var(--tx);box-shadow:0 0 0 1px var(--line);outline:none}
 .l3m-in input:focus{box-shadow:0 0 0 1.5px var(--gold)}
-.l3m-tip{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);max-width:min(560px,90%);background:var(--bg2);box-shadow:0 0 0 1.5px var(--line),0 6px 18px #0006;border-radius:999px;padding:8px 18px;font-weight:700;text-align:center;transition:opacity .25s}
+.l3m-tip{z-index:4;position:absolute;left:50%;bottom:150px;transform:translateX(-50%);max-width:min(560px,90%);background:var(--bg2);box-shadow:0 0 0 1.5px var(--line),0 6px 18px #0006;border-radius:999px;padding:8px 18px;font-weight:700;text-align:center;transition:opacity .25s}
 .l3m-tip.bad{box-shadow:0 0 0 1.5px var(--dn),0 6px 18px #0006;color:#ffd6d6}
 .l3m-pop{position:absolute;transform:translate(-50%,-100%);font:800 17px/1 var(--tx);color:#ffe27a;text-shadow:0 2px 0 #2a1d18,0 0 8px rgba(0,0,0,.6);white-space:nowrap;transition:opacity .3s}
 .l3m-other,.l3m-dark{position:absolute;left:50%;top:72px;transform:translateX(-50%);border-radius:999px;padding:7px 8px 7px 16px;display:flex;gap:10px;align-items:center;font-weight:700}
 .l3m-other{pointer-events:auto;background:rgba(110,28,40,.92);box-shadow:0 0 0 1.5px var(--dn)}
-.l3m-dark{background:rgba(10,8,20,.88);box-shadow:0 0 0 1.5px var(--line);padding-right:16px}
+.l3m-dark{background:rgba(10,8,20,.9);box-shadow:0 0 0 1.5px var(--dn);pointer-events:auto;max-width:min(640px,92%)}
 .l3m-modal{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(14,9,18,.5);pointer-events:auto}
 .l3m-win{width:min(460px,94%);max-height:86%;overflow:auto;background:linear-gradient(#2a2030,#221a28);box-shadow:0 0 0 1.5px var(--line),0 16px 40px #000a;border-radius:20px;padding:16px 18px}
 .l3m-win h3{margin:0 0 4px;font:700 18px/1.2 var(--hd);color:var(--gold)}.l3m-say{font-style:italic;margin:4px 0 10px;color:#e9dcd2}
@@ -125,7 +131,41 @@ const CSS = `
 .l3m-top li span{color:var(--mute);font-weight:800}.l3m-top li em{font-style:normal;font-weight:800}.l3m-top li.me{box-shadow:0 0 0 1.5px var(--gold)}.l3m-top li.me b{color:var(--gold)}
 .l3m-news{z-index:2}.l3m-news .l3m-win{width:min(420px,94%)}.l3m-news h3{font-size:19px}
 .l3m-news .l3m-list li{flex-direction:column;align-items:flex-start;gap:1px;padding:7px 11px}.l3m-news .l3m-list li>span{font-size:11px;color:var(--mute)}.l3m-news .l3m-list li b{font-size:14px}.l3m-news .l3m-btns{justify-content:center}.l3m-news .l3m-btn{padding:9px 26px;font-size:14px!important}
-@media (max-width:700px){.l3m-hud{width:224px}.l3m-jr{width:240px}}
+/* mineux: objective, lift row, collections, floors, bag, coach, eye */
+.l3m-obj{display:flex;align-items:center;gap:7px;background:linear-gradient(90deg,#ffcf6a26,#ffcf6a0a);border-radius:11px;padding:6px 8px;box-shadow:inset 0 0 0 1px #ffcf6a40;font-size:12px;font-weight:700;line-height:1.25}
+.l3m-obj .ic{color:var(--gold);flex:none}.l3m-obj .tx{flex:1;min-width:0}.l3m-obj .l3m-btn{flex:none}
+.l3m-obj[data-k="tab"],.l3m-obj[data-k="lamp"],.l3m-obj[data-k="wear"]{background:linear-gradient(90deg,#ff8f8f2a,#ff8f8f0a);box-shadow:inset 0 0 0 1px #ff8f8f55}
+.l3m-obj[data-k="claim"],.l3m-obj[data-k="sell"]{background:linear-gradient(90deg,#8fe39a26,#8fe39a0a);box-shadow:inset 0 0 0 1px #8fe39a55}
+.l3m-lift{cursor:pointer;pointer-events:auto}.l3m-lift:hover .lb{color:var(--gold)}.l3m-lift .l3m-mini i{background:var(--gold)}.l3m-lift .l3m-mini.up i{background:#7fe8ff}
+.l3m-ft{display:inline-flex;gap:5px}
+.l3m-fund{position:relative;height:22px;border-radius:999px;background:#0008;overflow:hidden;margin:8px 0 4px;box-shadow:inset 0 0 0 1px #ffcf6a40}
+.l3m-fund>i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#b8862a,#ffcf6a);transition:width .5s}
+.l3m-fund.up>i{background:linear-gradient(90deg,#3a8aa8,#7fe8ff)}.l3m-fund.dr>i{background:linear-gradient(90deg,#6a4aa8,#c9a0ff)}
+.l3m-fund span{position:relative;display:flex;justify-content:center;align-items:center;gap:4px;height:100%;font-weight:800;font-size:12px;text-shadow:0 1px 2px #000}
+.l3m-fls{display:flex;flex-wrap:wrap;gap:6px}
+.l3m-fl{pointer-events:auto;cursor:pointer;border:0;border-radius:12px;min-width:62px;padding:6px 8px;background:#ffffff12;box-shadow:0 0 0 1px var(--line);display:flex;flex-direction:column;align-items:center;gap:2px}
+.l3m-fl b{font:400 18px/1 var(--num);color:var(--gold)}.l3m-fl small{font-size:10px;color:var(--mute)}
+.l3m-fl:hover:not([disabled]){background:#ffcf6a2a}.l3m-fl.cur{background:#ffcf6a;box-shadow:0 2px 0 var(--goldd)}.l3m-fl.cur b,.l3m-fl.cur small{color:#2a1d18}.l3m-fl[disabled]{cursor:default}
+.l3m-by{margin:8px 0 0;font-size:12px;color:var(--mute)}.l3m-by b{color:var(--ink)}.l3m-by b.me{color:var(--gold)}
+.l3m-win>.l3m-btns:last-child{position:sticky;bottom:-16px;margin:8px -18px -16px;padding:10px 18px 12px;background:linear-gradient(#221a2800,#221a28 40%)}
+.l3m-res{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;background:var(--c);box-shadow:0 0 0 1.5px #2a2236,0 0 6px var(--c);transform:rotate(45deg)}
+.l3m-ore li b{font-size:13px}
+.l3m-hon{display:flex;align-items:baseline;gap:8px;background:#ffcf6a1c;border-radius:12px;padding:8px 11px;margin:6px 0}.l3m-hon b{font:400 20px/1 var(--num);color:var(--gold)}.l3m-hon small{color:var(--mute)}
+.l3m-c-quests h4{margin:12px 0 4px;font:700 13px/1.2 var(--hd);color:var(--gold)}
+.l3m-c-quests ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.l3m-c-quests ol li{display:grid;grid-template-columns:22px 1fr auto;gap:6px;background:#ffffff0c;border-radius:9px;padding:4px 9px;font-size:12.5px}
+.l3m-c-quests ol li span{color:var(--mute);font-weight:800}.l3m-c-quests ol li em{font-style:normal;font-weight:800}.l3m-c-quests ol li.me{box-shadow:0 0 0 1.5px var(--gold)}
+.l3m-eye svg .x{display:none}.l3m-eye.off svg .x{display:inline}.l3m-eye.off{color:var(--dn)!important}
+/* right of the floor map, above the chat dock (which grows up from the bottom-left) */
+.l3m-coach{position:absolute;left:236px;top:124px;width:300px;padding:10px 12px 12px;pointer-events:auto}
+.l3m-coach .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}.l3m-coach .hd b{font:700 14px/1.2 var(--hd);color:var(--gold)}
+.l3m-coach .l3m-x{position:static;float:none;margin:0;width:24px;height:24px}
+.l3m-coach ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.l3m-coach li{display:flex;gap:8px;align-items:flex-start}.l3m-coach li .n{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#ffffff14;font:800 11px/1 var(--tx);color:var(--gold);box-shadow:0 0 0 1px var(--line)}
+.l3m-coach li.ok{opacity:.6}.l3m-coach li.ok .n{background:var(--up);color:#1d2a1e;box-shadow:none}.l3m-coach li.ok>span:last-child{text-decoration:line-through}
+.l3m-dark .l3m-btn{flex:none}
+@media (max-width:700px){.l3m-hud{width:224px}.l3m-jr{width:240px}.l3m-coach{display:none}}
+.l3m-coach.flat{left:16px}
 `;
 
 export interface MineHudHandlers {
@@ -138,10 +178,24 @@ export interface MineHudHandlers {
   journal?(on: boolean): void;
   /** The mine chat input got / lost focus (the room turns gameplay keys off while typing). */
   typing?(on: boolean): void;
+  /** «Шахта 3.0»: ride the lift to floor f (the room sends /api/mineRide and opens the floor). */
+  ride?(f: number): void;
+  /** Walk to the lift (shaft card «К лифту», the HUD lift row). */
+  toLift?(): void;
+  /** Walk to the supplier and open his card. */
+  toSup?(): void;
+  /** «Скрыть других игроков» changed. */
+  hideOthers?(on: boolean): void;
+  /** A UI sound (src/audio/defs.ts id). */
+  sfx?(id: string): void;
 }
-export type CardKind = 'buy' | 'lamp' | 'quests' | 'news' | 'help' | 'top' | 'lift' | null;
+export type CardKind = 'buy' | 'lamp' | 'quests' | 'news' | 'help' | 'top' | 'lift' | 'drill' | 'shaft' | 'bag' | null;
 type JTab = 'log';
 const LS_MIN = 'l3d.mineHudMin';
+/** «Скрыть других игроков» (site lgMineHide; ours, the site's key is read once as the default). */
+export const LS_HIDE = 'l3d.mineHide';
+/** First-entry coach card dismissed. */
+export const LS_COACH = 'l3d.mineCoach';
 const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* */ } };
 
@@ -178,8 +232,8 @@ export function queueHtml(on: boolean, queue: readonly number[], cells: { i: num
 
 /** Depth reward ladder of the week (site help(): weekCoinsAt defaults). */
 export const WEEK_REWARDS: [number, number][] = [[10, 80], [20, 200], [30, 400], [40, 550], [60, 900]];
-export interface HelpVars { lampFrom: number; darkFrom: number; cap: number; pick: boolean; q2: boolean; queue: boolean; n: number }
-/** «Как устроена шахта» — the site's HELP text (mine.js 26.10), with the 3D controls instead of clicks. */
+export interface HelpVars { lampFrom: number; darkFrom: number; cap: number; pick: boolean; q2: boolean; queue: boolean; n: number; /** «Шахта 3.0» big floor: lift and drill rigs. */ v3?: boolean }
+/** «Как устроена шахта» — the site's HELP text (mine.js 26.10, lift / drills 30.10), with the 3D controls instead of clicks. */
 export function helpParts(v: HelpVars): [string, string[]][] {
   const week = WEEK_REWARDS.map(([f, c]) => `${f}-й этаж — ${c}`).join(', ') + ' монет';
   const L = layerOf(v.n);
@@ -191,8 +245,19 @@ export function helpParts(v: HelpVars): [string, string[]][] {
       'Вместе быстрее: на одном камне могут работать несколько героев. Добыча делится по вкладу — сколько работы вложил каждый.',
       'Число на камне — его уровень: чем выше, тем дольше копать. Табличка над камнем — оценка «≈»: сколько осталось, твоя доля, монет в час.',
     ]],
+    ...(v.v3 ? [['Лифт и этажи', [
+      'Этаж большой, дальше — туман: копай проходы, ищи жилы и шахту лифта. Карта этажа — слева сверху.',
+      'Новый этаж открывает лифт. На самом глубоком этаже найдите шахту лифта и докопайтесь до неё.',
+      'Потом все скидываются у лифта монетами или рудой (по цене скупщика, руда — в казну Ратуши); чем глубже, тем больше нужно.',
+      'Собрали — лифт улучшается сам по таймеру, потом открывается следующий этаж. Копать в это время можно.',
+      'Лифт возит на любой открытый этаж: подойди к нему, нажми E и выбери этаж. Там же — «В город».',
+    ]], ['Буровые', [
+      'Жилу выкопали на 70% — на ней площадка буровой. На этаже — не больше 2 буровых.',
+      'Скиньтесь монетами или рудой (подойди к буровой, E) — она строится по таймеру, уровни 1–3. Строителям — бонус рудой жилы по вкладу.',
+      'Буровая сама добывает руду жилы, пока та не иссякнет: 70% — в казну Ратуши, 30% — тем, кто копал в шахте за последний час.',
+    ]]] as [string, string[]][] : []),
     ['Этажи', [
-      'Расчистили этаж — клеть наверху зала горит, шахта спускается на следующий этаж.',
+      v.v3 ? 'Чем глубже, тем выше уровень камней (копать дольше); в глубоких пластах — другая руда.' : 'Расчистили этаж — клеть наверху зала горит, шахта спускается на следующий этаж.',
       'Чем глубже, тем выше уровень камней (копать дольше); в глубоких пластах — другая руда.',
       `Каждые 5 этажей — новый пласт. Сейчас: «${L.name}» (этажи ${layerSpan(L)}).`,
       'В каждом десятке этажей один — угольный (какой — заранее не узнать): на нём кучи угля, а вокруг каждой — жила угольных камней.',
@@ -225,7 +290,7 @@ export function helpParts(v: HelpVars): [string, string[]][] {
   ];
 }
 export function helpHtml(v: HelpVars): string {
-  return `<h3>Как устроена шахта</h3><p class="l3m-mut">По правилам сайта на 28.10</p>`
+  return `<h3>Как устроена шахта</h3><p class="l3m-mut">По правилам сайта на 30.10</p>`
     + helpParts(v).map(([h, li]) => `<h4>${esc(h)}</h4><ul>${li.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`).join('');
 }
 interface HistWeek { floor?: number; players?: number; top?: { l: string; u: number }[] }
@@ -242,21 +307,97 @@ export function topHtml(st: MineView, login: string): string {
     + `<p class="l3m-mut" style="margin-top:8px">Вклад — сколько работы вложил герой. Каждую субботу в 18:00 — новая шахта.</p>`;
 }
 
-/** «Шахта 3.0» lift card (site liftHtml, read-only here: the stage of the lift and the floors; riding and funding stay on the site). */
-export function liftHtml(st: MineView, now: number): string {
-  const L = st.lift || { st: 'dig' }, deep = st.deep || st.n;
-  const hm2 = (ms: number) => { const m = Math.max(0, Math.round(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} ч ${m % 60} мин` : `${m} мин`; };
+/** An ore heap that can go into a collection: uid, name, shards, price per piece (buyer's). */
+export interface OreRow { uid: string; name: string; q: number; price: number; res?: string }
+/**
+ * «Руда из сумки» rows of a collection (site oreRows): «Отдать ≈N» — the first press turns the button into
+ * «Точно отдать X шт.?» for THIS heap (8 s), the second press sends (OreAsk).
+ */
+export function oreRowsHtml(rows: OreRow[], ask: OreAsk, act: string, now: number, busy: boolean): string {
+  if (!rows.length) return '';
+  return '<div class="l3m-k" style="margin-top:8px">Руда из сумки</div><p class="l3m-mut">Руда уходит из твоей сумки в казну Ратуши — отдаётся вся кучка. Нажми «Отдать», потом подтверди.</p>'
+    + `<ul class="l3m-list">${rows.map((r) => { const on = ask.asked(r.uid, now), q = qty(Math.floor(r.q / 100), r.q % 100);
+      return `<li><span>${esc(r.name)}<br><small class="l3m-mut">${esc(q)}</small></span><button type="button" class="l3m-btn sm${on ? '' : ' ghost'}" data-a="${act}" data-uid="${esc(r.uid)}" data-q="${r.q}"${busy ? ' disabled' : ''}${on ? ` aria-label="Точно отдать ${esc(r.name)} ${esc(q)}?"` : ''}>${on ? `Точно отдать ${esc(pcs(r.q))} шт.?` : `Отдать ≈${coinsHtml(Math.floor(r.q * r.price / 100))}`}</button></li>`; }).join('')}</ul>`;
+}
+/** Collection block (site fundBlock): bar «c из need», coin buttons 100 / 500 / 1000 / «Весь остаток», ore rows. */
+export function fundHtml(c: number, need: number, act: string, oreAct: string, rows: OreRow[], ask: OreAsk, now: number, busy: boolean, money: number): string {
+  const p = need ? Math.min(100, c / need * 100) : 0;
+  return `<div class="l3m-fund" role="progressbar" aria-valuemin="0" aria-valuemax="${need}" aria-valuenow="${c}"><i style="width:${p.toFixed(1)}%"></i><span>${coinsHtml(c)} из ${coinsHtml(need)}</span></div>`
+    + `<div class="l3m-btns">${fundButtons(c, need).map((b) => `<button type="button" class="l3m-btn sm${b.all ? '' : ' ghost'}" data-a="${act}" data-v="${b.v}"${busy || money < b.v ? ' disabled' : ''}${money < b.v ? ' title="Не хватает монет"' : ''}>${b.all ? 'Весь остаток ' : ''}${coinsHtml(b.v)}</button>`).join('')}</div>`
+    + `<p class="l3m-mut">У тебя: ${coinsHtml(money)}</p>`
+    + oreRowsHtml(rows, ask, oreAct, now, busy);
+}
+/** «Скинулись: a 15, b 6 и ещё N» — one line (site drillMenuHtml), own contribution marked. */
+const byHtml = (by: [string, number][], me: string) => (by.length ? `<p class="l3m-by">Скинулись: ${by.slice(0, 4).map(([l, v]) => `<b class="${l.toLowerCase() === me ? 'me' : ''}">${esc(l)}</b> ${coinsHtml(v)}`).join(', ')}${by.length > 4 ? ` и ещё ${by.length - 4}` : ''}</p>` : '');
+
+export interface FundCtx { rows: OreRow[]; ask: OreAsk; now: number; stAt: number; busy: boolean; money: number; me: string }
+/**
+ * «Шахта 3.0» lift card (site liftHtml + the bubble «В город» / «Этажи»): «В город», the open floors (ride: POST
+ * /api/mineRide), the stage — dig (find the shaft) / fund (coins and ore: /api/mineLift) / up (timer), who chipped in.
+ */
+export function liftHtml(st: MineView, f: FundCtx): string {
+  const I = liftInfo(st, f.stAt, f.now), deep = I.deep;
+  const fl: string[] = []; for (let n = 1; n <= deep; n++) fl.push(`<button type="button" class="l3m-fl${n === st.n ? ' cur' : ''}" data-a="ride" data-f="${n}"${n === st.n ? ' aria-current="true" disabled' : f.busy ? ' disabled' : ''} title="${n === st.n ? 'Ты здесь' : `Поехать на этаж ${n}`}"><b>${n}</b><small>${n === st.n ? 'ты здесь' : n === deep ? 'самый глубокий' : 'этаж'}</small></button>`);
   let stage: string;
-  if (L.st === 'fund') {
-    const p = L.need ? Math.min(100, (L.c || 0) / L.need * 100) : 0;
-    stage = `<p>Сбор на этаж ${deep + 1}: <b>${Math.floor(p)}%</b> (${coinsHtml(L.c || 0)} из ${coinsHtml(L.need || 0)}), потом таймер ${hm2(L.ms || 0)}.</p><div class="l3m-bar"><i style="width:${p.toFixed(1)}%;background:#f4c74e"></i></div>`;
-  } else if (L.st === 'up') {
-    const left = (L.at || 0) + (L.ms || 0) - now;
-    stage = `<p>Лифт улучшается — этаж ${deep + 1} откроется${left > 0 ? ` через ${hm2(left)}` : ' вот-вот'}.</p>`;
-  } else stage = `<p>Этаж ${deep + 1}: сначала докопайтесь до <b>шахты лифта</b> на этаже ${deep} — она далеко от лифта, под туманом. Потом — сбор ${coinsHtml(L.need || 0)} и таймер ${hm2(L.ms || 0)}.</p>`;
-  return `<h3>Лифт</h3><p class="l3m-say">Ты на этаже <b>${st.n}</b>${deep > 1 ? ` · открыты этажи 1–${deep}` : ''}.</p>${stage}`
-    + `<p class="l3m-mut">Поездка на другой этаж и вклад в сбор — в окне шахты на сайте.</p>`
-    + `<div class="l3m-btns"><button type="button" class="l3m-btn" data-a="exit">В город ↑</button></div>`;
+  if (I.st === 'fund') stage = `<p>Шахта лифта найдена! Скидываемся на этаж ${deep + 1} — монетами и рудой (руда — по цене скупщика, уходит в казну Ратуши). Потом лифт улучшается ${hmTxt(I.ms)}.</p>`
+    + fundHtml(I.c, I.need, 'lfund', 'lore', f.rows, f.ask, f.now, f.busy, f.money);
+  else if (I.st === 'up') stage = `<p>Собрали! Лифт улучшается: этаж ${deep + 1} откроется ${I.leftMs > 0 ? `через <b>${tmrTxt(I.leftMs)}</b>` : '<b>вот-вот</b>'}. Копать можно.</p>`
+    + (I.ms > 0 ? `<div class="l3m-fund up"><i style="width:${Math.max(0, Math.min(100, (1 - I.leftMs / I.ms) * 100)).toFixed(1)}%"></i><span>улучшение лифта</span></div>` : '');
+  else stage = `<p>Этаж ${deep + 1}: сначала докопайтесь до <b>шахты лифта</b> на этаже ${deep} — она далеко от лифта, под туманом (на карте этажа — оранжевая точка, когда найдёте). Потом — сбор ${coinsHtml(I.need)} и таймер ${hmTxt(I.ms)}.</p>`;
+  return `<h3>Лифт</h3><p class="l3m-say">Ты на этаже <b>${st.n}</b>. Открыто этажей: ${deep}.</p>`
+    + `<div class="l3m-btns"><button type="button" class="l3m-btn" data-a="exit">В город ↑</button></div>`
+    + `<div class="l3m-k" style="margin-top:10px">Этажи</div><div class="l3m-fls" role="group" aria-label="Этажи">${fl.join('')}</div>`
+    + `<div class="l3m-k" style="margin-top:10px">Этаж ${deep + 1}</div>${stage}${byHtml(I.by, f.me)}`;
+}
+/** Drill rig card (site drillHtml / drillMenuHtml): stage, output, collection for the next level (/api/mineDrill), who chipped in. */
+export function drillHtml(d: DrillInfo | null, f: FundCtx): string {
+  if (!d) return '<h3>Буровая</h3><p>Буровой здесь нет.</p>';
+  const v = (x: number) => String(Math.round(x * 10) / 10).replace('.', ','), nm = esc(resName(d.res));
+  const head = d.stg === 'site' ? `<p>Жила «${nm}» почти выкопана — здесь можно поставить буровую. Она сама добывает руду жилы: 70% — в казну Ратуши, 30% — тем, кто копал в шахте за последний час. Строителям — бонус рудой.</p>`
+    : d.stg === 'build' ? `<p>Стройка ур. ${d.lv + 1}: готово через <b>${hmTxt(drillLeft(d, f.stAt, f.now))}</b>.${d.lv ? ` Пока строится — добывает как ур. ${d.lv}.` : ''}</p>`
+    : d.stg === 'dry' ? `<p>Жила иссякла — буровая добыла всё, что могла (${v(d.out)} шт.).</p>`
+    : `<p>Буровая ур. ${d.lv}: ${v(d.rate)} шт./ч руды «${nm}». Добыто ${v(d.out)} из ${v(d.cap)} шт.</p>`;
+  const prog = d.lv && d.stg !== 'dry' ? `<div class="l3m-fund dr"><i style="width:${d.cap ? Math.min(100, d.out / d.cap * 100).toFixed(1) : 0}%"></i><span>добыто ${v(d.out)} из ${v(d.cap)} шт.</span></div>` : '';
+  const fund = drillFundable(d) ? `<div class="l3m-k" style="margin-top:10px">${d.lv ? `На ур. ${d.lv + 1}` : 'На постройку'}</div>${fundHtml(d.c, d.need, 'dfund', 'dore', f.rows, f.ask, f.now, f.busy, f.money)}` : '';
+  return `<h3>Буровая · ${nm}${d.lv ? ` · ур. ${d.lv}` : ''}</h3>${head}${prog}${fund}${byHtml(d.by, f.me)}`;
+}
+/** «Шахта лифта» card (site liftMenu 'shaft'): it is not a way down — the lift is. */
+export function shaftHtml(st: MineView): string {
+  const deep = st.deep || st.n, L = st.lift || {};
+  const t = st.n < deep ? 'Это шахта лифта — чтобы спуститься ниже, воспользуйся лифтом.'
+    : L.st === 'fund' ? `Шахта лифта найдена! Скинуться на этаж ${deep + 1} можно у лифта в зале.`
+    : L.st === 'up' ? `Шахта лифта готова — лифт улучшается, скоро этаж ${deep + 1}.` : 'Это шахта лифта — спуститься по ней нельзя, только лифтом.';
+  return `<h3>Шахта лифта</h3><p>${t}</p><div class="l3m-btns"><button type="button" class="l3m-btn" data-a="tolift">К лифту</button></div>`;
+}
+/** «Доска почёта» tab of the board (site boardHtml 'hon'): my week, the week's top, last week. */
+export function honHtml(st: MineView, wk: number, login: string): string {
+  const me = String(login || '').toLowerCase(), top = st.top || [], k = top.findIndex(([l]) => String(l).toLowerCase() === me), h0 = (st.hist || [])[0] as any;
+  const row = (l: string, u: number, i: number) => `<li class="${String(l).toLowerCase() === me ? 'me' : ''}"><span>${i + 1}</span><b>${esc(String(l).toLowerCase() === me ? l + ' (ты)' : l)}</b><em>${u}</em></li>`;
+  return `<div class="l3m-hon"><span>Твой вклад за неделю</span><b>${wk || 0}</b>${k >= 0 ? `<small>${k + 1}-е место</small>` : ''}</div>`
+    + `<h4>Лучшие копатели недели</h4><ol>${top.map(([l, u], i) => row(l, u, i)).join('') || '<li><b class="l3m-mut">Пока никто не копал</b></li>'}</ol>`
+    + (h0 ? `<h4>Прошлая неделя — до этажа ${esc(h0.floor)}</h4><ol>${(h0.top || []).slice(0, 3).map((x: any, i: number) => row(x.l, x.u, i)).join('')}</ol>` : '')
+    + '<p class="l3m-mut" style="margin-top:8px">Вклад — сколько работы вложил герой. Каждую субботу в 18:00 — новая шахта.</p>';
+}
+/** «Сумка» card: ore heaps with the buyer's price, the ore bag, the helmet; actions go to the buyer / supplier. */
+export function bagHtml(o: { rows: OreRow[]; total: number; ob: { cap: number; used: number } | 0 | null; lamp: 'on' | 'bag' | 'none'; lampUid?: string; earn: number; buyerOn: boolean; wait: string }): string {
+  const ore = o.rows.length
+    ? `<ul class="l3m-list l3m-ore">${o.rows.map((r) => `<li><span><i class="l3m-res" style="--c:${resColor(r.res || '')}"></i>${esc(r.name)}<br><small class="l3m-mut">${esc(qty(Math.floor(r.q / 100), r.q % 100))} · ${r.price ? `${val(r.price)} за шт.` : 'скупщик не берёт'}</small></span><b>${r.price ? '≈ ' + coinsHtml(Math.floor(r.q * r.price / 100)) : '—'}</b></li>`).join('')}</ul>`
+      + `<div class="l3m-offer"><span>Всё вместе у скупщика</span><b>≈ ${coinsHtml(o.total)}</b></div>`
+    : '<p class="l3m-mut">Руды в сумке нет — накопай: из каждого камня выпадают осколки (100 осколков = 1 шт.).</p>';
+  const ob = o.ob ? `<li><span>Рудная сумка</span><b>${o.ob.used} / ${o.ob.cap} ячеек</b></li>` : '<li><span>Рудная сумка</span><b class="l3m-mut">нет — у Снабженца</b></li>';
+  const hat = `<li><span>Каска шахтёра</span><b class="${o.lamp === 'on' ? 'ok' : ''}">${o.lamp === 'on' ? 'надета' : o.lamp === 'bag' ? 'в сумке' : 'нет'}</b></li>`;
+  return `<h3>Сумка шахтёра</h3><p class="l3m-mut">Руда — в сумке героя (100 осколков = 1 шт.), цены — скупщика.${o.buyerOn ? ` Оплата за работу уже в кошельке: ${coinsFrac(o.earn)}.` : ''}</p>${o.wait ? `<p class="l3m-lim">${esc(o.wait)}</p>` : ''}${ore}`
+    + `<ul class="l3m-list">${ob}${hat}</ul>`
+    + `<div class="l3m-btns">${o.rows.length && o.buyerOn ? '<button type="button" class="l3m-btn" data-a="buyer">К скупщику</button>' : ''}${o.lamp === 'bag' && o.lampUid ? `<button type="button" class="l3m-btn" data-a="wear" data-uid="${esc(o.lampUid)}">Надеть каску</button>` : ''}<button type="button" class="l3m-btn ghost" data-a="tosup">К Снабженцу</button></div>`
+    + '<p class="l3m-mut" style="margin-top:6px">Вся сумка героя — клавиша <span class="l3m-kc">I</span></p>';
+}
+/** A stable tint per ore name (the bag rows' dot). */
+const RES_TINT: Record<string, string> = { iron: '#b9c2cf', coal: '#6a6272', copper: '#d9824a', silver: '#e3e7ef', gold: '#f2c14e', crystal: '#9fe7ff', sulfur: '#e8e05a', obsidian: '#7a5aa8', limestone: '#e6dcc4', sandstone: '#e0b878', clay: '#c88a64', salt: '#f4f0ea', amber: '#ffb347', topaz: '#ffc35a', emerald: '#56d68a', ruby: '#ff5f7a', sapphire: '#5a8cff', malachite: '#3fbf8a', aquamarine: '#7fe8e0', fire_opal: '#ff7a3c', adamant: '#9ad0ff', morion: '#4a3a3a', runestone: '#b9a2ff' };
+const resColor = (res: string) => RES_TINT[res] || '#c9a77e';
+/** The objective line (what to do next) of the HUD card. */
+export function objHtml(o: Objective): string {
+  const btn = o.act === 'wear' ? 'Надеть' : o.act === 'buyer' ? 'К скупщику' : o.act === 'quests' ? 'Забрать' : o.act === 'lift' ? 'К лифту' : '';
+  return `<div class="l3m-obj" data-k="${o.k}" role="status"><span class="ic" aria-hidden="true">➜</span><span class="tx">${esc(o.t)}</span>${btn ? `<button type="button" class="l3m-btn sm" data-a="obj" data-act="${o.act}">${btn}</button>` : ''}</div>`;
 }
 
 export class MineHud {
@@ -277,15 +418,27 @@ export class MineHud {
   private newsNw: MineNews | null = null; private newsFocus = false;
   /** The idle hint shows for the first 90 s in the mine or until the first stone. */
   private born = Date.now(); private dug = false;
+  /** Drill rig of the open «Буровая» card (site S.drillK). */
+  drillK: string | null = null;
+  /** Board tab: quests / honour board (site S.qTab). */
+  boardTab: 'q' | 'hon' = 'q';
+  /** «Отдать» ore in two presses (site oreAsk). */
+  readonly ask = new OreAsk();
+  /** Other miners hidden (site eye). */
+  hide = (lsGet(LS_HIDE) ?? lsGet('lgMineHide')) === '1';
+  /** First-entry coach: shown until «Понятно»; its steps tick off as they happen. */
+  coach = lsGet(LS_COACH) !== '1';
+  private coachSteps = { dig: false, sell: false, lift: false };
   constructor(host: HTMLElement, private client: MineClient, private h: MineHudHandlers) {
     this.el = document.createElement('div'); this.el.className = 'l3m'; this.el.setAttribute('aria-live', 'polite');
-    this.el.innerHTML = `<style>${CSS}</style>`
+    setHtml(this.el, `<style>${CSS}</style>`
       + `<section class="l3m-box l3m-hud" data-p0="hud" aria-label="Шахта"><div data-p="hd"></div><div class="l3m-mbar" data-p="mbar"></div><div class="l3m-bd" data-p="bd"></div></section>`
       + `<section class="l3m-box l3m-jr" data-p0="jr" hidden aria-label="Журнал шахты"><div class="tabs" data-p="jtabs"></div><div class="body" data-p="jbody"></div></section>`
-      + `<div class="l3m-other" data-p="other" hidden><span>Шахта открыта в другой вкладке — копать можно только в одной.</span><button type="button" class="l3m-btn sm" data-a="here">Копать здесь</button></div>`
-      + `<div class="l3m-dark" data-p="dark" hidden>${esc(TX.dark)}</div>`
+      + `<div class="l3m-other" data-p="other" hidden><span>Шахта открыта в другой вкладке — копать можно только в одной.</span><button type="button" class="l3m-btn sm" data-a="here">Копать здесь</button><button type="button" class="l3m-btn ghost sm" data-a="exit">В город</button></div>`
+      + `<div class="l3m-dark" data-p="dark" hidden role="status"></div>`
+      + `<section class="l3m-box l3m-coach" data-p="coach" hidden aria-label="Как начать"></section>`
       + `<div class="l3m-mm" data-p="mm" hidden aria-label="Карта этажа"></div>`
-      + `<div class="l3m-tip" data-p="tip" hidden></div><div class="l3m-pops" data-p="pops"></div><div data-p="modal"></div>`;
+      + `<div class="l3m-tip" data-p="tip" hidden></div><div class="l3m-pops" data-p="pops"></div><div data-p="modal"></div>`);
     host.appendChild(this.el);
     this.el.addEventListener('click', (e) => this.onClick(e));
     this.el.addEventListener('change', (e) => { const t = e.target as HTMLInputElement; if (t && t.dataset.use) { if (t.checked) this.noUse.delete(t.dataset.use); else this.noUse.add(t.dataset.use); this.render(); } });
@@ -294,7 +447,7 @@ export class MineHud {
   }
   private q<T extends HTMLElement = HTMLElement>(p: string): T { return this.el.querySelector(`[data-p="${p}"]`) as T; }
   private q0<T extends HTMLElement = HTMLElement>(p: string): T { return this.el.querySelector(`[data-p0="${p}"]`) as T; }
-  private set(p: string, html: string): void { if (this.parts[p] === html) return; this.parts[p] = html; this.q(p).innerHTML = html; }
+  private set(p: string, html: string): void { if (this.parts[p] === html) return; this.parts[p] = html; setHtml(this.q(p), html); }
   get typing(): boolean { return this.typingOn; }
 
   tip(text: string, bad = false): void {
@@ -317,7 +470,14 @@ export class MineHud {
     }
   }
 
-  open(kind: CardKind): void { const was = !!this.card; this.card = kind; if (kind !== 'news') this.newsFocus = false; if (!!kind !== was) this.h.modal(!!kind); this.parts.modal = '\u0000'; this.render(); }   // sentinel: always redraw (closing too — '' would match the cleared slot and leave the card on screen)
+  open(kind: CardKind): void {
+    const was = !!this.card;
+    if (kind !== this.card) { if (kind && kind !== 'news') this.h.sfx?.('ui.open'); else if (!kind && was) this.h.sfx?.('ui.close'); }
+    if (kind === 'lift') this.coachTick('lift');
+    if (kind !== 'lift' && kind !== 'drill') this.ask.clear();
+    this.openCard(kind, was);
+  }
+  private openCard(kind: CardKind, was: boolean): void { this.card = kind; if (kind !== 'news') this.newsFocus = false; if (!!kind !== was) this.h.modal(!!kind); this.parts.modal = '\u0000'; this.render(); }   // sentinel: always redraw (closing too — '' would match the cleared slot and leave the card on screen)
   close(): void { this.open(null); }
   /** Collapse / expand the card. */
   toggleMin(on = !this.min): void { this.min = on; lsSet(LS_MIN, on ? '1' : '0'); this.render(); }
@@ -341,13 +501,15 @@ export class MineHud {
     hud.hidden = jrOpen; hud.classList.toggle('min', this.min);
     // header: mine · floor · nature, counters, collapse
     const name = st.name && st.id !== 'home' ? `Шахта · ${st.name}` : 'Шахта';
-    this.set('hd', `<div class="l3m-hd" data-a="min" title="${this.min ? 'Развернуть' : 'Свернуть'}"><div class="g"><span class="t" title="${esc(`Пласт «${layerOf(st.n).name}» (этажи ${layerSpan(layerOf(st.n))})`)}">⛏ ${esc(name)} · этаж ${st.n}</span>`
-      + `<span class="s" title="${esc(weekResetTxt(st.reset, now) || (left > 0 ? `Новая шахта через ${dd ? dd + ' д ' : ''}${hh} ч` : ''))}">${stars(st.danger || 1)} ${esc(BIO_RU[st.biome || ''] || '')}${(st.rec || 0) > st.n ? ` · рекорд ${st.rec}` : ''}`
-      + ` · <span title="${M.hm ? `Были в шахте за последние ${M.hm} мин` : 'Сейчас в шахте'}">👥 ${all}</span> · <span title="Сейчас копают">⛏ ${w}</span></span></div>`
+    const eyeT = this.hide ? 'Показать других игроков' : 'Скрыть других игроков';
+    this.set('hd', `<div class="l3m-hd" data-a="min" title="${this.min ? 'Развернуть' : 'Свернуть'}"><div class="g"><div class="l1"><span class="t" title="${esc(`Пласт «${layerOf(st.n).name}» (этажи ${layerSpan(layerOf(st.n))})`)}">⛏ ${esc(name)} · этаж ${st.n}${M.F && M.F.v3 && (st.deep || st.n) > st.n ? ` <small>из ${st.deep}</small>` : ''}</span>`
+      + `<button type="button" class="l3m-tg" data-a="min" aria-label="${this.min ? 'Развернуть' : 'Свернуть'}" aria-expanded="${!this.min}">▾</button></div>`
+      + `<div class="l2"><span class="s" title="${esc(weekResetTxt(st.reset, now) || (left > 0 ? `Новая шахта через ${dd ? dd + ' д ' : ''}${hh} ч` : ''))}">${stars(st.danger || 1)} ${esc(BIO_RU[st.biome || ''] || '')}`
+      + ` · <span title="${M.hm ? `Были в шахте за последние ${M.hm} мин` : 'Сейчас в шахте'}">👥 ${all}</span> · <span title="Сейчас копают">⛏ ${w}</span></span>`
+      + `<span class="ib"><button type="button" class="l3m-btn ghost sm l3m-hb l3m-eye${this.hide ? ' off' : ''}" data-a="hide" aria-pressed="${this.hide}" title="${eyeT}" aria-label="${eyeT}">${EYE_ICO}</button>`
       + `<button type="button" class="l3m-btn ghost sm l3m-hb" data-a="top" title="Итоги шахты: лучшие копатели недели" aria-label="Итоги шахты">🏆</button>`
       + `<button type="button" class="l3m-btn ghost sm l3m-hb" data-a="help" title="Как устроена шахта" aria-label="Как устроена шахта">?</button>`
-      + `<button type="button" class="l3m-btn ghost sm l3m-jb" data-a="jr" title="Журнал шахты [L]"><span class="l3m-kc">L</span></button>`
-      + `<button type="button" class="l3m-tg" data-a="min" aria-label="${this.min ? 'Развернуть' : 'Свернуть'}" aria-expanded="${!this.min}">▾</button></div>`);
+      + `<button type="button" class="l3m-btn ghost sm l3m-jb" data-a="jr" title="Журнал шахты [L]"><span class="l3m-kc">L</span></button></span></div></div></div>`);
     // Сейчас
     const dig = M.myI >= 0 && M.F ? M.F.cells[M.myI] : null;
     const pr = dig ? stoneProgress(st, M.myI, now) : null, rem = pr ? 1 - pr.p : 1;
@@ -358,9 +520,9 @@ export class MineHud {
       nowH = `<div><div class="l3m-k">Сейчас<small>${pr && pr.n > 1 ? `копают: ${pr.n}` : ''}</small></div><p class="l3m-t">${TX.doing}: <b>${esc(blockTitle(dig))}</b></p>`
         + `<div class="l3m-bar"><i style="width:${(rem * 100).toFixed(1)}%;background:${barCol}"></i></div>`
         + `<div class="l3m-row"><span class="l3m-mut">${esc(leftTxt((pr ? pr.eta : 0) * 1000))}</span><button type="button" class="l3m-btn ghost sm" data-a="stop">Стоп</button></div>${queueHtml(c.queueOn, c.queue(), M.F ? M.F.cells : [])}</div>`;
-    } else if (!this.dug && now - this.born < 90000) nowH = `<p class="l3m-mut" title="Подойди к камню, наведи прицел и нажми E — герой докопает сам, даже если закрыть сайт">Копай камни с <b style="color:var(--gold)">жёлтым кругом</b> — <span class="l3m-kc">E</span></p>`;
-    else nowH = '';
-    if (dig) this.dug = true;
+    } else nowH = '';
+    if (dig) { this.dug = true; this.coachTick('dig'); }
+    if (c.buySaid) this.coachTick('sell');
     // Заработок
     const bag = me.bag || { c: 0, r: {} }, res = resList(bag);
     const ore = c.oreItems();
@@ -369,14 +531,26 @@ export class MineHud {
       : `${coinsFrac(bag.c)}<span class="l3m-mut"> · ${res.length ? res.map(([k, n]) => `${esc(resName(k))} ${n}`).slice(0, 2).join(', ') : 'сумка пуста'}</span>`;
     const q = me.q || { d: [], w: [] }, qc = q.c || null;
     const canClaim = canClaimOf(q, c.claimed, now);
+    // what to do next (fund.ts objective): one line with its own button; while digging only when something is more urgent
+    const ob = objective({ st, me: M.me, myI: M.myI, dark: M.dark, lampHave: !!M.lampHave(), pickOn: M.pickOn, buyerOn: M.buyerOn, capFull: dayLimit(me, now).kind === 'full',
+      canClaim, oreValue: c.priceOf(c.allLines()), v3: !!(M.F && M.F.v3), other: c.other, stAt: M.stAt, now });
+    const objH = dig && ob.k === 'dig' ? '' : objHtml(ob);
+    // «Шахта 3.0»: the lift's line (stage of the next floor) — a click walks to the lift
+    let liftH = '';
+    if (M.F && M.F.v3) {
+      const I = liftInfo(st, M.stAt, now);
+      const t = !I.onDeep ? `этажи 1–${I.deep} · ты на ${st.n}-м` : I.st === 'fund' ? `сбор на этаж ${I.deep + 1}: ${Math.floor(I.p)}%` : I.st === 'up' ? `этаж ${I.deep + 1} через ${I.leftMs > 0 ? tmrTxt(I.leftMs) : 'минуту'}` : `ищем шахту лифта для этажа ${I.deep + 1}`;
+      const pct = I.st === 'fund' ? I.p : I.st === 'up' && I.ms ? Math.max(0, Math.min(100, (1 - I.leftMs / I.ms) * 100)) : 0;
+      liftH = `<div class="l3m-sec l3m-lift" data-a="tolift" role="button" tabindex="0" title="Лифт в зале: этажи, сбор на новый этаж, выход в город — нажми, чтобы дойти"><div class="l3m-row"><span class="nw"><span class="lb">Лифт</span> ${esc(t)}</span><span class="l3m-mut">→</span></div>${I.st !== 'dig' && I.onDeep ? `<div class="l3m-mini ${I.st}"><i style="width:${pct.toFixed(1)}%"></i></div>` : ''}</div>`;
+    }
     const earnH = `<div class="l3m-sec l3m-row" title="${M.buyerOn ? 'Оплата за работу — сразу в кошелёк; руду купит скупщик' : 'Всё выдаст скупщик'}"><span class="nw"><span class="lb">Доход</span> ${earnL}</span><button type="button" class="l3m-btn sm" data-a="buyer">${M.buyerOn ? 'Скупщик' : 'Сдать'}</button></div>`;
     const mxx = me.mx || { lv: 1, xp: 0, need: 60 }, dayP = me.cap ? Math.min(100, me.day / me.cap * 100) : 0;
     const lim = dayLimit(me, now);
     const limTitle = me.cap > 0 ? `Копать можно до ${hm(me.cap)} в сутки (на все шахты). Новые сутки в 05:00 МСК — через ${spanTxt(lim.resetIn)}` : 'Время работы за сутки считается от 05:00 МСК';
     const metH = `<div class="l3m-sec"><div class="l3m-meters"><div title="${esc(limTitle)}"><div class="lb">Сегодня</div><div class="v">${hm(me.day)}${me.cap > 0 ? ` <span class="l3m-mut">/ ${hm(me.cap)}</span>` : ''}</div>${me.cap > 0 ? `<div class="l3m-mini ${lim.kind}"><i style="width:${dayP.toFixed(1)}%"></i></div>` : ''}</div>`
       + `<div><div class="lb">${TX.mast}</div><div class="v">ур. ${mxx.lv}</div><div class="l3m-mini xp"><i style="width:${mxx.need ? Math.min(100, mxx.xp / mxx.need * 100).toFixed(1) : 100}%"></i></div></div></div>${lim.text ? `<div class="l3m-lim ${lim.kind}" role="status" title="${esc(limTitle)}">${esc(lim.text)}</div>` : ''}</div>`;
-    const ftH = `<div class="l3m-row"><span class="l3m-mut">${canClaim ? '<b style="color:var(--gold)">Награда готова!</b>' : `Поручения: ${[...q.d, ...q.w].filter((x) => x.done).length} / ${q.d.length + q.w.length}`}</span><button type="button" class="l3m-btn ghost sm" data-a="quests">Поручения${canClaim ? ' <span class="l3m-dot">★</span>' : ''}</button></div>`;
-    this.set('bd', nowH + earnH + metH + (qc ? qcHudHtml(qc) : '') + ftH);
+    const ftH = `<div class="l3m-row"><span class="l3m-mut">${canClaim ? '<b style="color:var(--gold)">Награда готова!</b>' : `Поручения: ${[...q.d, ...q.w].filter((x) => x.done).length} / ${q.d.length + q.w.length}`}</span><span class="l3m-ft"><button type="button" class="l3m-btn ghost sm" data-a="bag" title="Руда, рудная сумка, каска">Сумка</button><button type="button" class="l3m-btn ghost sm" data-a="quests">Поручения${canClaim ? ' <span class="l3m-dot">★</span>' : ''}</button></span></div>`;
+    this.set('bd', objH + nowH + earnH + liftH + metH + (qc ? qcHudHtml(qc) : '') + ftH);
     // journal drawer
     const jr = this.q0('jr'); jr.hidden = !jrOpen;
     if (jrOpen) {
@@ -393,7 +567,14 @@ export class MineHud {
         + `</dl><p class="l3m-mut">💬 Чат шахты — внизу слева</p><div class="l3m-k">Журнал шахты</div><ul class="l3m-log">${(st.log || []).slice(0, 12).map((e) => `<li>${esc(e.t)}</li>`).join('') || '<li>Пока тихо</li>'}</ul>`);
     }
     this.q('other').hidden = !c.other;
-    this.q('dark').hidden = !M.dark;
+    // site hatLine: the helmet is needed on this floor and not on — what to do about it, with its button
+    {
+      const need = st.n >= (st.darkFrom || 5) && !M.lampOn(), have = M.lampHave();
+      const hat = !need ? '' : have ? `<span>Темно — нужна каска шахтёра. Она в сумке — надень её.</span><button type="button" class="l3m-btn sm" data-a="wear" data-uid="${esc(have.uid)}">Надеть</button>`
+        : `<span>Темно — без каски с фонарём не видно, куда бить. Купи её у ${M.pickOn ? 'Снабженца' : 'Фонарщика'} в зале.</span><button type="button" class="l3m-btn sm" data-a="tosup">К ${M.pickOn ? 'Снабженцу' : 'Фонарщику'}</button>`;
+      this.set('dark', hat); this.q('dark').hidden = !hat;
+    }
+    this.coachRender(!!(M.F && M.F.v3));
     // «Пока тебя не было»: the site's rules (first 15 s only; later silently marked read) live in NewsGate
     const nw = this.gate.tick(M.me, c.c, now, () => c.seen());
     if (nw) { this.newsNw = nw; this.open('news'); return; }
@@ -413,7 +594,7 @@ export class MineHud {
     this.mmKey = key; el.hidden = false;
     const w = F.w!, h = F.h!, k = Math.max(3, Math.min(7, Math.floor(200 / w)));
     let cv = el.querySelector('canvas') as HTMLCanvasElement | null;
-    if (!cv) { el.innerHTML = '<span class="cap">Карта этажа</span><canvas></canvas>'; cv = el.querySelector('canvas'); }
+    if (!cv) { setHtml(el, '<span class="cap">Карта этажа</span><canvas></canvas>'); cv = el.querySelector('canvas'); }
     if (!cv) return;
     if (cv.width !== w * k || cv.height !== h * k) { cv.width = w * k; cv.height = h * k; }
     const g = cv.getContext('2d'); if (!g) return;
@@ -446,14 +627,17 @@ export class MineHud {
     if (this.card === 'help' || this.card === 'top') {
       const M = this.client.model, st = M.st!, me = M.me;
       const body = this.card === 'help'
-        ? helpHtml({ lampFrom: st.lampFrom || 4, darkFrom: st.darkFrom || 5, cap: (me && +me.cap) || 0, pick: M.pickOn, q2: !!(me && me.q && me.q.c), queue: this.client.queueOn, n: st.n })
+        ? helpHtml({ lampFrom: st.lampFrom || 4, darkFrom: st.darkFrom || 5, cap: (me && +me.cap) || 0, pick: M.pickOn, q2: !!(me && me.q && me.q.c), queue: this.client.queueOn, n: st.n, v3: !!(M.F && M.F.v3) })
         : topHtml(st, this.client.login);
       const lbl = this.card === 'help' ? 'Как устроена шахта' : 'Итоги шахты';
       this.set('modal', `<div class="l3m-modal" data-a="bg"><div class="l3m-win l3m-${this.card}" role="dialog" aria-modal="true" aria-label="${lbl}"><button type="button" class="l3m-x" data-a="back" aria-label="Закрыть" title="Закрыть [Esc]">✕</button>${body}<div class="l3m-btns"><button type="button" class="l3m-btn" data-a="back">Понятно</button></div></div></div>`);
       return;
     }
-    const body = this.card === 'buy' ? this.buyerHtml() : this.card === 'lamp' ? this.supHtml() : this.card === 'lift' ? liftHtml(this.client.model.st!, Date.now()) : this.questsHtml();
-    this.set('modal', `<div class="l3m-modal" data-a="bg"><div class="l3m-win" role="dialog" aria-modal="true">${body}<div class="l3m-btns"><button type="button" class="l3m-btn ghost" data-a="back">Назад</button></div></div></div>`);
+    const M = this.client.model, st = M.st!, k = this.card;
+    const body = k === 'buy' ? this.buyerHtml() : k === 'lamp' ? this.supHtml() : k === 'lift' ? liftHtml(st, this.fundCtx())
+      : k === 'drill' ? drillHtml(drillsOf(st).find((d) => d.k === this.drillK) || null, this.fundCtx()) : k === 'shaft' ? shaftHtml(st) : k === 'bag' ? this.bagCard() : this.questsHtml();
+    const lbl = k === 'buy' ? TX.seller : k === 'lamp' ? (M.pickOn ? TX.sup : TX.lampNpc) : k === 'lift' ? 'Лифт' : k === 'drill' ? 'Буровая' : k === 'shaft' ? 'Шахта лифта' : k === 'bag' ? 'Сумка шахтёра' : 'Доска поручений';
+    this.set('modal', `<div class="l3m-modal" data-a="bg"><div class="l3m-win l3m-c-${k}" role="dialog" aria-modal="true" aria-label="${esc(lbl)}"><button type="button" class="l3m-x" data-a="back" aria-label="Закрыть" title="Закрыть [Esc]">✕</button>${body}<div class="l3m-btns"><button type="button" class="l3m-btn ghost" data-a="back">Назад <span class="l3m-kc">Esc</span></button></div></div></div>`);
   }
   private buyerHtml(): string {
     const c = this.client, M = c.model, st = M.st!;
@@ -475,7 +659,9 @@ export class MineHud {
     const c = this.client, M = c.model, me = M.me, q = (me && me.q) || { d: [], w: [] };
     const li = (x: Quest) => `<li class="${x.done ? 'done' : ''}${x.cl ? ' cl' : ''}"><span>${esc(x.t)}${x.h ? `<br><small class="l3m-mut">Где: ${esc(x.h)}</small>` : ''}</span><b>${x.cl ? 'получено' : x.done ? 'готово' : `${x.p} / ${x.g}`} · +${x.c}</b></li>`;
     const canClaim = canClaimOf(q, c.claimed, Date.now());
-    return `<h3>Поручения скупщика</h3><p class="l3m-mut">Награду выдаёт ${TX.seller} — кнопка «Забрать награду», когда поручение готово.</p>`
+    const tabs = `<div class="l3m-tabs" role="tablist" aria-label="Доска">${([['q', 'Поручения'], ['hon', 'Доска почёта']] as const).map(([k, t]) => `<button type="button" role="tab" class="l3m-btn ghost sm" data-a="btab" data-tab="${k}" aria-selected="${this.boardTab === k}">${t}</button>`).join('')}</div>`;
+    if (this.boardTab === 'hon') return `<h3>Доска почёта</h3>${tabs}${honHtml(M.st!, (me && me.wk) || 0, c.login)}`;
+    return `<h3>Поручения скупщика</h3>${tabs}<p class="l3m-mut">Награду выдаёт ${TX.seller} — кнопка «Забрать награду», когда поручение готово.</p>`
       + `<div class="l3m-k" style="margin-top:8px">Поручения на сегодня</div><ul class="l3m-list">${q.d.map(li).join('') || '<li>Нет</li>'}</ul>`
       + `<div class="l3m-k">Поручения недели</div><ul class="l3m-list">${q.w.map(li).join('') || '<li>Нет</li>'}</ul>`
       + (q.c ? `<div class="l3m-k">Общее поручение шахты</div><ul class="l3m-list">${qcRowHtml(q.c)}</ul>` : '')
@@ -524,6 +710,36 @@ export class MineHud {
     } else body = lampBody();
     return `<h3>${TX.sup}</h3><p class="l3m-mut">Торговец снаряжением</p><p class="l3m-say">«${esc(say)}»</p>${tabs}${body}`;
   }
+  /** Ore rows of a collection and the rest of the collection context (lift / drill cards). */
+  private fundCtx() {
+    const c = this.client, M = c.model, P = (M.st && M.st.bp) || {};
+    const rows: OreRow[] = c.fundOre(8).map((it) => ({ uid: String(it.uid), name: String(it.name || resName(it.res)), q: +it.q || 0, price: +P[it.res] || 0 }));
+    return { rows, ask: this.ask, now: Date.now(), stAt: M.stAt, busy: c.busyOp, money: c.heroMoney(), me: c.login };
+  }
+  private bagCard(): string {
+    const c = this.client, M = c.model, P = (M.st && M.st.bp) || {}, now = Date.now();
+    const rows: OreRow[] = c.oreItems().filter((it) => !c.oreGone.has(it.uid, now)).map((it) => ({ uid: String(it.uid), name: String(it.name || resName(it.res)), q: +it.q || 0, price: +P[it.res] || 0, res: String(it.res || '') }));
+    const me = M.me, bag = (me && me.bag) || { c: 0, r: {} }, res = resList(bag);
+    const wait = res.length && M.buyerOn ? `Сумка и склад полны — ждёт в шахте: ${res.map(([k, n, p]) => `${resName(k)} ${qty(n, p)}`).join(', ')}. Освободи место — перенесём сами.` : '';
+    const have = M.lampHave();
+    return bagHtml({ rows, total: c.priceOf(c.allLines()), ob: (me && me.pkx) ? me.pkx.ob : null, lamp: M.lampOn() ? 'on' : have ? 'bag' : 'none', lampUid: have ? have.uid : undefined, earn: bag.cx != null ? bag.cx : bag.c, buyerOn: M.buyerOn, wait });
+  }
+  /** Open a drill rig's card. */
+  openDrill(k: string): void { this.drillK = k; this.ask.clear(); this.open('drill'); }
+  /** Coach step happened (dig / sell / lift). */
+  coachTick(k: 'dig' | 'sell' | 'lift'): void { if (!this.coach || this.coachSteps[k]) return; this.coachSteps[k] = true; this.h.sfx?.('ui.tick'); }
+  private coachRender(v3: boolean): void {
+    const el = this.q('coach');
+    const show = this.coach && !this.card && !this.jr && !this.client.other;
+    if (!show) { if (!el.hidden) el.hidden = true; return; }
+    const S = this.coachSteps, li = (on: boolean, n: number, t: string) => `<li class="${on ? 'ok' : ''}"><span class="n">${on ? '✓' : n}</span><span>${t}</span></li>`;
+    this.set('coach', `<div class="hd"><b>Как начать</b><button type="button" class="l3m-x" data-a="coach-x" aria-label="Скрыть подсказку" title="Скрыть">✕</button></div><ol>`
+      + li(S.dig, 1, 'Подойди к камню с <b>жёлтым кругом</b> и нажми <span class="l3m-kc">E</span> — герой копает сам, даже если закрыть сайт.')
+      + li(S.sell, 2, 'Руда падает в сумку — продай её <b>Скупщику Грому</b> у прилавка в зале.')
+      + (v3 ? li(S.lift, 3, 'В тумане — жилы и <b>шахта лифта</b>. Нашли её — вся шахта скидывается у <b>лифта</b> на новый этаж.') : li(S.lift, 3, 'Лифт в зале — дорога в город.'))
+      + `</ol><div class="l3m-btns"><button type="button" class="l3m-btn sm" data-a="coach-x">Понятно</button><button type="button" class="l3m-btn ghost sm" data-a="help">Как устроена шахта</button></div>`);
+    el.classList.toggle('flat', !v3); el.hidden = false;
+  }
   private oreHave(): Record<string, number> { const o: Record<string, number> = {}; for (const it of this.client.oreItems()) o[it.res] = (o[it.res] || 0) + (+it.q || 0); return o; }
 
   private onClick(e: MouseEvent): void {
@@ -534,7 +750,7 @@ export class MineHud {
     e.stopPropagation();
     switch (a) {
       case 'stop': (t as HTMLButtonElement).disabled = true; this.h.stop(); break;
-      case 'buyer': this.h.toBuyer(); break;
+      case 'buyer': if (this.card === 'bag') this.close(); this.h.toBuyer(); break;
       case 'quests': this.open('quests'); break;
       case 'help': this.open('help'); break;
       case 'top': this.open('top'); break;
@@ -552,6 +768,25 @@ export class MineHud {
       case 'tab': this.supTab = (t.dataset.tab as 'pick') || 'pick'; this.render(); break;
       case 'pick': void c.pick(+(t.dataset.to || 0), (t.dataset.use2 || '').split(',').filter(Boolean)).then(() => this.render()); this.render(); break;
       case 'orebag': void c.oreBag().then(() => this.render()); this.render(); break;
+      case 'hide': this.hide = !this.hide; lsSet(LS_HIDE, this.hide ? '1' : '0'); this.h.hideOthers?.(this.hide); this.h.sfx?.('ui.tick'); this.render(); break;
+      case 'bag': this.open(this.card === 'bag' ? null : 'bag'); break;
+      case 'btab': this.boardTab = t.dataset.tab === 'hon' ? 'hon' : 'q'; this.render(); break;
+      case 'tolift': this.close(); this.h.toLift?.(); break;
+      case 'tosup': this.close(); this.h.toSup?.(); break;
+      case 'ride': { const f = +(t.dataset.f || 0); if (f > 0) this.h.ride?.(f); break; }
+      case 'lfund': void c.liftFund(+(t.dataset.v || 0)).then((ok) => { if (ok) this.h.sfx?.('mine.chest'); this.render(); }); this.render(); break;
+      case 'dfund': { const k = this.drillK; if (k) { void c.drillFund(k, +(t.dataset.v || 0)).then((ok) => { if (ok) this.h.sfx?.('mine.chest'); this.render(); }); this.render(); } break; }
+      case 'lore': case 'dore': {
+        const uid = t.dataset.uid || '', q = +(t.dataset.q || 0), k = this.drillK;
+        const r = this.ask.press(uid, Date.now());
+        if (r === 'send') {
+          const ln: [string, number][] = [[uid, q]];
+          void (a === 'lore' ? c.liftFund(0, ln) : k ? c.drillFund(k, 0, ln) : Promise.resolve(false)).then((ok) => { if (ok) this.h.sfx?.('mine.chest'); this.render(); });
+        } else if (r === 'ask') this.h.sfx?.('ui.tick');
+        this.render(); break;
+      }
+      case 'obj': { const act = t.dataset.act; if (act === 'buyer') this.h.toBuyer(); else if (act === 'quests') this.open('quests'); else if (act === 'lift') this.h.toLift?.(); else if (act === 'wear') { const hv = c.model.lampHave(); if (hv) void c.wear(hv.uid).then(() => this.render()); } break; }
+      case 'coach-x': this.coach = false; lsSet(LS_COACH, '1'); this.render(); break;
     }
   }
   /** «Понятно» (button or backdrop, like the site): close the window and send the one /api/mineSeen. */

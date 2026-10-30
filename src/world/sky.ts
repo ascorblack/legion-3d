@@ -14,10 +14,11 @@ export function skyDome(css: string | undefined): THREE.Mesh {
     uniforms: {
       c0: { value: cols[0] }, c1: { value: cols[1] }, c2: { value: cols[2] }, c3: { value: cols[3] },
       p: { value: new THREE.Vector4(ps[0], ps[1], ps[2], ps[3]) }, hz: { value: hz },
+      uMoon: { value: new THREE.Vector3(-0.45, 0.55, -0.7).normalize() },
     },
     vertexShader: /* glsl */`varying vec3 vP; void main(){ vP = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.); gl_Position = p.xyww; }`,
     fragmentShader: /* glsl */`
-      uniform vec3 c0; uniform vec3 c1; uniform vec3 c2; uniform vec3 c3; uniform vec3 hz; uniform vec4 p; varying vec3 vP;
+      uniform vec3 c0; uniform vec3 c1; uniform vec3 c2; uniform vec3 c3; uniform vec3 hz; uniform vec4 p; uniform vec3 uMoon; varying vec3 vP;
       void main(){
         // t = 0 at the zenith … 1 at the horizon (CSS gradient goes top → bottom)
         float t = 1.0 - clamp(vP.y * 1.6, 0.0, 1.0);
@@ -26,6 +27,14 @@ export function skyDome(css: string | undefined): THREE.Mesh {
         c = mix(c, c2, smoothstep(p.y, p.z, t));
         c = mix(c, c3, smoothstep(p.z, max(p.w, p.z + 0.001), t));
         c = mix(c, hz, exp(-max(vP.y, 0.0) * 9.0));
+        vec3 d = normalize(vP);
+        // a faint milky band across the sky (cloudy noise inside a soft great-circle strip), dimmer towards the horizon
+        float band = exp(-pow(dot(d, normalize(vec3(0.35, 0.55, 0.76))), 2.0) * 22.0);
+        float cl = 0.5 + 0.3 * sin(d.x * 23.0 + sin(d.z * 17.0) * 2.0) * sin(d.z * 19.0 + d.y * 11.0) + 0.2 * sin(d.x * 41.0 + d.y * 37.0 + sin(d.z * 29.0));   // cheap trig clouds (no per-pixel noise)
+        c += vec3(0.55, 0.5, 0.75) * band * smoothstep(0.35, 0.85, cl) * 0.07 * smoothstep(0.05, 0.4, d.y);
+        // moon halo: a soft corona round the moon sprite + a wide faint glow
+        float mc = max(dot(d, uMoon), 0.0);
+        c += vec3(0.75, 0.78, 1.0) * (pow(mc, 300.0) * 0.35 + pow(mc, 24.0) * 0.08);
         gl_FragColor = vec4(c, 1.0);
         #include <colorspace_fragment>
       }`,
@@ -63,7 +72,7 @@ export function stars(n: number, dot: THREE.Texture): THREE.Points {
 }
 
 /** Additive glow points with per-point size (m) and colour; flicker by time. */
-export function glowPoints(data: number[], stride: 7 | 6, tex: THREE.Texture, opts: { size?: number; flicker?: number; intensity?: number } = {}): THREE.Points {
+export function glowPoints(data: number[], stride: 7 | 6, tex: THREE.Texture, opts: { size?: number; flicker?: number; intensity?: number; near?: number } = {}): THREE.Points {
   const n = Math.floor(data.length / stride);
   const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n);
   for (let i = 0; i < n; i++) {
@@ -78,12 +87,12 @@ export function glowPoints(data: number[], stride: 7 | 6, tex: THREE.Texture, op
   g.setAttribute('size', new THREE.BufferAttribute(size, 1));
   g.computeBoundingSphere();
   const mat = new THREE.ShaderMaterial({
-    uniforms: { map: { value: tex }, uTime: { value: 0 }, uScale: { value: 600 }, uInt: { value: opts.intensity ?? 1 }, uFlick: { value: opts.flicker ?? 0.12 } },
-    vertexShader: /* glsl */`attribute float size; attribute vec3 color; uniform float uTime; uniform float uScale; uniform float uFlick; varying vec3 vC;
+    uniforms: { map: { value: tex }, uTime: { value: 0 }, uScale: { value: 600 }, uInt: { value: opts.intensity ?? 1 }, uFlick: { value: opts.flicker ?? 0.12 }, uNear: { value: opts.near ?? 0 } },
+    vertexShader: /* glsl */`attribute float size; attribute vec3 color; uniform float uTime; uniform float uScale; uniform float uFlick; uniform float uNear; varying vec3 vC;
       void main(){ vec4 mv = modelViewMatrix * vec4(position,1.); float d = -mv.z;
         float ph = position.x * 3.1 + position.z * 1.7;
         float f = 1.0 - uFlick + uFlick * (0.6 + 0.4 * sin(uTime * 9.0 + ph) * sin(uTime * 2.3 + ph * 1.7));
-        float fade = clamp(1.4 - d / 70.0, 0.0, 1.0);
+        float fade = clamp(1.4 - d / 70.0, 0.0, 1.0) * (uNear > 0.0 ? smoothstep(uNear * 0.3, uNear, d) : 1.0);
         vC = color * f * fade; gl_PointSize = clamp(size * uScale / max(d, 0.1), 0.0, 512.0); gl_Position = projectionMatrix * mv; }`,
     fragmentShader: /* glsl */`uniform sampler2D map; uniform float uInt; varying vec3 vC; void main(){ float a = texture2D(map, gl_PointCoord).a; gl_FragColor = vec4(vC * a * uInt, 1.0); }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,

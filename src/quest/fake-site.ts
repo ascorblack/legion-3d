@@ -1,4 +1,5 @@
-/**
+
+import { setHtml } from '../core/html';/**
  * A fake of the SITE'S «Поход» tab (quest.js 28.10) for dev pages and tests ONLY — never used against the live site.
  * Markup copied from the site's own templates (qaBtn, hwBtn, qaBattle, qaRune2, pzHtml, hwEvHtml/skeldance, gobHtml, qaEvent,
  * pbHtml, voteHtml, sayMount), so src/quest/siteui.ts reads it exactly like the real tab. FakeSite also emulates the site's delegated
@@ -147,7 +148,7 @@ export class FakeSite {
     if (!this.shown) return;
     const inner = this.qa ? `<div class="q-wrap ql-on"><div class="ql">${this.top()}<section class="q-card ql-act" data-ql="act" aria-live="polite">${this.act()}</section><div class="ql-row ql-r2">${this.hero()}</div></div></div>`
       : `<div class="q-wrap">${this.act()}</div>`;
-    this.tab.innerHTML = inner + this.say();
+    setHtml(this.tab, inner + this.say());
   }
 
   /* ------------------------------------------------------------ the site's handlers (qaBind, pbClick, sayMount), logging instead of sending */

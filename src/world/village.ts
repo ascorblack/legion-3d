@@ -150,13 +150,19 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
     if (!g.attributes.normal) g.computeVertexNormals();
     g.applyMatrix4(c.m);
     const pos = g.attributes.position as THREE.BufferAttribute, nor = g.attributes.normal as THREE.BufferAttribute;
+    let za = Infinity, zb = -Infinity, wa = Infinity, wb = -Infinity;
     for (let i = 0; i < pos.count; i++) {
-      const z = pos.getZ(i), kz = slope(z) * szs;
-      pos.setXYZ(i, X(pos.getX(i)), pos.getY(i) * o.sy, f(z));
+      const z = pos.getZ(i), kz = slope(z) * szs, w = f(z);
+      za = Math.min(za, z); zb = Math.max(zb, z); wa = Math.min(wa, w); wb = Math.max(wb, w);
+      pos.setXYZ(i, X(pos.getX(i)), pos.getY(i) * o.sy, w);
       _v.set(nor.getX(i) / sxs, nor.getY(i) / o.sy, nor.getZ(i) / kz).normalize();
       nor.setXYZ(i, _v.x, _v.y, _v.z);
     }
-    add0.call(k.b, c.mat, g, IDENT, c.col, c.uv);
+    // a piece with its own UV layout (roof slopes: rows along the slope) squeezed in depth would stretch its texture
+    // (test/world-texmap.test.ts): box-project it in its new shape instead
+    const k2 = zb - za > 0.05 ? (wb - wa) / (zb - za) : 1;
+    const uv = (c.uv === 'keep' || Array.isArray(c.uv)) && (k2 < 0.8 || k2 > 1.25) ? 1 : c.uv;
+    add0.call(k.b, c.mat, g, IDENT, c.col, uv);
     g.dispose();
   }
   // what the builder pushed into the context
@@ -177,8 +183,17 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
   for (let i = n0.wi; i + 5 < k.wires.length; i += 6) { pt(k.wires, i); pt(k.wires, i + 3); }
   const P = k.pools!;
   for (let i = n0.po; i + 7 < P.length; i += 8) { pt(P, i); P[i + 3] *= o.sy; }
-  for (const [kind, a] of k.inst.placed) for (let i = inst0.get(kind) ?? 0; i < a.length; i++) {
-    const p = a[i]; p.x = X(p.x); p.y *= o.sy; p.z = f(p.z); p.scale *= o.sy; p.sy *= o.sy; if (o.flip) p.rotY += Math.PI;
+  for (const [kind, a] of k.inst.placed) {
+    const i0 = inst0.get(kind) ?? 0;
+    for (let i = i0; i < a.length; i++) {
+      const p = a[i]; p.x = X(p.x); p.y *= o.sy; p.z = f(p.z); p.scale *= o.sy; p.sy *= o.sy; if (o.flip) p.rotY += Math.PI;
+    }
+    // the depth map squeezes the gaps: two props of a kind set apart in depth (the storage barn's barrels) can land in
+    // one spot — keep the first (two identical meshes inside each other z-fight: test/world-village.test.ts)
+    for (let i = a.length - 1; i > i0; i--) {
+      const p = a[i];
+      for (let j = i0; j < i; j++) { const q = a[j]; if (Math.abs(p.y - q.y) < 0.05 && Math.hypot(p.x - q.x, p.z - q.z) < 0.3 * (p.scale + q.scale)) { a.splice(i, 1); break; } }
+    }
   }
   return f;
 }

@@ -25,6 +25,8 @@ const MAX_CHARS = 90;
 const PLATE_FAR = 25, BUBBLE_FAR = 40;
 const PX_PER_M = 220;   // canvas px per world metre at scale 1
 const MAX_CAND = 64, MAX_PLATES = 20;
+/** Plate atlas: 2 columns × 24 rows of cells at the plate canvas' own resolution (a box wider than a cell is squeezed). */
+const COLS = 2, ROWS = 24, CELLS = COLS * ROWS, CELL_K = 1, CELL_W = 512, CELL_H = 96, ATLAS_W = CELL_W * COLS, ATLAS_H = CELL_H * ROWS;
 // plate canvas: 96 px high, the visible box is 64 px high and starts 18 px above the canvas bottom
 const PLATE_FH = 64 / 96, PLATE_FY0 = 18 / 96;
 const PLATE_H = 64 / PX_PER_M, BUBBLE_H = PLATE_H * 0.9;
@@ -42,7 +44,8 @@ function overlaps(R: Float32Array, n: number, x0: number, y0: number, x1: number
 
 interface Entry {
   login: string;
-  plate: THREE.Sprite; plateKey: string; plateCanvas: HTMLCanvasElement; plateTex: THREE.CanvasTexture; plateMat: THREE.SpriteMaterial;
+  /** The plate is drawn into this entry's own canvas, then copied into a cell of the shared atlas (all plates = 1 draw). */
+  plateKey: string; plateCanvas: HTMLCanvasElement; cell: number; dirty: boolean; plateBoxW: number; plateOp: number; plateY: number;
   plateW: number; plateH: number;
   bubble: THREE.Sprite | null; bubbleCanvas: HTMLCanvasElement | null; bubbleTex: THREE.CanvasTexture | null; bubbleMat: THREE.SpriteMaterial | null;
   bubbleKey: string; bubbleW: number; bubbleH: number;
@@ -106,18 +109,57 @@ class LabelsImpl implements Labels {
   private maxPlates = MAX_PLATES;
   private tanHalf = Math.tan((75 / 2) * Math.PI / 180);
 
-  constructor() { this.root.name = 'labels'; }
+  // nameplates: one atlas + one instanced billboard quad for all of them (bubbles stay sprites: they change often)
+  private atlas: HTMLCanvasElement;
+  private atlasTex: THREE.CanvasTexture;
+  private plates: THREE.InstancedMesh;
+  private aUv: THREE.InstancedBufferAttribute; private aOp: THREE.InstancedBufferAttribute; private aSz: THREE.InstancedBufferAttribute;
+  private cells: (Entry | null)[] = new Array(CELLS).fill(null);
+  private cellUse = new Float64Array(CELLS);
+  private frame = 0;
+  private pl: Entry[] = [];
+  private m4 = new THREE.Matrix4();
+
+  constructor() {
+    this.root.name = 'labels';
+    this.atlas = document.createElement('canvas'); this.atlas.width = ATLAS_W; this.atlas.height = ATLAS_H;
+    this.atlasTex = newTex(this.atlas);
+    const geo = new THREE.PlaneGeometry(1, 1); geo.translate(0, 0.5, 0);   // bottom-centre anchored, like the sprites were
+    this.aUv = new THREE.InstancedBufferAttribute(new Float32Array(CELLS * 4), 4);
+    this.aOp = new THREE.InstancedBufferAttribute(new Float32Array(CELLS), 1);
+    this.aSz = new THREE.InstancedBufferAttribute(new Float32Array(CELLS * 2), 2);
+    geo.setAttribute('aUv', this.aUv); geo.setAttribute('aOp', this.aOp); geo.setAttribute('aSz', this.aSz);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: this.atlasTex } },
+      vertexShader: /* glsl */`attribute vec4 aUv; attribute float aOp; attribute vec2 aSz; varying vec2 vUv; varying float vOp;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4( instanceMatrix[3].xyz, 1.0 );
+          mv.xy += position.xy * aSz;
+          gl_Position = projectionMatrix * mv;
+          vUv = aUv.xy + uv * aUv.zw; vOp = aOp;
+        }`,
+      fragmentShader: /* glsl */`uniform sampler2D map; varying vec2 vUv; varying float vOp;
+        void main() {
+          vec4 c = texture2D( map, vUv );
+          gl_FragColor = vec4( c.rgb, c.a * vOp );
+          if ( gl_FragColor.a < 0.004 ) discard;
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+      transparent: true, depthWrite: false, depthTest: true,
+    });
+    mat.name = 'labels-plates';
+    this.plates = new THREE.InstancedMesh(geo, mat, CELLS);
+    this.plates.name = 'labels:plates'; this.plates.count = 0; this.plates.frustumCulled = false; this.plates.renderOrder = 10;
+    this.root.add(this.plates);
+    for (let i = 0; i < MAX_CAND; i++) this.pl.push(null as unknown as Entry);
+  }
 
   private entry(login: string): Entry {
     let e = this.map.get(login);
     if (e) return e;
     const plateCanvas = document.createElement('canvas'); plateCanvas.width = 512; plateCanvas.height = 96;
-    const plateTex = newTex(plateCanvas);
-    const plateMat = new THREE.SpriteMaterial({ map: plateTex, transparent: true, depthWrite: false, depthTest: true, sizeAttenuation: true });
-    const plate = new THREE.Sprite(plateMat);
-    plate.center.set(0.5, 0); plate.renderOrder = 10; plate.visible = false;
-    this.root.add(plate);
-    e = { login, plate, plateKey: '', plateCanvas, plateTex, plateMat, plateW: 1, plateH: 0.2,
+    e = { login, plateKey: '', plateCanvas, cell: -1, dirty: true, plateBoxW: 512, plateOp: 0, plateY: 0, plateW: 1, plateH: 0.2,
       bubble: null, bubbleCanvas: null, bubbleTex: null, bubbleMat: null, bubbleKey: '', bubbleW: 1, bubbleH: 0.3, bubbleStyle: '', styleUntil: 0, drawnStyle: '', bubbleUntil: 0, bubbleShown: 0, fade: 0,
       me: false, plateFW: 1, bubbleFW: 1, bubbleFH: 1,
       dist: 1e9, depth: 1, sx: 0, sy: 0, vis: 0, bVis: 0, pScale: 1, pLift: 0, bScale: 1, bTop: 0, lastScale: 1, lastLift: 0 };
@@ -141,9 +183,17 @@ class LabelsImpl implements Labels {
     if (c.width < W) c.width = Math.min(1024, Math.max(W, c.width * 2));   // grows only
     g.clearRect(0, 0, c.width, c.height);
     const x0 = Math.round((c.width - W) / 2), y0 = 14;
+    // pill: soft drop shadow, vertical gradient, a thin light rim on top (reads as a small enamel badge, not a flat box)
+    g.save();
+    g.shadowColor = 'rgba(6,4,18,.55)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
     roundRect(g, x0, y0, W, H, 22);
-    g.fillStyle = p.me ? 'rgba(60,32,8,.72)' : 'rgba(21,18,46,.62)'; g.fill();
-    g.lineWidth = 3; g.strokeStyle = p.me ? 'rgba(255,201,77,.9)' : 'rgba(255,255,255,.18)'; g.stroke();
+    const bg = g.createLinearGradient(0, y0, 0, y0 + H);
+    if (p.me) { bg.addColorStop(0, 'rgba(92,52,14,.86)'); bg.addColorStop(1, 'rgba(48,24,6,.86)'); }
+    else { bg.addColorStop(0, 'rgba(44,36,92,.8)'); bg.addColorStop(1, 'rgba(18,14,42,.8)'); }
+    g.fillStyle = bg; g.fill();
+    g.restore();
+    g.lineWidth = 2.5; g.strokeStyle = p.me ? 'rgba(255,205,96,.95)' : 'rgba(196,178,255,.42)'; roundRect(g, x0, y0, W, H, 22); g.stroke();
+    g.lineWidth = 2; g.strokeStyle = 'rgba(255,255,255,.16)'; g.beginPath(); g.moveTo(x0 + 22, y0 + 4); g.lineTo(x0 + W - 22, y0 + 4); g.stroke();
     let x = x0 + 20;
     if (p.badge) { g.font = fB; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText(p.badge, x, y0 + H / 2 + 1); x += bw; }
     g.font = fN; g.textBaseline = 'middle';
@@ -152,11 +202,14 @@ class LabelsImpl implements Labels {
     x += nw + 10;
     if (lv) {
       g.font = fL;
-      roundRect(g, x, y0 + 14, lw, H - 28, 12); g.fillStyle = p.me ? '#ffc94d' : '#8fb6ff'; g.fill();
+      const lg = g.createLinearGradient(0, y0 + 14, 0, y0 + H - 14);
+      if (p.me) { lg.addColorStop(0, '#ffe08a'); lg.addColorStop(1, '#f0a92a'); } else { lg.addColorStop(0, '#b9d2ff'); lg.addColorStop(1, '#7b9ef0'); }
+      roundRect(g, x, y0 + 13, lw, H - 26, 13); g.fillStyle = lg; g.fill();
+      g.lineWidth = 2; g.strokeStyle = 'rgba(15,12,40,.55)'; g.stroke();
       g.fillStyle = '#15122e'; g.textAlign = 'center'; g.fillText(lv, x + lw / 2, y0 + H / 2 + 1); g.textAlign = 'left';
     }
-    e.plateTex.needsUpdate = true;
-    // sprite scale: canvas px → metres; use the canvas aspect (whole canvas is mapped)
+    e.dirty = true; e.plateBoxW = W;
+    // world size: canvas px → metres (the plate quad maps the box's columns, the canvas' full height)
     e.plateW = c.width / PX_PER_M; e.plateH = c.height / PX_PER_M; e.plateFW = W / c.width;
   }
 
@@ -238,7 +291,7 @@ class LabelsImpl implements Labels {
   remove(login: string): void {
     const e = this.map.get(login);
     if (!e) return;
-    this.root.remove(e.plate); e.plateTex.dispose(); e.plateMat.dispose();
+    if (e.cell >= 0) this.cells[e.cell] = null;
     if (e.bubble) { this.root.remove(e.bubble); e.bubbleTex!.dispose(); e.bubbleMat!.dispose(); }
     this.map.delete(login);
   }
@@ -314,20 +367,19 @@ class LabelsImpl implements Labels {
     }
     // pass 3: apply (fade in/out smoothly; hidden plates fade out instead of popping)
     const kIn = Math.min(1, dt * 10), kOut = Math.min(1, dt * 7);
+    const pl = this.pl; let np = 0;
+    this.frame++;
     for (const e of this.map.values()) {
       const a = anchors.get(e.login);
       const far = this.plateFar;
       const df = e.dist < far - 6 ? 1 : Math.max(0, (far - e.dist) / 6);
       e.fade += ((e.vis ? 1 : 0) - e.fade) * (e.vis ? kIn : kOut);
-      if (e.fade < 0.02 || !a) { e.plate.visible = false; e.fade = e.vis ? e.fade : 0; }
+      if (e.fade < 0.02 || !a) { e.plateOp = 0; e.fade = e.vis ? e.fade : 0; }
       else {
         if (e.vis) { e.lastScale = e.pScale; e.lastLift = e.pLift; }
-        const s = e.lastScale;
-        e.plate.visible = true;
-        e.plate.scale.set(e.plateW * s, e.plateH * s, 1);
-        e.plate.position.set(a.x, a.y + e.lastLift, a.z);
-        e.plateMat.opacity = e.fade * df * (e.me ? 0.85 : 1);
-        e.plate.renderOrder = 10 + (e.vis ? Math.max(0, 40 - Math.round(e.dist)) : 0);
+        e.plateOp = e.fade * df * (e.me ? 0.85 : 1);
+        e.plateY = a.y + e.lastLift;
+        if (np < MAX_CAND) pl[np++] = e;
       }
       if (e.bubble) {
         const live = now < e.bubbleUntil;
@@ -342,6 +394,52 @@ class LabelsImpl implements Labels {
         e.bubble.renderOrder = 60 + Math.max(0, 40 - Math.round(e.dist));
       }
     }
+    this.writePlates(pl, np, anchors);
+  }
+
+  /** All shown plates → the instanced quad, far to near (blending order); cells assigned / redrawn on demand. */
+  private writePlates(pl: Entry[], np: number, anchors: ReadonlyMap<string, THREE.Vector3>): void {
+    for (let i = 1; i < np; i++) { const e = pl[i]; let j = i - 1; while (j >= 0 && pl[j].dist < e.dist) { pl[j + 1] = pl[j]; j--; } pl[j + 1] = e; }
+    const m = this.plates, uvA = this.aUv, opA = this.aOp, szA = this.aSz;
+    let n = 0, upload = false;
+    for (let i = 0; i < np && n < CELLS; i++) {
+      const e = pl[i], a = anchors.get(e.login)!;
+      if (e.cell < 0 && !this.claim(e)) continue;
+      this.cellUse[e.cell] = this.frame;
+      if (e.dirty) { this.blit(e); upload = true; }
+      const cw = Math.min(CELL_W, e.plateBoxW * CELL_K), cx = (e.cell % COLS) * CELL_W, cy = Math.floor(e.cell / COLS) * CELL_H;
+      uvA.setXYZW(n, cx / ATLAS_W, 1 - (cy + CELL_H) / ATLAS_H, cw / ATLAS_W, CELL_H / ATLAS_H);
+      opA.setX(n, e.plateOp);
+      szA.setXY(n, (e.plateBoxW / PX_PER_M) * e.lastScale, e.plateH * e.lastScale);
+      this.m4.makeTranslation(a.x, e.plateY, a.z); m.setMatrixAt(n, this.m4);
+      n++;
+    }
+    m.count = n; m.visible = n > 0;
+    if (n) { m.instanceMatrix.needsUpdate = true; uvA.needsUpdate = true; opA.needsUpdate = true; szA.needsUpdate = true; }
+    if (upload) this.atlasTex.needsUpdate = true;
+  }
+
+  /** A free atlas cell for `e`, else the one used longest ago by a plate not shown this frame. */
+  private claim(e: Entry): boolean {
+    let best = -1, bestUse = Infinity;
+    for (let i = 0; i < CELLS; i++) {
+      const o = this.cells[i];
+      if (!o) { best = i; break; }
+      if (this.cellUse[i] < this.frame && this.cellUse[i] < bestUse) { best = i; bestUse = this.cellUse[i]; }
+    }
+    if (best < 0) return false;
+    const o = this.cells[best]; if (o) { o.cell = -1; o.dirty = true; }
+    this.cells[best] = e; e.cell = best; e.dirty = true;
+    return true;
+  }
+
+  private blit(e: Entry): void {
+    const g = this.atlas.getContext('2d')!, c = e.plateCanvas;
+    const cx = (e.cell % COLS) * CELL_W, cy = Math.floor(e.cell / COLS) * CELL_H, bw = e.plateBoxW;
+    const sx = Math.round((c.width - bw) / 2);   // the plate box (drawn centred in its canvas)
+    g.clearRect(cx, cy, CELL_W, CELL_H);
+    g.drawImage(c, sx, 0, bw, c.height, cx, cy, Math.min(CELL_W, bw * CELL_K), CELL_H);
+    e.dirty = false;
   }
 
   /** World scale for a label so its on-screen height shrinks gently with distance (≈ d^-0.35) and stays legible. */
@@ -354,6 +452,7 @@ class LabelsImpl implements Labels {
 
   dispose(): void {
     for (const k of [...this.map.keys()]) this.remove(k);
+    this.plates.geometry.dispose(); (this.plates.material as THREE.Material).dispose(); this.plates.dispose(); this.atlasTex.dispose();
     this.root.removeFromParent();
   }
 }

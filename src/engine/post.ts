@@ -14,6 +14,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutlineMaskPass, OUTLINE_GLSL, OUTLINE_GLSL_HEAD, outlineUniforms } from './outline';
 
 export interface PostOptions {
@@ -30,13 +31,15 @@ export interface PostOptions {
   vignette?: number;
   /** 0..1 warm tint (amber highlights, slightly cooler shadows) + a touch of saturation. */
   warm?: number;
+  /** Ground-truth ambient occlusion strength (0 = off): contact shadows in corners, under props and eaves. Quality 3. */
+  ao?: number;
 }
 
 /**
  * Tuned for soft lamp glow without glare (bug #9): only the excess above `threshold` blooms (soft knee), the excess is
  * clamped, and the strength is low. Tone mapping is AgX at exposure TONE_EXPOSURE (engine.ts).
  */
-export const POST_DEFAULTS: Required<PostOptions> = { bloom: 0.2, threshold: 1.35, knee: 0.4, clamp: 2.0, radius: 0.22, vignette: 0.35, warm: 0.45 };
+export const POST_DEFAULTS: Required<PostOptions> = { bloom: 0.2, threshold: 1.35, knee: 0.4, clamp: 2.0, radius: 0.22, vignette: 0.35, warm: 0.45, ao: 0 };
 /** renderer.toneMappingExposure for AgX (used with and without post-processing). */
 export const TONE_EXPOSURE = 0.92;
 
@@ -70,6 +73,31 @@ class CheapBloomPass extends UnrealBloomPass {
   }
 }
 
+/**
+ * GTAO on the frame's own depth (no extra scene render: normals are reconstructed from depth). The depth texture is the
+ * read buffer's (EffectComposer ping-pongs two targets): re-pointed every frame.
+ */
+class DepthAoPass extends GTAOPass {
+  constructor(scene: THREE.Scene, camera: THREE.Camera, depth: THREE.DepthTexture) {
+    super(scene, camera, 16, 16);
+    this.setGBuffer(depth);   // (after construction: three's setGBuffer reads its own normal target, made by the default path)
+    this.updateGtaoMaterial({ radius: 0.55, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: 12, distanceFallOff: 1.0 });
+    this.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, samples: 12 });
+  }
+  override setSize(width: number, height: number): void {
+    super.setSize(width, height);
+    (this as unknown as { normalRenderTarget: THREE.WebGLRenderTarget }).normalRenderTarget.setSize(1, 1);   // unused (depth-only G-buffer): keep the default target tiny
+  }
+  override render(renderer: THREE.WebGLRenderer, write: THREE.WebGLRenderTarget, read: THREE.WebGLRenderTarget, dt: number, mask: boolean): void {
+    const d = read.depthTexture;
+    if (d) {
+      (this.gtaoMaterial.uniforms.tDepth as THREE.IUniform).value = d;
+      (this.pdMaterial.uniforms.tDepth as THREE.IUniform).value = d;
+    }
+    super.render(renderer, write, read, dt, mask);
+  }
+}
+
 const GRADE_GLSL = /* glsl */`
 			// --- l3d grade + vignette (tone-mapped linear space, before the sRGB transfer)
 			{
@@ -77,6 +105,8 @@ const GRADE_GLSL = /* glsl */`
 				float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
 				c = mix( vec3( l ), c, 1.0 + 0.10 * uWarm );                                   // saturation
 				c *= mix( vec3( 1.0 ), mix( vec3( 0.97, 0.99, 1.04 ), vec3( 1.06, 1.0, 0.90 ), smoothstep( 0.05, 0.6, l ) ), uWarm );
+				// deeper, cooler shadows (no milky haze in the dark gaps between the lamp pools); mids / highlights untouched
+				c *= mix( vec3( 0.82, 0.84, 0.92 ), vec3( 1.0 ), mix( 1.0, smoothstep( 0.0, 0.2, l ), uWarm ) );
 				vec2 q = vUv - 0.5;
 				float v = 1.0 - uVignette * smoothstep( 0.18, 0.75, dot( q, q ) * 2.2 );
 				gl_FragColor.rgb = c * v;
@@ -90,6 +120,7 @@ export class PostChain {
   private readonly renderPass: RenderPass;
   private readonly target: THREE.WebGLRenderTarget;
   private readonly outline: OutlineMaskPass;
+  private readonly ao: DepthAoPass;
 
   constructor(private renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, msaa: number, o: PostOptions = {}) {
     const p = { ...POST_DEFAULTS, ...o };
@@ -115,7 +146,10 @@ export class PostChain {
       .replace('// color space', OUTLINE_GLSL);
     m.needsUpdate = true;
     this.outline = new OutlineMaskPass(camera);
+    this.ao = new DepthAoPass(scene, camera, this.target.depthTexture!);
+    this.ao.blendIntensity = p.ao; this.ao.enabled = p.ao > 0;
     this.composer.addPass(this.renderPass);
+    this.composer.addPass(this.ao);
     this.composer.addPass(this.outline);
     if (p.bloom > 0) this.composer.addPass(this.bloom);
     this.composer.addPass(this.output);
@@ -137,12 +171,13 @@ export class PostChain {
     const u = this.output.uniforms as Record<string, THREE.IUniform>;
     if (o.vignette != null) u.uVignette.value = o.vignette;
     if (o.warm != null) u.uWarm.value = o.warm;
+    if (o.ao != null) { this.ao.blendIntensity = o.ao; this.ao.enabled = o.ao > 0; }
   }
 
   render(dt: number): void { this.composer.render(dt); }
 
   dispose(): void {
-    this.outline.dispose(); this.bloom.dispose(); this.output.dispose(); this.renderPass.dispose();
+    this.outline.dispose(); this.ao.dispose(); this.bloom.dispose(); this.output.dispose(); this.renderPass.dispose();
     this.composer.dispose(); this.target.dispose();
   }
 }

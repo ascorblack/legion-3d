@@ -3,7 +3,7 @@
 ```
 Chrome MV3 extension, two content scripts in the page's MAIN world (no extension permissions for the game itself; the update notice below adds `storage` + one host):
 
-  bridge.js   document_start  tees EventSource events and fetch() JSON of the page into a bus (window.__L3D_BUS)
+  bridge.js   document_start  tees EventSource events into a bus (window.__L3D_BUS); owns the fetch tee but leaves window.fetch alone until 3D asks (see «fetch tee» in docs/SITE-NOTES.md)
   game.js     document_idle   the game: store, engine, world, avatars, UI; boots when the user enters 3D mode
   notify.js   document_idle   ISOLATED world: relays the update worker's answer to the page (postMessage, data only)
   background.js  service worker (Firefox: event page): the update check, below
@@ -20,7 +20,7 @@ would be slow and impolite to the server. So:
 - The site's own City tab stays **open underneath** (shrunk to a tiny viewport, other players hidden there with
   `LGCity.hideOthers(true)`, lowest quality) — it keeps us *present* in the city and handles interiors.
 - **We move** by calling `LGCity.go(x, y)` (the site throttles and sends `/api/city/go`).
-- **We read** others and chat by teeing the SSE `city` events and the `/api/city/enter` response (bridge),
+- **We read** others and chat by teeing the SSE `city` events and, in 3D mode only, the `/api/city/enter` response (bridge; the fetch tee is on while 3D runs and off in the classic site),
   then simulate walkers with the site's own `LGCityMap.follow/stepAlong` (identical motion to the 2D city).
 - **Buildings**: walking to a door and pressing `E` calls `LGCity.panel(id)`; the site's interior (`.cy-room`,
   `position:fixed`) is shown above the 3D canvas; closing it returns to the game.

@@ -16,6 +16,7 @@
  * feed (docked: delegated to the site's own buttons; fallback panel) and to the «⛏ Шахта» tab.
  * Nothing here sends by itself: a request only follows an explicit pick / submit / typed command of a moderator.
  */
+import { setHtml } from '../core/html';
 import { esc } from './data';
 import { setModal, type ModalInput } from '../core/modal';
 
@@ -318,7 +319,7 @@ export class ModUi {
   menu(from: HTMLElement, title: string, items: UiItem[], kind = 'Модерация') {
     if (this.justClosed(from)) return;
     const pop = document.createElement('div'); pop.className = 'pop'; pop.setAttribute('role', 'menu'); pop.setAttribute('aria-label', `${kind}: ${title}`);
-    pop.innerHTML = `<div class="hd">${esc(title)}</div>`;
+    setHtml(pop, `<div class="hd">${esc(title)}</div>`);
     let mt: HTMLElement | null = null;
     for (const it of items) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'it' + (it.bad ? ' bad' : ''); b.setAttribute('role', 'menuitem'); b.textContent = it.label;
@@ -348,18 +349,18 @@ export class ModUi {
     const status = (t: string, ok = false) => { const s = pop.querySelector('.st'); if (s) { s.textContent = t; s.classList.toggle('ok', ok); } };
     const render = async (note?: [string, boolean]) => {
       if (this.pop !== pop) return;
-      if (!pop.childElementCount) { pop.innerHTML = head + '<p class="pl">Загружаю…</p>'; this.place(anchor.getBoundingClientRect()); }
+      if (!pop.childElementCount) { setHtml(pop, head + '<p class="pl">Загружаю…</p>'); this.place(anchor.getBoundingClientRect()); }
       const r = await o.load();
       if (this.pop !== pop) return;
-      if (!r || !r.ok) { pop.innerHTML = head + `<p class="pl">${esc(errText(r, 'не загрузилось'))}</p><button type="button" class="pb" data-close>← К чату</button>`; this.place(anchor.getBoundingClientRect()); return; }
+      if (!r || !r.ok) { setHtml(pop, head + `<p class="pl">${esc(errText(r, 'не загрузилось'))}</p><button type="button" class="pb" data-close>← К чату</button>`); this.place(anchor.getBoundingClientRect()); return; }
       const hm = (t: number) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
       const now = Date.now();
       const bans = (r.bans || []).map((x: any) => `<li><b>${esc(x.l)}</b> <span>${x.until ? `мут до ${esc(hm(x.until))}${x.until - now > 864e5 ? ` (${leftT(x.until - now)})` : ''}` : 'бан'}${x.by ? ` · ${esc(x.by)}` : ''}</span><button type="button" data-op="unban" data-l="${esc(x.l)}">Снять</button></li>`).join('');
       const mods = r.role === 'own' ? `<h4>Модераторы чата</h4><ul>${(r.mods || []).map((x: string) => `<li><b>${esc(x)}</b><span></span><button type="button" data-op="unmod" data-l="${esc(x)}" aria-label="Снять модератора ${esc(x)}">×</button></li>`).join('') || '<li class="pl">Пока никого. Модераторы канала на платформе — тоже модераторы чата.</li>'}</ul>
         <form data-pmod><input type="text" maxlength="26" placeholder="ник модератора" aria-label="Ник нового модератора" autocomplete="off" spellcheck="false"><button type="submit">Добавить</button></form>` : '';
-      pop.innerHTML = head + `<form data-pban><input type="text" maxlength="26" placeholder="ник" aria-label="Ник, кого ограничить" autocomplete="off" spellcheck="false"><select aria-label="Срок">${MUTES.map(([k, t]) => `<option value="${k}">мут ${t}</option>`).join('')}<option value="ban">бан</option></select><button type="submit">Ок</button></form>
+      setHtml(pop, head + `<form data-pban><input type="text" maxlength="26" placeholder="ник" aria-label="Ник, кого ограничить" autocomplete="off" spellcheck="false"><select aria-label="Срок">${MUTES.map(([k, t]) => `<option value="${k}">мут ${t}</option>`).join('')}<option value="ban">бан</option></select><button type="submit">Ок</button></form>
         <h4>Мут и бан</h4><ul>${bans || '<li class="pl">Никто не ограничен.</li>'}</ul>${mods}<p class="st" role="status"></p>
-        <button type="button" class="pb" data-close>← К чату</button>`;
+        <button type="button" class="pb" data-close>← К чату</button>`);
       if (note) status(note[0], note[1]);
       this.place(anchor.getBoundingClientRect());
     };

@@ -24,7 +24,8 @@ const fakeDoc = (attrs: Record<string, string> | null, hidden = false) => {
 };
 
 const reqs: string[] = [];
-const bus = makeBus();
+const teeLog: string[] = [];
+const bus = Object.assign(makeBus(), { fetchTee: { on: () => { teeLog.push('on'); return true; }, off: () => { teeLog.push('off'); return true; }, installed: () => false } });
 // stubs before any module that reads `window` at load time is imported (collection of the describe blocks below)
 {
   vi.stubGlobal('window', { __L3D_BUS: bus, addEventListener() { /* */ }, dispatchEvent() { return true; } });
@@ -87,6 +88,8 @@ describe('connectExpedition', () => {
     s!.setClassic(true); expect((document as any).cls.has('l3d-exp')).toBe(false);
     s!.setClassic(false); expect((document as any).cls.has('l3d-exp')).toBe(true);
     s!.dispose(); expect((document as any).cls.has('l3d-exp')).toBe(false);
+    // the fetch tee follows the mode: off in the classic site, back on in 3D, off for good at dispose
+    expect(teeLog).toEqual(['off', 'on', 'off']);
     bus.emit('sse:q', { on: true, k: 'after-dispose' });
     expect((st.quest as any)?.k).not.toBe('after-dispose');
   });

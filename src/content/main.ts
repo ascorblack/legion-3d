@@ -18,10 +18,10 @@ import { connectExpedition, cityTab } from '../net/expedition-site';
 import { RETURN_EVENT } from '../features/expedition-only';
 import { startGame, type Game } from './game';
 import CSS from './main.css';
+import { setHtml } from '../core/html';
+import { autoStart3d, LS_AUTO, SS_NOGL } from '../bridge/start';
+import { setFetchTee } from '../net/fetch-tee';
 
-const LS_AUTO = 'l3d.auto';
-const LS_START = 'l3d.start';
-const SS_NOGL = 'l3d.noWebGL';
 const W = window as any;
 
 /* ------------------------------------------------------------------ launcher button + toggle */
@@ -42,7 +42,7 @@ function launcher() {
   const st = document.createElement('style'); st.id = 'l3d-css'; st.textContent = CSS; document.head.appendChild(st);
   const b = document.createElement('button');
   b.id = 'l3d-launch'; b.type = 'button';
-  b.innerHTML = '<span aria-hidden="true">◆</span> Играть в 3D';
+  setHtml(b, '<span aria-hidden="true">◆</span> Играть в 3D');
   b.title = ssGet(SS_NOGL) ? TITLE_NOGL : TITLE;
   b.onclick = () => toggle();
   document.body.appendChild(b);
@@ -55,9 +55,10 @@ function launcher() {
   W.addEventListener('l3d:contextrestored', () => gpuNotice(false));
   // what opens on entering the channel page (Настройки → Прочее → «При входе открывать»): '2d' (default) — the
   // classic site, 3D by the button / F8; '3d' — always 3D; 'last' — the mode used last time (F8 remembers it)
-  let auto = false;
-  try { const m = localStorage.getItem(LS_START) || '2d'; auto = m === '3d' || (m === 'last' && localStorage.getItem(LS_AUTO) !== '0'); } catch { /* default 2D */ }
-  if (auto && !ssGet(SS_NOGL)) setTimeout(() => { if (!game && !booting) toggle(); }, 600);
+  if (autoStart3d(window)) {
+    setFetchTee(true);   // the City's first answers (enter: chat, moderator role, ignore list) are caught from the start; toggle() takes it off if 3D does not come up
+    setTimeout(() => { if (!game && !booting) toggle(); }, 600);
+  }
 }
 
 /** Leave the expedition-only game and boot the city in place (the site's City tab is open again). */
@@ -86,6 +87,7 @@ async function toggle() {
     return;
   }
   booting = true;
+  setFetchTee(true);   // 3D is coming up: tee the City's first answers (taken off again below if it does not come up)
   document.getElementById('l3d-launch')?.classList.add('hide');
   const splash = showSplash('Собираем город…');
   let site: SiteSession | null = null;
@@ -106,6 +108,7 @@ async function toggle() {
       }
     }
     if ('error' in s) {
+      setFetchTee(false);   // the site stays classic: its own fetch back
       if (s.missing?.length) console.error('[legion-3d] site contract broken:\n  ' + s.missing.join('\n  '));
       splash.error(s.error, s.loginUrl);
       return;
@@ -123,6 +126,7 @@ async function toggle() {
     // give the site back: header, tabs and the 2D city (connectSite hid them)
     if (site) { try { site.dispose(); } catch (err) { console.error('[legion-3d] restore failed', err); } }
     game = null;
+    setFetchTee(false);
     if (isNoWebGL(e)) {
       ssSet(SS_NOGL, '1');
       const b = document.getElementById('l3d-launch'); if (b) b.title = TITLE_NOGL;
@@ -134,7 +138,7 @@ async function toggle() {
 function showSplash(text: string) {
   const el = document.createElement('div'); el.id = 'l3d-splash';
   el.setAttribute('role', 'dialog'); el.setAttribute('aria-live', 'polite');
-  el.innerHTML = '<div class="l3d-sp-box"><div class="l3d-sp-logo">ЛЕГИОН <b>3D</b></div><div class="l3d-sp-t"></div><div class="l3d-sp-bar"><i></i></div><div class="l3d-sp-x"></div></div>';
+  setHtml(el, '<div class="l3d-sp-box"><div class="l3d-sp-logo">ЛЕГИОН <b>3D</b></div><div class="l3d-sp-t"></div><div class="l3d-sp-bar"><i></i></div><div class="l3d-sp-x"></div></div>');
   document.body.appendChild(el);
   const t = el.querySelector('.l3d-sp-t') as HTMLElement; t.textContent = text;
   const msgs: Record<string, string> = {

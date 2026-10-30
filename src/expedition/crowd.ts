@@ -263,6 +263,27 @@ export class Crowd {
     this.dirty = false;
   }
 
+  private _boxes: number[] = [];
+  /**
+   * Screen-space declutter of the nameplates: in party order (me first) a plate stays only if its rectangle does not cover an
+   * already kept one — a crowd reads as a few clean names instead of a pile. Hidden plates return when the cats spread out.
+   */
+  declutter(cam: THREE.PerspectiveCamera): void {
+    const kept = this._boxes; kept.length = 0;
+    cam.updateMatrixWorld(); const asp = cam.aspect || 1.78, tf = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+    const order = this.actors.filter((a) => a.label && a.label.obj.visible);
+    order.sort((x, y) => (x.m.me ? 0 : 1) - (y.m.me ? 0 : 1));
+    for (const a of order) {
+      const o = a.label!.obj; _dv.copy(o.position).applyMatrix4(cam.matrixWorldInverse);
+      const d = -_dv.z; if (d < 0.1) continue;
+      const hw = o.scale.x / (d * tf * asp) * 0.5 * 0.82, hh = o.scale.y / (d * tf) * 0.5 * 0.7;   // half extents in NDC (the plate's visible part)
+      const cx = _dv.x / (d * tf * asp), cy = _dv.y / (d * tf);
+      let hit = false;
+      for (let i = 0; i < kept.length; i += 4) if (Math.abs(cx - kept[i]) < hw + kept[i + 2] && Math.abs(cy - kept[i + 1]) < hh + kept[i + 3]) { hit = true; break; }
+      if (hit && !a.m.me) o.visible = false; else kept.push(cx, cy, hw, hh);
+    }
+  }
+
   /** Detailed avatars' draw calls (tests/perf). */
   /** keep a nameplate at least ~the size it has at 6 m from the camera (sprites shrink with distance) */
   private fitLabel(l: Label) {
@@ -283,6 +304,7 @@ export class Crowd {
 }
 
 const DEF_LEN: Record<Act, number> = { idle: 1, attack: 0.55, shoot: 0.8, cast: 0.75, heal: 0.75, cheer: 1.4, down: 1, hurt: 0.4, block: 0.45, sit: 1, wave: 1.6 };
+const _dv = new THREE.Vector3();
 const short = (s: string) => (s.length > 16 ? s.slice(0, 15) + '…' : s);
 function turn(a: number, b: number, k: number): number {
   let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;

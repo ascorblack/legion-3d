@@ -7,6 +7,10 @@
  *    SITE_CHAT_CSS. We only control it: Enter/T/'/' focus its input (gameplay off), Esc/blur gives gameplay back,
  *    a sent message blurs it, it fades when idle and hides while a menu is open or the HUD is off. Every site update
  *    of the chat reaches the player without a change here.
+ *    Site 30.10 «chatone» (src/ui/chatone.ts): the hero may have ONE chat window for the page (window.LGChatOne: Город · Торговля ·
+ *    Достижения · Шахта · Личные). It is the same kind of box, docked the same way — in the City it stands in the City's slot, in the
+ *    mine room it takes our host (`.l3d-co-host`) and opens on «Шахта»; our own mine tab below is then NOT added (attachMineChat hands
+ *    the mine's chat to the site's window instead). The window's size (top / right edge handles on a PC, height 280–340 px) is the site's.
  * 2. FALLBACK (offline demo, site chat missing or switched off): our own panel with the site's tab logic ported
  *    (tabOf / chatVis of site-chat.js): Достижения under the trade flag (ct, else in Общий), Личные under cd with
  *    peers, ✉ on nicks, per-tab unread counters, class icons and per-nick colours.
@@ -18,7 +22,10 @@ import { esc } from './data';
 import { SITE_CHAT_CSS } from './styles';
 import { ModUi, Moderator, canMod, menuItems, roleIco, type ModApi, type ModLine, type UiItem, type ModOp } from './chat-mod';
 import type { ModalInput } from '../core/modal';
+import { setHtml } from '../core/html';
 import { DmBridge, dmApi, friendsApi, nickMenuItems } from './dm';
+import { CO_BOX_SEL, OneMine, chatOneApi, isQuiet } from './chatone';
+export { chatOneOn } from './chatone';
 
 /* ================================================================ pure logic (site-chat.js parity, tested) */
 
@@ -124,6 +131,8 @@ export interface MineLine { id: string; l: string; n?: string; t: string; at?: n
 /** What the mine room hands to the chat dock (no import of rooms/ from ui/). Reading only; say() is called by the dock only when the player sends. */
 export interface MineChatSource {
   lines(): readonly MineLine[];
+  /** Chat counter of the mine's feed (`mchat.c`): the single chat window (site «chatone») continues from it. */
+  c?(): number;
   on(fn: (fresh: MineLine[]) => void): () => void;
   say(text: string): Promise<{ ok?: boolean; error?: string } | null | undefined | unknown>;
   me(): string;
@@ -223,8 +232,17 @@ export class MineChatTab {
 
 let mineSrc: MineChatSource | null = null;
 const mineSubs = new Set<() => void>();
+/** The mine room's hold on the site's single chat window (chatone), when the hero has it. */
+let oneMine: OneMine | null = null;
 /** The 3D mine room calls this on enter and the returned function on exit: the chat dock shows / removes the «⛏ Шахта» tab. */
 export function attachMineChat(src: MineChatSource): () => void {
+  // site 30.10 «chatone»: the page's single window has the «Шахта» tab — it, not our tab, shows (and sends) the mine's chat
+  const one = chatOneApi();
+  if (one && typeof document !== 'undefined') {
+    const om = new OneMine(one, { lines: () => src.lines(), c: src.c ? () => src.c!() : undefined, state: src.state ? () => src.state!() : undefined }, document, ensureCss);
+    oneMine = om; om.start();
+    return () => { if (oneMine === om) oneMine = null; om.stop(); };
+  }
   mineSrc = src; for (const f of [...mineSubs]) f();
   return () => { if (mineSrc === src) { mineSrc = null; for (const f of [...mineSubs]) f(); } };
 }
@@ -243,7 +261,7 @@ const FADE_MS = 10000;     // fallback: an idle line fades after this
 const SHOW = 6;            // fallback: lines when idle
 const KEEP = 80;           // per tab (site CHAT_N)
 const IDLE_MS = 9000;      // dock: no new lines for this long → faded
-const DOCK_SEL = '#tab-city .cy-chat';
+const DOCK_SEL = CO_BOX_SEL;   // the City's chat, or the single chat window (site «chatone») in the City's slot / our mine host / its own float
 const DOC = typeof document !== 'undefined' ? document : null;
 
 export class Chat {
@@ -542,7 +560,7 @@ export class Chat {
     this.toEl.hidden = !on;
     if (on) {
       const peers = dmPeers(this.c.host.store.chat, this.me(), this.peer, EMPTY_SET);
-      this.toEl.innerHTML = (peers.length ? `<button type="button" data-peer="" aria-pressed="${!this.peer}">Все</button>` + peers.map((p) => `<button type="button" data-peer="${esc(p)}" aria-pressed="${this.peer === p}" style="color:${nickColor(p)}">${esc(p)}</button>`).join('') : '')
+      setHtml(this.toEl, (peers.length ? `<button type="button" data-peer="" aria-pressed="${!this.peer}">Все</button>` + peers.map((p) => `<button type="button" data-peer="${esc(p)}" aria-pressed="${this.peer === p}" style="color:${nickColor(p)}">${esc(p)}</button>`).join('') : ''))
         + (this.peer ? `<span class="tw">Кому: <b>${esc(this.peer)}</b></span>` : peers.length ? '<span class="tw">Выбери, кому писать</span>' : '');
     }
     // ⚙ (moderators of the chat shown): the moderation window
@@ -607,7 +625,7 @@ export class Chat {
       const to = k === 'dm' && m.login === me && m.to ? ` → <b data-nick="${esc(m.to)}" class="n" style="color:${nickColor(m.to)}">${esc(m.to)}</b>` : '';
       const dmB = f.dm && k !== 'dm' && m.login !== me ? `<button type="button" class="dmb" data-dm="${esc(m.login)}" title="Написать лично" aria-label="Написать лично: ${esc(m.name)}">✉</button>` : '';
       const r = this.roleOf(m), cm = canMod(this.city.role, me, { id: m.id, l: m.login, r, k }) ? `<button type="button" class="cm" data-cm="${esc(m.id)}" aria-label="Модерация: ${esc(m.name)}">⋯</button>` : '';
-      el.innerHTML = `${roleIco(r)}${ico}<b class="n" data-nick="${esc(m.login)}" style="color:${nickColor(m.login)}">${esc(m.name)}</b>${to}${dmB} <span>${esc(m.text)}</span>${cm}`;
+      setHtml(el, `${roleIco(r)}${ico}<b class="n" data-nick="${esc(m.login)}" style="color:${nickColor(m.login)}">${esc(m.name)}</b>${to}${dmB} <span>${esc(m.text)}</span>${cm}`);
       if (m.login === me) el.classList.add('me');
     }
     (el as any)._at = m.at;
@@ -686,7 +704,9 @@ export class Chat {
   private findBox(): HTMLElement | null {
     if (!DOC || !DOC.documentElement.classList.contains('l3d-on')) return null;
     const b = DOC.querySelector<HTMLElement>(DOCK_SEL);
-    return b && b.dataset.bound && !b.hidden ? b : null;
+    if (!b || !b.dataset.bound || b.hidden) return null;
+    const fl = b.closest<HTMLElement>('.co-float');   // the single window's own float: only while the site shows it
+    return fl && fl.hidden ? null : b;
   }
 
   private dock(b: HTMLElement) {
@@ -696,7 +716,7 @@ export class Chat {
     this.el.style.display = 'none';
     if (this.focused) this.input.blur();
     const inChat = (x: Element | null) => !!x && (b.contains(x) || !!x.closest?.('.cy-nm') || x.id === ModUi.HOST_ID);
-    const onIn = () => { if (!this.dockFocus && DOC!.documentElement.classList.contains('l3d-on')) { this.dockFocus = true; this.gameplayFor(true); this.lastAct = Date.now(); this.setIdle(false); } };
+    const onIn = () => { if (!this.dockFocus && !isQuiet() && DOC!.documentElement.classList.contains('l3d-on')) { this.dockFocus = true; this.gameplayFor(true); this.lastAct = Date.now(); this.setIdle(false); } };
     const onOut = () => {
       // the site re-renders its list (a focused nick may vanish) and opens the nick menu outside the box: decide later
       setTimeout(() => {
@@ -871,7 +891,7 @@ export class Chat {
     const me = this.mine!.src.me(), mod = this.mine!.mod;
     const el = h('div', 'ln g' + (String(l.l).toLowerCase() === me ? ' me' : ''));
     const cm = mod && canMod(mod.role, me, l as ModLine) ? `<button type="button" class="cm" data-cm="${esc(l.id)}" aria-label="Модерация: ${esc(l.n || l.l)}">⋯</button>` : '';
-    el.innerHTML = `${roleIco(l.r)}<b class="n" data-nick="${esc(l.l)}" style="color:${nickColor(l.l)}">${esc(l.n || l.l)}</b> <span>${esc(l.t)}</span>${cm}`;
+    setHtml(el, `${roleIco(l.r)}<b class="n" data-nick="${esc(l.l)}" style="color:${nickColor(l.l)}">${esc(l.n || l.l)}</b> <span>${esc(l.t)}</span>${cm}`);
     el.title = hhmm(l.at); (el as any)._at = l.at;
     return el;
   }
@@ -1007,7 +1027,7 @@ export class Chat {
     if (inp) { const ph = m.mutedPh(); inp.disabled = !!ph; const sb = this.dForm?.querySelector('button'); if (sb) sb.disabled = !!ph; inp.placeholder = ph || (m.mod && m.mod.role ? 'Написать… (/help — команды)' : MINE_PH); }
     const me = m.src.me(), lines = m.lines();
     const html = lines.length ? lines.map((l) => mineLi(l, me, m.mod)).join('') : `<li class="cy-chat-0">${MINE_EMPTY}</li>`;
-    if ((ol as any)._k !== html) { (ol as any)._k = html; ol.innerHTML = html; if (stick || sel) ol.scrollTop = ol.scrollHeight; }
+    if ((ol as any)._k !== html) { (ol as any)._k = html; setHtml(ol, html); if (stick || sel) ol.scrollTop = ol.scrollHeight; }
   }
 
   private dockMineDetach() {
@@ -1043,6 +1063,8 @@ export class Chat {
     if (this.scanT > 0.5) {
       this.scanT = 0;
       this.dm.scan();
+      oneMine?.tick();
+      if (this.box) this.dm.adopt(this.box);   // the single chat window: its «Личные» box (LGDm dock)
       // the site rebuilds its City (re-enter, town change) → a new chat element; classic mode → back to our panel
       if (this.box && (!this.box.isConnected || this.box.hidden || !DOC!.documentElement.classList.contains('l3d-on'))) this.undock();
       if (!this.box) { const b = this.findBox(); if (b) this.dock(b); }

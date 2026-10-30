@@ -11,6 +11,7 @@ import { toX, toZ, fromX, fromZ } from '../world/coords';
 import { entranceZ } from '../world/buildings';
 import { landmarkText, hintLine, type LandmarkPos } from '../explore/landmarks';
 import { coreFeature } from './types';
+import { setHtml } from '../core/html';
 
 export const LANDMARKS_KEY = 'l3d.world.landmarks';
 const SHOW_MS = 9000;
@@ -42,9 +43,9 @@ export default coreFeature({
       ctx.camera.getWorldDirection(_d);
       const f = ctx.feet;
       const hint = hintLine(list, lm, f.x, f.z, _d.x, _d.z);
-      card.innerHTML = `<div style="font-weight:700;font-size:14px;color:#fbe9b8">${t.icon} ${esc(lm.title)}</div>`
+      setHtml(card, `<div style="font-weight:700;font-size:14px;color:#fbe9b8">${t.icon} ${esc(lm.title)}</div>`
         + `<div style="margin-top:3px">${esc(t.what)}</div><div style="margin-top:4px;color:#b9b0e6">${esc(t.tip)}</div>`
-        + (hint ? `<div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,.12);color:#ffd9a0">Рядом: ${esc(hint)}</div>` : '');
+        + (hint ? `<div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,.12);color:#ffd9a0">Рядом: ${esc(hint)}</div>` : ''));
       shownId = lm.id; card.style.opacity = '1'; card.style.transform = 'translate(0,0)';
       clearTimeout(hideT); hideT = window.setTimeout(hide, SHOW_MS);
     };

@@ -11,38 +11,54 @@ import { Batch, GEO, M, type MatKey } from '../../world/batch';
 import { SignAtlas, glowTexture } from '../../world/textures';
 import { glowPoints } from '../../world/sky';
 import { getTexture } from '../../world/tex';
+import { surfaceDetail, surfaceUniforms, type SurfaceOpts, type SurfaceUniforms } from '../../world/tex/surface';
 import { PropKit, type PropKind } from '../../world/props';
 import type { Pal } from '../../world/palette';
-import type { Ctx as WorldKitCtx } from '../../world/kit';
+import { shade, type Ctx as WorldKitCtx } from '../../world/kit';
+import { plankFloor, ceilingDetail, bevel as bevelBox } from './detail';
+import type { Shaft } from './atmos';
 
 export interface Solid { x0: number; x1: number; z0: number; z1: number; top: number }
 
-/** Materials of a room (own instances; textures are the shared tex cache — never dispose them). */
-export function makeRoomMats(pal: Pal, signs: SignAtlas): Record<MatKey, THREE.Material> & { rock: THREE.Material } {
-  const std = (kind: Parameters<typeof getTexture>[0], o: { rough?: number; ns?: number; colors?: string[]; neutral?: boolean; seed?: number; side?: THREE.Side; size?: number } = {}) => {
+/** The rooms' / the mine's own surface-shader uniforms: the floor is at y = 0, no lower street (one set for all rooms). */
+let roomSd: SurfaceUniforms | null = null;
+export function roomSurfaceUniforms(): SurfaceUniforms { return (roomSd ||= surfaceUniforms({ lowH: 0, dirt: '#4a3a2e', moss: '#56643a' })); }
+/** Surface detail (world/tex/surface.ts: macro variation, per-tile tone, anti-tiling, grime from the floor) on a room
+ *  material — q1+ only (q0 keeps the plain material); `t` = the texture set the material was made from. */
+export function roomSurface(m: THREE.Material, t: { ids?: boolean; organic?: boolean } | null, o: SurfaceOpts, quality: number): void {
+  if (quality < 1) return;
+  surfaceDetail(m, { ...o, ids: t && t.ids ? o.ids : 0, antiTile: !!(t && t.organic) && o.antiTile !== false, uniforms: roomSurfaceUniforms() });
+}
+
+/** Materials of a room (own instances; textures are the shared tex cache — never dispose them). q1+: surface detail. */
+export function makeRoomMats(pal: Pal, signs: SignAtlas, quality = 2): Record<MatKey, THREE.Material> & { rock: THREE.Material } {
+  const std = (kind: Parameters<typeof getTexture>[0], o: { rough?: number; ns?: number; colors?: string[]; neutral?: boolean; seed?: number; side?: THREE.Side; size?: number; sd?: SurfaceOpts } = {}) => {
     const t = getTexture(kind, { neutral: o.neutral ?? true, colors: o.colors, seed: o.seed, size: o.size });
     const m = new THREE.MeshStandardMaterial({
       vertexColors: true, map: t.map, normalMap: t.normalMap ?? null, roughnessMap: t.roughnessMap ?? null,
       roughness: o.rough ?? 0.9, metalness: 0, side: o.side ?? THREE.FrontSide,
     });
     if (t.normalMap) m.normalScale.setScalar(o.ns ?? 0.8);
+    if (o.sd) roomSurface(m, t, o.sd, quality);
     return m;
   };
+  // indoors: grime rising from the floor, little moss, per-tile tone where the texture carries element ids
+  const wall: SurfaceOpts = { macro: 0.14, hue: 0.08, ids: 0.14, dirt: 0.45, dirtH: 1.0, moss: 0.06 };
   const emit = new THREE.MeshBasicMaterial({ vertexColors: true });
   emit.color.setScalar(1.6);
   const signMat = new THREE.MeshStandardMaterial({ map: signs.texture, emissiveMap: signs.texture, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.5, roughness: 0.7, alphaTest: 0.5 });
   const plain = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
   const mats: Record<MatKey, THREE.Material> & { rock: THREE.Material } = {
-    rock: std('canvas', { colors: ['#ffffff', '#f2f2f2'], rough: 0.95, ns: 0.4 }),   // ONE_SIDED: canvas seen from inside only
-    brick: std('brick', { rough: 0.95 }),
-    plaster: std('plaster', { rough: 0.95, ns: 0.5 }),
-    wood: std('wood', { rough: 0.8, ns: 0.6 }),
-    roof: std('slate', { rough: 0.9, ns: 1.0 }),
-    stone: std('stone', { rough: 0.95 }),
-    metal: Object.assign(std('metal', { rough: 0.55, ns: 0.4 }), { metalness: 0.4 }),
-    canvas: std('canvas', { colors: ['#ffffff', '#f2f2f2'], rough: 0.95, ns: 0.4, side: THREE.DoubleSide }),
-    paving: std('cobble', { neutral: false, colors: [pal.ground, pal.groundL, pal.mortar, pal.groundL], rough: 1, ns: 0.7, size: 512 }),
-    lowPaving: std('stone', { rough: 0.95, seed: 9 }),
+    rock: std('canvas', { colors: ['#ffffff', '#f2f2f2'], rough: 0.95, ns: 0.4, sd: { macro: 0.1, hue: 0.08, dirt: 0.4, dirtH: 0.6 } }),   // ONE_SIDED: canvas seen from inside only
+    brick: std('brick', { rough: 0.95, sd: wall }),
+    plaster: std('plaster', { rough: 0.95, ns: 0.5, sd: { ...wall, dirt: 0.5, dirtH: 1.1 } }),
+    wood: std('wood', { rough: 0.8, ns: 0.6, sd: { macro: 0.1, hue: 0.06, ids: 0.14, dirt: 0.4, dirtH: 0.7 } }),
+    roof: std('slate', { rough: 0.9, ns: 1.0, sd: { macro: 0.14, hue: 0.08, ids: 0.16 } }),
+    stone: std('stone', { rough: 0.95, sd: { ...wall, moss: 0.1 } }),
+    metal: Object.assign(std('metal', { rough: 0.55, ns: 0.4, sd: { macro: 0.06, hue: 0.04, dirt: 0.2, dirtH: 0.5, roughVar: 0.3 } }), { metalness: 0.4 }),
+    canvas: std('canvas', { colors: ['#ffffff', '#f2f2f2'], rough: 0.95, ns: 0.4, side: THREE.DoubleSide, sd: { macro: 0.1, hue: 0.08, dirt: 0.4, dirtH: 0.6 } }),
+    paving: std('cobble', { neutral: false, colors: [pal.ground, pal.groundL, pal.mortar, pal.groundL], rough: 1, ns: 0.7, size: 512, sd: { macro: 0.16, hue: 0.1, ids: 0.14, roughVar: 0.15 } }),
+    lowPaving: std('stone', { rough: 0.95, seed: 9, sd: { macro: 0.16, hue: 0.1, ids: 0.14, roughVar: 0.15 } }),
     leaf: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),
     flat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
     dark: new THREE.MeshBasicMaterial({ color: '#100d17' }),
@@ -112,7 +128,8 @@ export const VESTIBULE = 3.2;
 
 export class RoomKit {
   readonly root = new THREE.Group();
-  readonly b = new Batch(1000);
+  // one chunk: a room is small (the city's 15 m chunks — and a split at x = 0 — only doubled the draw calls)
+  readonly b = new Batch(Infinity);
   readonly signs: SignAtlas;
   readonly mats: Record<MatKey, THREE.Material> & { rock: THREE.Material };
   readonly solids: Solid[] = [];
@@ -131,6 +148,14 @@ export class RoomKit {
   pad = 0.28;
   /** Round room (tent): walkable disc instead of the bounds rectangle. */
   circle: { x: number; z: number; r: number } | null = null;
+  /** World AABBs (x0 y0 z0 x1 y1 z1) of every piece baked so far (q1+). */
+  readonly occRaw: number[] = [];
+  /** occRaw index where the room's own things start (after the shell). */
+  occFrom = 0;
+  /** z of the shell's ceiling beams. */
+  beams: number[] = [];
+  /** Extra AO occluders that are not collision solids (props baked with solid:false): x0 x1 z0 z1 top. */
+  readonly aoExtra: number[] = [];
   /** Raised floor areas: [x0,x1,z0,z1,y]. */
   readonly floors: [number, number, number, number, number][] = [];
   /** World-kit compatible context (for kit.ts helpers: windowZ, doorZ, signZ, awning…). */
@@ -143,8 +168,10 @@ export class RoomKit {
   constructor(readonly pal: Pal, readonly quality = 2, name = 'room') {
     this.root.name = name;
     this.b.recorder = RoomKit.recorder;
+    // world AABB of every piece (the automatic set dressing, dress.ts, places things only where nothing is)
+    if (quality >= 1) this.b.onAdd = (_m, bx) => { this.occRaw.push(bx.min.x, bx.min.y, bx.min.z, bx.max.x, bx.max.y, bx.max.z); };
     this.signs = new SignAtlas(pal);
-    this.mats = makeRoomMats(pal, this.signs);
+    this.mats = makeRoomMats(pal, this.signs, quality);
     this.owned.push(this.signs.texture);
     for (const m of new Set(Object.values(this.mats))) this.owned.push(m);
     this.wk = { b: this.b, pal, signs: this.signs, inst: null as any, glows: this.glows, lights: [], bulbs: [], wires: [], rnd: Math.random, quality, lowH: 0, wallZ: 0, colliders: this.camBoxes };
@@ -224,6 +251,18 @@ export class RoomKit {
   }
   private readonly lightReq: { l: THREE.PointLight; prio: number; i: number }[] = [];
   /**
+   * Light-pool candidates (world/lightPools.ts: x, y, z, radius, r, g, b, gain) for every requested light — call after
+   * finish(): the lights it dropped (low quality) still warm their surroundings through the pools, the kept ones a little.
+   */
+  poolCandidates(): number[] {
+    const out: number[] = [];
+    for (const { l } of this.lightReq) {
+      const kept = this.lights.includes(l), c = l.color;
+      out.push(l.position.x, l.position.y, l.position.z, Math.max(2.5, l.distance * 0.7), c.r, c.g, c.b, kept ? 0.22 : 0.55);
+    }
+    return out;
+  }
+  /**
    * Fake light: an additive gradient quad on a surface (a lamp's pool of light on a wall, a shelf or the floor).
    * Centre (x,y,z), size w×h, facing yaw ry (0 = faces +Z) and pitch rx (−π/2 = lies on the floor facing up).
    * All splashes are one draw call; they work at every quality (no light cap).
@@ -253,6 +292,7 @@ export class RoomKit {
     const c = Math.abs(Math.cos(rotY)), s = Math.abs(Math.sin(rotY));
     const w = (fp.w * c + fp.d * s) * scale, d = (fp.w * s + fp.d * c) * scale, h = fp.h * scale;
     if (opts.solid !== false) this.solid(x - w / 2, x + w / 2, z - d / 2, z + d / 2, typeof opts.solid === 'number' ? opts.solid : h > 1.3 ? Infinity : y + h);
+    else if (y < 0.05) this.aoExtra.push(x - w * 0.4, x + w * 0.4, z - d * 0.4, z + d * 0.4, h);
     return { w, d, h };
   }
   /** Every sign placed (text, centre, facing yaw rotY: 0 = +Z) — facing audits (test/rooms-facing.test.ts). */
@@ -290,8 +330,9 @@ export class RoomKit {
     const V = o.cutaway === false ? 0 : VESTIBULE;
     this.bounds = { x0, x1, z0, z1 };
     this.shellH = h;
-    // floor (+ vestibule)
-    this.box(o.floor || 'wood', o.floorCol || P.wood, x0 - t, x1 + t, -0.1, 0, z0 - t, z1 + t + V);
+    // floor (+ vestibule): q1+ wooden floors are laid board by board (shade per board, gaps, a worn path from the door)
+    if ((o.floor || 'wood') === 'wood' && this.quality >= 1) plankFloor(this, x0 - t, x1 + t, z0 - t, z1 + t + V, o.floorCol || P.wood, (o.door || { x: 0 }).x);
+    else this.box(o.floor || 'wood', o.floorCol || P.wood, x0 - t, x1 + t, -0.1, 0, z0 - t, z1 + t + V);
     // walls: back, left, right (side walls run on through the vestibule)
     this.box(wall, wc, x0 - t, x1 + t, 0, h, z0 - t, z0);
     this.box(wall, wc, x0 - t, x0, 0, h, z0, z1 + V);
@@ -324,9 +365,13 @@ export class RoomKit {
     if (o.ceiling !== 'none') {
       this.box('wood', cc, x0 - t, x1 + t, h, h + 0.12, z0 - t, z1 + t + V);
       if (o.ceiling !== 'flat') {
-        const n = Math.max(2, Math.round(d / 1.6));
-        for (let i = 0; i <= n; i++) { const z = z0 + 0.2 + (d - 0.4) * i / n; this.box('wood', P.timber, x0, x1, h - 0.22, h, z - 0.1, z + 0.1); }
-      }
+        const n = Math.max(2, Math.round(d / 1.6)), zs: number[] = [];
+        for (let i = 0; i <= n; i++) zs.push(z0 + 0.2 + (d - 0.4) * i / n);
+        this.beams = zs;
+        // q1+: chamfered beams, joists, knee braces and a cornice; q0: the plain beams
+        if (this.quality >= 1) ceilingDetail(this, x0, x1, z0, z1 + V, h, zs, P.timber, cc, { cornice: sk });
+        else for (const z of zs) this.box('wood', P.timber, x0, x1, h - 0.22, h, z - 0.1, z + 0.1);
+      } else if (this.quality >= 1) ceilingDetail(this, x0, x1, z0, z1 + V, h, [], P.timber, cc, { joists: false, braces: false, cornice: sk });
     }
     // the vestibule is seen only by the TP camera backing out through the entrance wall: dress it like the room
     // (skirting, a warm wall lamp with its pool of light on each side, a barrel and a plant) so it never reads as a void
@@ -349,6 +394,7 @@ export class RoomKit {
     const zf = z1 + V;
     this.camBoxes.push(x0 - 1, x1 + 1, -1, h + 1, z0 - 1, z0, x0 - 1, x0, -1, h + 1, z0, zf, x1, x1 + 1, -1, h + 1, z0, zf, x0 - 1, x1 + 1, -1, h + 1, zf, zf + 1, x0 - 1, x1 + 1, h, h + 1, z0 - 1, zf + 1);
     this.vestibule = V;
+    this.occFrom = this.occRaw.length;
   }
   /** Door gap of the shell's entrance wall (exitDoor() defaults to it). */
   doorGap = { x: 0, w: 1.4, h: 2.3 };
@@ -358,9 +404,21 @@ export class RoomKit {
   posts(xs: number[], z: number, h: number, col = this.pal.timber, s = 0.16): void {
     for (const x of xs) this.box('wood', col, x - s / 2, x + s / 2, 0, h, z - s / 2, z + s / 2);
   }
+  /** Light shafts from the windows (moonlight slanting into the room): RoomBase.finish turns them into atmos volumes. */
+  readonly shafts: Shaft[] = [];
+  /** Chamfered box (counters, shelves, beams); a plain box at q0. */
+  bevel(mat: MatKey, col: THREE.ColorRepresentation, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, c = 0.02): void { bevelBox(this, mat, col, x0, x1, y0, y1, z0, z1, c); }
   /** Night window on the back wall (z0) or side walls: a lit/dark pane with a frame. side: 'back' | 'left' | 'right'. */
   window(side: 'back' | 'left' | 'right', u: number, y: number, w: number, h: number, sky = '#2a2f6e'): void {
     const B = this.bounds, P = this.pal, f = 0.08;
+    // the moonbeam through it: down into the room, slightly sideways; its pool on the floor (splash)
+    {
+      const d = side === 'back' ? new THREE.Vector3(0.28, -0.62, 1) : new THREE.Vector3(side === 'left' ? 1 : -1, -0.62, 0.3);
+      d.normalize();
+      const cx = side === 'back' ? u : side === 'left' ? B.x0 : B.x1, cz = side === 'back' ? B.z0 : u;
+      const ax = side === 'back' ? 1 : 0, az = side === 'back' ? 0 : 1;
+      this.shafts.push({ cx, cy: y + h / 2, cz, w: w * 0.92, h: h * 0.92, ax, az, dx: d.x, dy: d.y, dz: d.z, color: '#9fb6ff', k: 1 });
+    }
     if (side === 'back') {
       const z = B.z0;
       this.box('emit', sky, u - w / 2, u + w / 2, y, y + h, z - 0.02, z + 0.01);
@@ -381,6 +439,43 @@ export class RoomKit {
       this.box('wood', P.woodD, x, x + 0.05 * s, y, y + h, u - 0.025, u + 0.025);
       this.box('wood', P.woodD, x, x + 0.04 * s, y + h * 0.5, y + h * 0.5 + 0.05, u - w / 2, u + w / 2);
     }
+    if (this.quality >= 1) this.windowView(side, u, y, w, h, sky);
+  }
+  /**
+   * q1+: what is seen through a window (a lighter band of sky over the horizon, the dark roofs of the town, stars) and
+   * the dressing round it (curtains on a rod, tie-backs). Layers lie a few mm proud of the pane, never coplanar.
+   */
+  private windowView(side: 'back' | 'left' | 'right', u: number, y: number, w: number, h: number, sky: string): void {
+    const B = this.bounds, f = 0.08;
+    // wall frame: (along, out of the wall) → world box
+    const bx = (mat: MatKey, col: THREE.ColorRepresentation, ua: number, ub: number, y0: number, y1: number, oa: number, ob: number) => {
+      if (side === 'back') this.box(mat, col, ua, ub, y0, y1, B.z0 + oa, B.z0 + ob);
+      else if (side === 'left') this.box(mat, col, B.x0 + oa, B.x0 + ob, y0, y1, ua, ub);
+      else this.box(mat, col, B.x1 - ob, B.x1 - oa, y0, y1, ua, ub);
+    };
+    const o0 = side === 'back' ? 0.01 : 0.02;   // the pane's front
+    const glowCol = '#' + new THREE.Color(sky).lerp(new THREE.Color('#c8a8ff'), 0.45).getHexString();
+    bx('emit', glowCol, u - w / 2, u + w / 2, y, y + h * 0.32, o0 + 0.005, o0 + 0.008);
+    // roofs: a few dark blocks with a lit window dot
+    const roofs = [[-0.5, -0.22, 0.26], [-0.24, 0.06, 0.18], [0.08, 0.3, 0.3], [0.32, 0.5, 0.14]];
+    for (const [a, b, t] of roofs) bx('dark', '#141020', u + a * w, u + b * w, y, y + h * t, o0 + 0.014, o0 + 0.018);
+    bx('emit', '#ffcf6a', u + 0.15 * w, u + 0.19 * w, y + h * 0.16, y + h * 0.2, o0 + 0.023, o0 + 0.026);
+    for (let i = 0; i < 5; i++) {
+      const su = u + (((i * 0.37 + 0.13) % 1) - 0.5) * w * 0.85, sy = y + h * (0.62 + ((i * 0.53) % 0.33));
+      bx('emit', '#fff3c4', su - 0.012, su + 0.012, sy - 0.012, sy + 0.012, o0 + 0.005, o0 + 0.008);
+    }
+    // curtains: a rod over the frame, two gathered panels with tie-backs
+    const cur = ['#8a2a3a', '#2e5a4a', '#4a3a7a', '#7a4a2a'][Math.abs(Math.round(u * 3)) % 4];
+    const rt = y + h + f + 0.1;
+    bx('metal', '#c9a04a', u - w / 2 - 0.42, u + w / 2 + 0.42, rt - 0.02, rt + 0.02, 0.15, 0.18);
+    for (const sg of [-1, 1]) {
+      const c0 = u + sg * (w / 2 + f + 0.03), c1 = u + sg * (w / 2 + f + 0.33);
+      bx('canvas', cur, Math.min(c0, c1), Math.max(c0, c1), y - 0.18, rt - 0.03, 0.1, 0.14);
+      // folds: darker strips proud of the panel
+      for (let k = 0; k < 2; k++) { const fu = c0 + (c1 - c0) * (0.3 + k * 0.4); bx('canvas', shade(cur, -0.25), fu - 0.025, fu + 0.025, y - 0.16, rt - 0.05, 0.14, 0.15); }
+      const tu = (c0 + c1) / 2;
+      bx('canvas', '#e8c86a', tu - 0.16, tu + 0.16, y + h * 0.35, y + h * 0.35 + 0.04, 0.156, 0.162);
+    }
   }
   /** Rug on the floor: border + field, stacked floor decals. */
   rug(x0: number, x1: number, z0: number, z1: number, col: string, border?: string): void {
@@ -395,7 +490,7 @@ export class RoomKit {
     this.cone('metal', P.metal, x, y + 0.12, z, 0.16, 0.12, true);
     this.box('emit', color, x - 0.09, x + 0.09, y - 0.12, y + 0.12, z - 0.09, z + 0.09);
     this.box('metal', P.metal, x - 0.12, x + 0.12, y - 0.16, y - 0.12, z - 0.12, z + 0.12);
-    if (light) this.light(x, y - 0.1, z, '#ffb35c', 5, 8, 1.4); else this.glow(x, y, z, 1.2, color, 0.8);
+    if (light) this.light(x, y - 0.1, z, '#ffb35c', 5, 8, 0.95); else this.glow(x, y, z, 0.9, color, 0.8);
   }
   /** The entrance door built by exitDoor() (leaves to swing), or null. */
   door: RoomDoor | null = null;
@@ -530,7 +625,12 @@ export class RoomKit {
     }
     if (this.glows.length) {
       if (!this.glowTex) { this.glowTex = glowTexture(); this.owned.push(this.glowTex); }
-      const g = glowPoints(this.glows, 7, this.glowTex, { flicker: 0.08, intensity: 0.85 });
+      // interiors are small: halos are sized for the street (600 px·m) and would cover half the screen right next to the
+      // camera — smaller, a little dimmer at q2+ (the post chain's bloom adds its own), faded out within ~2 m of the eye
+      const g = glowPoints(this.glows, 7, this.glowTex, { flicker: 0.08, intensity: this.quality >= 2 ? 0.66 : 0.8 });
+      const gm = g.material as THREE.ShaderMaterial;
+      gm.uniforms.uScale.value = 430;
+      gm.vertexShader = gm.vertexShader.replace('float fade = clamp(1.4 - d / 70.0, 0.0, 1.0);', 'float fade = clamp(1.4 - d / 70.0, 0.0, 1.0) * smoothstep(0.5, 2.2, d);');
       g.name = 'room:glows'; this.root.add(g); this.owned.push(g.geometry, g.material as THREE.Material);
     }
     // camera colliders: one invisible merged box mesh (material.visible = false → never drawn, still raycastable)

@@ -12,6 +12,7 @@ import type { Fx } from '../combat/fx';
 import type { Decals } from './foes';
 import { Label } from './text';
 import { propGeo, hullGeo, GB, T } from './art';
+import { blobShadowMesh } from './biome-art';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   talkingStoneGeo, stoneMouthGeo, critterGeo, burrowGeo, boardGeo, trinketGeo, letterBlockGeo, orbGeo, cottageGeo, doorGeo, lanternGeo, candyBowlGeo,
@@ -493,6 +494,8 @@ class Lair extends Base implements SetPiece {
     for (const g of s.lair?.gone || []) if (g >= 1 && g <= 4) this.sink[g - 1] = 1;
     this.my = s.lair?.my || 0;
     this.light('#c87aff', 0, 5, -7, 40, 30);
+    this.light('#3ae8ff', 0, 1.1, -1.8, 16, 15);   // rune glow lighting the stone from below
+    this.light('#ff7aa8', 0, 3.5, -13, 22, 16);   // a hot rim behind the boss
     void s;
   }
   slots(n: number, me: number): { x: number; z: number }[] {
@@ -518,6 +521,7 @@ class Lair extends Base implements SetPiece {
       this.isles.setMatrixAt(i, m);
       this.nums[i].obj.visible = this.sink[i] < 0.5;
       if (this.my === i + 1) this.env.decals.add(this.pos[i][0], 0.05, this.pos[i][1], 2.3, '#ffd34d', 0.9, 0.2, 5);
+      else if (this.sink[i] < 0.6) this.env.decals.add(this.pos[i][0], 0.03, this.pos[i][1], 3.1, '#3ae8ff', 0.22 * (1 - this.sink[i] * 1.6), 1, 1.6);
     }
     this.isles.instanceMatrix.needsUpdate = true;
     this.eye.position.y = -1.6 + Math.sin(t * 0.8) * 0.4;
@@ -1371,7 +1375,24 @@ function puzzleSet(env: SetEnv, s: SceneState): SetPiece | null {
   }
 }
 
-export function buildSet(env: SetEnv, s: SceneState): SetPiece {
+/** One instanced draw of soft contact shadows under the big static meshes of a set (stalls, tents, gates, wagons…). */
+function withContactShadows(env: SetEnv, p: SetPiece): SetPiece {
+  p.root.updateMatrixWorld(true);
+  const items: number[] = [], box = new THREE.Box3(), sz = new THREE.Vector3(), c = new THREE.Vector3();
+  p.root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || (m as THREE.InstancedMesh).isInstancedMesh || !m.visible || items.length >= 6 * 22) return;
+    if (m.material !== env.mats.tint || !m.geometry.attributes.aTint) return;
+    box.setFromObject(m); box.getSize(sz); box.getCenter(c);
+    if (box.min.y > 0.5 || sz.x < 0.7 || sz.z < 0.7 || sz.x > 14 || sz.z > 14) return;
+    const r = Math.max(sz.x, sz.z) * 0.5;
+    items.push(c.x + r * 0.3, 0.03, c.z - r * 0.2, r * 0.95 + 0.25, r * 0.8 + 0.2, 0.5);
+  });
+  if (items.length) { const im = blobShadowMesh(env.mats.decal, items); p.root.add(im); const d = p.dispose.bind(p); p.dispose = () => { im.geometry.dispose(); im.dispose(); d(); }; }
+  return p;
+}
+export function buildSet(env: SetEnv, s: SceneState): SetPiece { return withContactShadows(env, buildSet0(env, s)); }
+function buildSet0(env: SetEnv, s: SceneState): SetPiece {
   switch (s.kind) {
     case 'gather': return new Camp(env, 'gather', s.title);
     case 'rest': return new Camp(env, 'rest', s.title);

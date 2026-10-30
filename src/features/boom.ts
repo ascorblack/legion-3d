@@ -21,6 +21,7 @@ import { TpPeek } from '../emotes/tp';
 import { registerChatCommand } from '../ui/chat';
 import { funToggle, reducedMotion, sfx } from '../social/toggle';
 import { coreFeature } from './types';
+import { setHtml } from '../core/html';
 
 const KEY = 'l3d.fun.boom';
 /** The command: exactly «!идея бум» (any case, extra spaces and trailing «!» forgiven). */
@@ -46,7 +47,7 @@ export default coreFeature({
 
     const host = document.createElement('div'); host.className = 'l3d-boom';
     const sh = host.attachShadow({ mode: 'open' });
-    sh.innerHTML = `<style>${CSS}</style><div class="dim"></div><div class="fl"></div>`;
+    setHtml(sh, `<style>${CSS}</style><div class="dim"></div><div class="fl"></div>`);
     const dim = sh.querySelector('.dim') as HTMLElement, fl = sh.querySelector('.fl') as HTMLElement;
     ctx.uiRoot.appendChild(host);
     const setDim = (a: number) => { a = Math.round(a * 100) / 100; if (a !== dimA) { dimA = a; dim.style.opacity = String(a); } };

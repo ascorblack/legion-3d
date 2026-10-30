@@ -15,7 +15,9 @@ const BOX = 0, DISC = 1;
 const INF = Infinity;
 
 /** Prop footprints at scale 1 (rotY 0): half extents along x / z (or radius) and top above the prop origin; Infinity = can't stand on. */
-const PROP_SOLID: Record<string, { hx?: number; hz?: number; r?: number; top: number; inner?: { r: number; top: number } }> = {
+/** `bar`: an extra box (half extents, centred on the prop, rotated with it) for parts that stick out of the main shape
+ *  at body height — the dummy's arms (test/world-collide.test.ts). */
+export const PROP_SOLID: Record<string, { hx?: number; hz?: number; r?: number; top: number; inner?: { r: number; top: number }; bar?: { hx: number; hz: number; top: number } }> = {
   lamp: { r: 0.24, top: INF }, mast: { r: 0.12, top: INF },
   bench: { hx: 0.76, hz: 0.25, top: 0.46 },
   crate: { hx: 0.29, hz: 0.29, top: 0.54 }, barrel: { r: 0.28, top: 0.75 }, chest: { hx: 0.4, hz: 0.28, top: 0.55 },
@@ -23,7 +25,7 @@ const PROP_SOLID: Record<string, { hx?: number; hz?: number; r?: number; top: nu
   fence: { hx: 1.02, hz: 0.06, top: 0.9 },
   fountain: { r: 1.27, top: 0.64, inner: { r: 1.07, top: INF } },
   well: { r: 0.67, top: 0.75, inner: { r: 0.45, top: INF } },
-  statue: { r: 0.9, top: INF }, dummy: { r: 0.35, top: INF }, signpost: { r: 0.2, top: INF }, cart: { hx: 0.8, hz: 0.6, top: INF },
+  statue: { r: 0.9, top: INF }, dummy: { r: 0.35, top: INF, bar: { hx: 0.5, hz: 0.1, top: INF } }, signpost: { r: 0.2, top: INF }, cart: { hx: 0.8, hz: 0.6, top: INF },
   noticeBoard: { hx: 0.7, hz: 0.2, top: INF },
 };
 
@@ -102,6 +104,11 @@ export function collectSolids(L: CityLayout, spec: GroundSpec, builderSolids: nu
         box(p.x - hx, p.x + hx, p.z - hz, p.z + hz, top);
       }
       if (d.inner) disc(p.x, p.z, d.inner.r * s, d.inner.top === INF ? INF : p.y + d.inner.top * sy);
+      if (d.bar) {
+        const c = Math.abs(Math.cos(p.rotY)), si = Math.abs(Math.sin(p.rotY)), b = d.bar;
+        const hx = (b.hx * c + b.hz * si) * s, hz = (b.hx * si + b.hz * c) * s;
+        box(p.x - hx, p.x + hx, p.z - hz, p.z + hz, b.top === INF ? INF : p.y + b.top * sy);
+      }
     }
   }
   // terrain: coping along the ledge (a low step), stair cheek walls, bridge rails, canal water
@@ -120,7 +127,14 @@ export function collectSolids(L: CityLayout, spec: GroundSpec, builderSolids: nu
       const c0 = toZ(spec.canal[0]), c1 = toZ(spec.canal[1]);
       for (const [b0, b1] of spec.bridges) {
         const a0 = toX(b0) + 0.1, a1 = toX(b1) - 0.1;
-        for (const x of [a0 + 0.08, a1 - 0.08]) box(x - 0.08, x + 0.08, c0 - 0.3, c1 + 0.3, spec.lowH + 0.95);
+        // rails follow the bridge's hump (one flat top over the whole span left the handrail 5–9 cm above your feet
+        // when you stood on it mid-span): 8 pieces, each topped at the rail's highest point over it
+        const zb0 = c0 - 0.2, zb1 = c1 + 0.2, hump = 0.18;
+        for (const x of [a0 + 0.08, a1 - 0.08]) for (let i = 0; i < 8; i++) {
+          const za = zb0 + (zb1 - zb0) * i / 8, zz = zb0 + (zb1 - zb0) * (i + 1) / 8;
+          const h = Math.max(Math.sin(Math.PI * i / 8), Math.sin(Math.PI * (i + 1) / 8), i === 3 || i === 4 ? 1 : 0);
+          box(x - 0.08, x + 0.08, i === 0 ? c0 - 0.3 : za, i === 7 ? c1 + 0.3 : zz, spec.lowH + 0.88 + hump * h);
+        }
       }
     }
   }

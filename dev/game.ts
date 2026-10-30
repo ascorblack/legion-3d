@@ -27,7 +27,8 @@ import { QUEST_MOCKS } from '../src/debug/questMocks';
 // ?town=camp: the start camp «Перепутье» (test/fixtures/camp-map.json); ?town=village: a hand-made village ★1
 // (test/fixtures/village-map.json); otherwise the fair
 const TOWN = new URLSearchParams(location.search).get('town');
-const layout = TOWN === 'camp' ? campFixtureLayout() : TOWN === 'village' ? villageFixtureLayout() : fixtureLayout();
+const MAGIC = new URLSearchParams(location.search).get('magic') === '1';   // ?magic=1: the camp's magic shop (hero.ms)
+const layout = TOWN === 'camp' ? campFixtureLayout('cats', MAGIC) : TOWN === 'village' ? villageFixtureLayout() : fixtureLayout();
 // ?sky=dusk: an evening sky for photos (the site's own style sky otherwise)
 if (new URLSearchParams(location.search).get('sky') === 'dusk') layout.sky = 'linear-gradient(#1b1640 0%, #3e2f6e 38%, #9a5a86 72%, #f0a070 100%)';
 const SPAWN: [number, number] = (layout as any).spawn || [layout.QW + 660, 1010];

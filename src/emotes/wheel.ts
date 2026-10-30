@@ -5,6 +5,7 @@
  * Built once, shown / hidden with a class (no layout work per frame beyond one transform for the pointer dot).
  */
 import { EMOTES, WHEEL } from './defs';
+import { setHtml } from '../core/html';
 
 const CSS = `
 :host { all: initial; }
@@ -49,7 +50,7 @@ export class EmoteWheel {
     const st = document.createElement('style'); st.textContent = CSS; sh.appendChild(st);
     this.wrap = document.createElement('div'); this.wrap.className = 'wrap';
     this.wrap.setAttribute('role', 'menu'); this.wrap.setAttribute('aria-label', 'Эмоции'); this.wrap.setAttribute('aria-hidden', 'true');
-    this.wrap.innerHTML = '<div class="dim"></div><div class="ring"><div class="mid"><div><b></b><i></i></div></div><div class="dot"></div></div>';
+    setHtml(this.wrap, '<div class="dim"></div><div class="ring"><div class="mid"><div><b></b><i></i></div></div><div class="dot"></div></div>');
     const ring = this.wrap.querySelector('.ring') as HTMLElement;
     const R = 124;
     EMOTES.forEach((e, i) => {
@@ -57,7 +58,7 @@ export class EmoteWheel {
       const s = document.createElement('div');
       s.className = 'sec'; s.setAttribute('role', 'menuitem'); s.setAttribute('aria-label', e.label);
       s.style.transform = `translate(${(Math.sin(a) * R).toFixed(1)}px, ${(-Math.cos(a) * R).toFixed(1)}px)`;
-      s.innerHTML = `<span class="em">${e.emoji}</span><span class="lb">${e.label}</span>`;
+      setHtml(s, `<span class="em">${e.emoji}</span><span class="lb">${e.label}</span>`);
       ring.appendChild(s); this.secs.push(s);
     });
     this.name = this.wrap.querySelector('.mid b') as HTMLElement;

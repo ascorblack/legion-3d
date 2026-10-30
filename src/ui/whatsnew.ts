@@ -14,7 +14,15 @@ export function mountWhatsNew(root: HTMLElement, version: string, bullets: reado
   card.append(head, list, report); root.append(card);
   const onPhoto = (event: Event) => { card.style.display = (event as CustomEvent<{ on: boolean }>).detail?.on ? 'none' : ''; };
   window.addEventListener('l3d:photo', onPhoto);
-  const dispose = () => { window.removeEventListener('l3d:photo', onPhoto); card.remove(); };
+  // in the 3D mine the right column is the mine card and the left one the floor map + «Как начать» (up to x≈540): the notice
+  // moves to the top, between them
+  const onMine = (event: Event) => {
+    const on = !!(event as CustomEvent<{ inMine?: boolean }>).detail?.inMine;
+    card.style.right = on ? 'auto' : '22px'; card.style.bottom = on ? 'auto' : '78px';
+    card.style.left = on ? 'max(552px, calc(50% - 105px))' : ''; card.style.top = on ? '118px' : '';
+  };
+  window.addEventListener('l3d:mine-status', onMine);
+  const dispose = () => { window.removeEventListener('l3d:photo', onPhoto); window.removeEventListener('l3d:mine-status', onMine); card.remove(); };
   close.addEventListener('click', dispose);
   return dispose;
 }

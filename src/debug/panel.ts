@@ -8,6 +8,7 @@ import type { SectionInfo } from './dimension';
 import type { CardInfo } from './dimension';
 import { MOCK_GROUPS, QUEST_MOCKS } from './questMocks';
 import { SEG_RU } from './scenes';
+import { setHtml, appendHtml } from '../core/html';
 
 export interface PanelState {
   dim: { inside: boolean; blocked: string; sections: SectionInfo[]; tod: number; info: string };
@@ -72,11 +73,11 @@ export class DebugPanel {
     if (!this.open) return;
     const s = this.api.state();
     const tabs = TABS.map(([id, t, i]) => `<button type="button" role="tab" aria-selected="${id === this.tab}" class="tab${id === this.tab ? ' on' : ''}" data-tab="${id}"><span class="emo">${i}</span>${t}</button>`).join('');
-    this.win.innerHTML = `<div class="hd"><div class="ttl"><span class="emo">🐞</span><b>Отладка</b><small>всё только у тебя в браузере · на сайт ничего не уходит</small></div>
-      <span class="hbtn"><button type="button" class="x" data-a="min" aria-label="${this.min ? 'Развернуть' : 'Свернуть'}" title="${this.min ? 'Развернуть' : 'Свернуть'}">${this.min ? '▾' : '▴'}</button><button type="button" class="x" data-a="close" aria-label="Закрыть">✕</button></span></div><div class="tabs" role="tablist">${tabs}</div>`;
-    this.body.innerHTML = this.tabHtml(s);
+    setHtml(this.win, `<div class="hd"><div class="ttl"><span class="emo">🐞</span><b>Отладка</b><small>всё только у тебя в браузере · на сайт ничего не уходит</small></div>
+      <span class="hbtn"><button type="button" class="x" data-a="min" aria-label="${this.min ? 'Развернуть' : 'Свернуть'}" title="${this.min ? 'Развернуть' : 'Свернуть'}">${this.min ? '▾' : '▴'}</button><button type="button" class="x" data-a="close" aria-label="Закрыть">✕</button></span></div><div class="tabs" role="tablist">${tabs}</div>`);
+    setHtml(this.body, this.tabHtml(s));
     this.win.appendChild(this.body);
-    this.win.insertAdjacentHTML('beforeend', `<div class="ft"><span><i class="kc">F10</i> панель</span><span><i class="kc">Esc</i> закрыть</span><span>прицел + <i class="kc">E</i>/<i class="kc">F</i> — карточка</span></div>`);
+    appendHtml(this.win, `<div class="ft"><span><i class="kc">F10</i> панель</span><span><i class="kc">Esc</i> закрыть</span><span>прицел + <i class="kc">E</i>/<i class="kc">F</i> — карточка</span></div>`);
   }
 
   /** 4 Hz: patch live values without re-rendering (sliders keep working). */
@@ -90,13 +91,13 @@ export class DebugPanel {
       const lb = this.body.querySelector<HTMLElement>('[data-live="plan"]'); if (lb) lb.textContent = `${fmtS(s.scenes.plan)} / ${fmtS(s.scenes.dur)} · ${KIND_LABEL[s.scenes.kind] || s.scenes.kind}${s.scenes.title ? ' — ' + s.scenes.title : ''}`;
     }
     if (this.tab === 'dim') { const i = this.body.querySelector<HTMLElement>('[data-live="dim"]'); if (i) i.textContent = s.dim.info; }
-    if (this.tab === 'bus') { const t = this.body.querySelector<HTMLElement>('[data-live="bus"]'); if (t) t.innerHTML = busRows(s.bus.rows); }
+    if (this.tab === 'bus') { const t = this.body.querySelector<HTMLElement>('[data-live="bus"]'); if (t) setHtml(t, busRows(s.bus.rows)); }
     if (this.tab === 'world') { const b = this.body.querySelector<HTMLElement>('[data-live="bots"]'); if (b) b.textContent = String(s.world.bots); }
   }
 
   card(c: CardInfo): void {
-    this.cardEl.innerHTML = `<div class="ch"><span class="emo">${esc(c.icon || '📦')}</span><b>${esc(c.title)}</b><button type="button" class="x" data-x aria-label="Закрыть">✕</button></div>
-      <table>${c.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>`;
+    setHtml(this.cardEl, `<div class="ch"><span class="emo">${esc(c.icon || '📦')}</span><b>${esc(c.title)}</b><button type="button" class="x" data-x aria-label="Закрыть">✕</button></div>
+      <table>${c.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>`);
     this.cardEl.hidden = false;
     clearTimeout(this.cardT);
     this.cardT = window.setTimeout(() => this.hideCard(), 9000);

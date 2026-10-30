@@ -36,9 +36,11 @@ export function fixtureLayout(): CityLayout {
   };
 }
 
+/** The camp's magic shop (site campmap.js 30.10, fix/camp-magic-shop): between the Storage and the Forge, `magic: true` — present only for a hero with the shop open. */
+export const CAMP_MAGIC = { id: 'magic', title: 'Лавка звездочёта', sub: 'посохи, мантии, амулеты', icon: '🔮', magic: true, hit: [606, 846, 440, 800], door: { x: 722, y: 848 } } as unknown as Building;
 /** The start camp «Перепутье» (test/fixtures/camp-map.json, scripts/fixture-camp.mjs): the same CityLayout shape the
  *  extension builds from window.LGCampMap at runtime (src/net/site.ts buildCampLayout) — free/nearest from the grid. */
-export function campFixtureLayout(styleId = 'cats'): CityLayout {
+export function campFixtureLayout(styleId = 'cats', magic = false): CityLayout {
   const m = camp as any;
   const { C, cols, rows } = m.grid as { C: number; cols: number; rows: number }, G: string = m.grid.G;
   const y0 = m.AREA.y0;
@@ -59,7 +61,7 @@ export function campFixtureLayout(styleId = 'cats'): CityLayout {
   };
   const L = {
     id: 'camp', styleId, W: m.W, H: m.H, QW: 0, area: m.AREA,
-    obstacles: m.OBST as Obstacle[], buildings: (m.BUILDINGS as Building[]).map((b) => ({ ...b, door: { ...b.door } })),
+    obstacles: m.OBST as Obstacle[], buildings: [...(m.BUILDINGS as Building[]), ...(magic ? [CAMP_MAGIC] : [])].map((b) => ({ ...b, door: { ...b.door } })),
     sky: 'linear-gradient(#0f0d2a 0%, #1d1a4a 40%, #3a2f6e 75%, #5a3a7a 100%)',
     free, nearest, camp: campScene({ ...m, FENCE: m.FENCE }), spawn: [m.spawn[0], m.spawn[1]] as [number, number],
   };

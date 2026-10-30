@@ -20,6 +20,8 @@ export interface DmApi {
   open(login: string, o?: { name?: string; bg?: boolean; show?: boolean }): boolean;
   on(key: string, fn: ((why: string) => void) | null): void;
   place?(): void;
+  /** LGDm.dock(key, chatRoot, dmxBox): the chat the DMs live in (null box = detach). */
+  dock?(key: string, sec: Element, box: Element | null): void;
   report?(login: string, reason: string): Promise<boolean> | boolean;
   unread(): number;
   tabs?(): string[];
@@ -103,6 +105,8 @@ export interface DmHooks {
 }
 
 export const DM_KEY = 'l3d-3d';
+/** The key the site's single chat (LGChatOne) docks LGDm under (site-chatone.js: key 'lgChatOne'). */
+export const CO_DM_KEY = 'lgChatOne';
 const TOAST_GAP_MS = 2500;
 const FROM_FRESH_MS = 4000;
 
@@ -159,6 +163,20 @@ export class DmBridge {
     }, 60);
     this.timers.add(t);
   };
+
+  /**
+   * The single chat window (site 30.10 «chatone») registers its «Личные» box with LGDm while it is still detached (its holder is
+   * never in the page), and LGDm drops a dock that is not connected — the DMs would stay in their small floating window over the
+   * chat. Once the window is on the page we register it again (LGDm.dock is idempotent, the site's own call).
+   */
+  adopt(box: HTMLElement) {
+    const lg = this.lg; if (!lg || typeof lg.dock !== 'function' || !box.isConnected || !box.dataset.coBound) return;
+    const dmx = box.querySelector('.cy-chat-dmx');
+    if (!dmx || this.adopted.get(lg) === box) return;
+    this.adopted.set(lg, box);
+    try { lg.dock(CO_DM_KEY, box, dmx); } catch { /* */ }
+  }
+  private adopted = new WeakMap<object, HTMLElement>();
 
   /** LGDm.place(): back into the chat after it was hidden (menu closed, HUD back). */
   place() { try { this.lg?.place?.(); } catch { /* */ } }

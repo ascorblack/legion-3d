@@ -33,7 +33,9 @@ describe('world solidTop', () => {
     const fence = k.inst.placed.get('fence')!.find((p) => p.x > 15)!;
     const t = at(fence.x, fence.z);
     expect(t).toBeGreaterThan(0.5); expect(t).toBeLessThanOrEqual(0.8);
-    for (let y = 1100; y <= 1136; y += 4) expect(top(1800, y), 'y=' + y).toBe(-Infinity);   // (right of the mine cliff)
+    // (right of the mine cliff) open below the wall — or the raised bed along the wall foot (src/world/ledge.ts): a low
+    // finite top under the ledge, never a wall
+    for (let y = 1100; y <= 1136; y += 4) { const v = top(1800, y); expect(v === -Infinity || (v > -1.4 && v < -0.9), 'y=' + y).toBe(true); }
     expect(top(1600, 1050)).toBe(-Infinity);          // open street
   });
   it('fountain rim is standable, its basin is not', () => {

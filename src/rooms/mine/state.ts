@@ -287,6 +287,16 @@ export class MineModel {
   /** Set when a stop must be re-sent (left protection) — the client sends /api/mineStop and clears it. */
   needStop = false;
   constructor(public login: string) { this.login = String(login || '').toLowerCase(); }
+  /** The next view is another mine key's (a floor switch): accept it whatever its version and treat it as a new floor. */
+  fresh = false;
+  /**
+   * Another floor key is opened (site open() starts with a fresh S): forget who is here and the own stone; the floor on
+   * show stays until the new view arrives (the scene keeps drawing it meanwhile). Looks stay.
+   */
+  reset(): void {
+    this.fresh = true; this.myI = -1; this.want = null; this.left = null;
+    this.others.clear(); this.lkWant.clear(); this.nOthers = 0; this.here = null; this.hw = null; this.needStop = false;
+  }
 
   /** Apply a view (st) and/or my record (me) and looks (lk). Mirrors mine.js take0. */
   take(st: MineView | null | undefined, me: MineMe | null | undefined, lk: Record<string, LookRec> | null | undefined, now: number, heroMe?: MineMe | null): TakeResult {
@@ -294,13 +304,14 @@ export class MineModel {
     if (me) this.me = me; else if (heroMe) this.me = heroMe;
     if (lk) for (const [l, v] of Object.entries(lk)) this.looks.set(l, v);
     // late view (poll and SSE interleave) — never roll back
-    if (st && this.st && st.v < this.st.v && st.v > this.st.v - 500 && st.week === this.st.week) st = null;
+    if (st && this.st && !this.fresh && st.v < this.st.v && st.v > this.st.v - 500 && st.week === this.st.week) st = null;
     if (!st) return res;
     if (!st.fl) {
-      if (this.st && this.st.fl && this.st.seed === st.seed && this.st.n === st.n) st = { ...st, fl: this.st.fl };
+      if (this.st && this.st.fl && !this.fresh && this.st.seed === st.seed && this.st.n === st.n) st = { ...st, fl: this.st.fl };
       else { res.needFull = true; return res; }   // a new floor without layout: the client asks for the full view
     }
-    const newFloor = !this.st || this.st.n !== st.n || this.st.seed !== st.seed;
+    const newFloor = !this.st || this.fresh || this.st.n !== st.n || this.st.seed !== st.seed;
+    this.fresh = false;
     const prevDug = this.dug, prevDg = (this.st && this.st.dg) || {}, prevMy = this.myI;
     this.st = st; this.F = floorOf(st); this.G = geomOf(st); this.dug = dugArr(st); this.stAt = now;
     const me_ = this.login;
@@ -398,6 +409,8 @@ export class MineModel {
   /** «Шахта 3.0»: what the lift is doing (site draw3 chip over the cage). */
   liftChip(): string {
     const L = (this.st && this.st.lift) || { st: 'dig' };
+    // site 30.10: the lift's stage is about the deepest floor — on an upper floor the chip only lists the floors
+    if (this.st && this.st.n < (this.st.deep || this.st.n)) return `этажи 1–${this.st.deep}`;
     return L.st === 'fund' ? `сбор ${Math.floor(L.need ? Math.min(100, (L.c || 0) / L.need * 100) : 0)}%` : L.st === 'up' ? 'лифт улучшается' : 'ищем шахту лифта';
   }
   upText(): string {

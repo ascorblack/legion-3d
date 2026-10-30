@@ -7,6 +7,7 @@ import { moneyCompact } from './money';
 import { statIcon } from './icons';
 import { promptView } from './prompt';
 import { MiniMap } from './map';
+import { setHtml } from '../core/html';
 
 const TAU = Math.PI * 2;
 const HINTS_S = 20;
@@ -126,14 +127,14 @@ export class Hud {
     this.xpFill.style.width = `calc(${(xp.pct * 100).toFixed(1)}% - 4px)`;
     this.xpT.textContent = xp.xneed == null ? 'максимум' : `${xp.xin} / ${xp.xneed}`;
     // money
-    this.money.innerHTML = coinsHtml(H.money);
+    setHtml(this.money, coinsHtml(H.money));
     // 29.10: Halloween candies (site hero card «🍬 Конфеты», hero.hw.c) — shown only while the site sends them
     { const hw = (H as { hw?: { c?: unknown } | null }).hw; const on = !!hw; this.candy.hidden = !on; if (on) this.candy.textContent = `🍬 ${Math.max(0, Math.floor(+(hw!.c as number) || 0))}`; }
     if (this.lastMoney != null && H.money !== this.lastMoney) this.floatMoney(H.money - this.lastMoney);
     this.lastMoney = H.money;
     // social
     const s = H.soc;
-    if (s) { this.soc.hidden = false; this.soc.classList.toggle('bad', !!s.bad); this.soc.innerHTML = `<span class="emo">${esc(s.icon)}</span>${esc(s.rankName)} · ${s.score} <span class="mut">#${s.place}</span>`; this.soc.title = `Соц. рейтинг: место ${s.place} из ${s.total}`; }
+    if (s) { this.soc.hidden = false; this.soc.classList.toggle('bad', !!s.bad); setHtml(this.soc, `<span class="emo">${esc(s.icon)}</span>${esc(s.rankName)} · ${s.score} <span class="mut">#${s.place}</span>`); this.soc.title = `Соц. рейтинг: место ${s.place} из ${s.total}`; }
     else this.soc.hidden = true;
     if (this.lastLevel != null && H.level > this.lastLevel) this.levelUp(H.level);
     this.lastLevel = H.level;
@@ -159,7 +160,7 @@ export class Hud {
     if (H && H.ghost) {
       this.ghost.hidden = false;
       const du = +(H.deadUntil || 0);
-      this.ghost.innerHTML = `👻 Пал в Походе${du > Date.now() ? ` · до воскрешения <b>${plainCountdown(du)}</b>` : ''} · раньше — свиток воскрешения`;
+      setHtml(this.ghost, `👻 Пал в Походе${du > Date.now() ? ` · до воскрешения <b>${plainCountdown(du)}</b>` : ''} · раньше — свиток воскрешения`);
       if (du > Date.now()) this.hpT.textContent = '👻 ' + plainCountdown(du);
     } else this.ghost.hidden = true;
   }
@@ -221,7 +222,7 @@ export class Hud {
       if (cs !== this.lastCross) { this.lastCross = cs; this.cross.hidden = !fp; this.cross.classList.toggle('hot', hot); }
       if (this.pDirty) {
         this.pDirty = false;
-        if (this.ptext) { const v = promptView(this.ptext); this.prompt.className = 'prompt on' + (v.muted ? ' soon' : ''); this.prompt.innerHTML = v.html; }
+        if (this.ptext) { const v = promptView(this.ptext); this.prompt.className = 'prompt on' + (v.muted ? ' soon' : ''); setHtml(this.prompt, v.html); }
         else this.prompt.className = 'prompt';
       }
       return;
@@ -236,8 +237,8 @@ export class Hud {
       if (ft) {
         const soon = !!(ft as any).soon;
         this.prompt.className = 'prompt on' + (soon ? ' soon' : '');
-        this.prompt.innerHTML = soon ? `<span class="ic emo">🚧</span>${esc(ft.title)} — скоро откроется`
-          : `<i class="kc">E</i>Войти: ${ft.icon ? `<span class="ic emo">${esc(ft.icon)}</span>` : ''}${esc(ft.title)}`;
+        setHtml(this.prompt, soon ? `<span class="ic emo">🚧</span>${esc(ft.title)} — скоро откроется`
+          : `<i class="kc">E</i>Войти: ${ft.icon ? `<span class="ic emo">${esc(ft.icon)}</span>` : ''}${esc(ft.title)}`);
       } else this.prompt.className = 'prompt';
     }
   }

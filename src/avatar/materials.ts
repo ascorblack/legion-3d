@@ -38,10 +38,50 @@ function applyAlpha(m: THREE.Material, v: Variant, lvl: number, base = 1) {
   if (a < 0.999) { m.transparent = true; m.opacity = a; m.depthWrite = v !== 'g' && a > 0.7; }
 }
 
+/**
+ * Character shading on top of the cel ramp (shared uniforms, one program for every variant):
+ *  - rim: a soft two-tone edge light — cool sky from above, warm lamp from the sides / below — so a character, dark
+ *    ones included, separates from a dark street (added light, only partly scaled by the albedo);
+ *  - fill: a small lift of the shadow side (no pitch-black backs at night);
+ *  - fur / cloth grain: a fine, mostly vertical streak pattern in the model's rest space (sticks to the body while it
+ *    moves), faded out by its own screen-space frequency so it never shimmers at a distance.
+ */
+export const TOON_SHADE = { uRim: { value: 1.0 }, uFill: { value: 0.06 }, uFur: { value: 0.12 } };
+/** The first-person paws: a stronger rim and fill (they sit in the screen corner, against the darkest part of the view). */
+export const TOON_SHADE_VM = { uRim: { value: 1.2 }, uFill: { value: 0.12 }, uFur: { value: 0.12 } };
+function shadeToon(m: THREE.MeshToonMaterial, u = TOON_SHADE): void {
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFurP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFurP = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vFurP; uniform float uRim; uniform float uFill; uniform float uFur;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          // strands: a fine streak round the body (angle about the vertical axis), broken up softly along the height
+          float fa = atan( vFurP.x, vFurP.z ) * 60.0 + sin( vFurP.y * 23.0 ) * 1.3;
+          float fz = 1.0 - smoothstep( 0.5, 1.6, fwidth( fa ) );
+          float fn = sin( fa ) * ( 0.6 + 0.4 * sin( vFurP.y * 61.0 + fa * 0.21 ) );
+          diffuseColor.rgb *= 1.0 + uFur * fn * fz;
+        }`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        {
+          float tNdv = clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );
+          // a crisp band on the top and the sides only (the underside facing away stays in shade, no milky bottom)
+          float tRim = smoothstep( 0.42, 0.8, 1.0 - tNdv ) * ( 1.0 - 0.75 * smoothstep( 0.88, 0.99, 1.0 - tNdv ) ) * smoothstep( -0.35, 0.25, normal.y );   // a band just inside the edge: the ink outline stays bold
+          vec3 rimCol = mix( vec3( 1.0, 0.7, 0.42 ), vec3( 0.55, 0.66, 1.0 ), clamp( normal.y * 1.4 + 0.3, 0.0, 1.0 ) );
+          float alb = max( diffuseColor.r, max( diffuseColor.g, diffuseColor.b ) );
+          totalEmissiveRadiance += rimCol * tRim * uRim * ( 0.5 + 0.5 * alb ) + diffuseColor.rgb * uFill;
+        }`);
+  };
+  m.userData.shade = u;   // dev tuning: any avatar-body material → userData.shade.uRim.value …
+  m.customProgramCacheKey = () => 'avatar-toon';
+}
+
 /** Cel material with vertex colours (body, limbs, gear — everything of a character in one material). */
 export function toonMat(v: Variant = 'n', lvl = ALPHA_LEVELS): THREE.MeshToonMaterial {
   return cached(`toon|${v}|${lvl}`, () => {
     const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradientMap() });
+    shadeToon(m, v === 'vm' ? TOON_SHADE_VM : TOON_SHADE);
     if (v === 'g') { m.color.set('#bcd8ff'); m.emissive.set('#3a5a8a'); m.transparent = true; m.opacity = 0.55 * lvl / ALPHA_LEVELS; m.depthWrite = false; }
     else applyAlpha(m, v, lvl);
     m.name = `avatar-toon-${v}-${lvl}`;

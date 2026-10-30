@@ -29,6 +29,10 @@ export interface Ctx {
   pools?: number[];
   /** Solid tops for jumping (solid.ts): x0 x1 z0 z1 top (m; Infinity = wall). Props add theirs from footprints. Optional. */
   solids?: number[];
+  /** Extra contact-shadow blobs under static pieces (index.ts world:blobs): x, y, z, half-size x, half-size z. Optional. */
+  blobs?: number[];
+  /** Soil rectangles planted with foliage (scatter.ts plantRects): x0 x1 z0 z1 ySoil yFoot zFringe. Optional. */
+  plant?: number[];
 }
 
 export const C = (c: THREE.ColorRepresentation) => new THREE.Color(c);
@@ -155,9 +159,9 @@ export function pyramidRoof(k: Ctx, roofCol: string, cx: number, cz: number, w: 
 export const FACADE_LAYERS = true;
 
 /** Window on a +Z facing wall at `zf`: frame, glass (lit or dark), cross bars, sill, optional shutters / arch. */
-export function windowZ(k: Ctx, x: number, y: number, zf: number, w: number, h: number, lit: boolean, opts: { shutters?: string; arch?: boolean; frame?: string } = {}): void {
+export function windowZ(k: Ctx, x: number, y: number, zf: number, w: number, h: number, lit: boolean, opts: { shutters?: string; arch?: boolean; frame?: string; glass?: string } = {}): void {
   const fr = opts.frame || k.pal.woodD, P = k.pal;
-  const glassCol = lit ? P.glass : '#3a4a7a', gm: BatchKey = lit ? 'emit' : 'glass';
+  const glassCol = lit ? opts.glass || P.glass : '#3a4a7a', gm: BatchKey = lit ? 'emit' : 'glass';
   const t = 0.07;
   if (opts.arch) {
     // arch slab: rect part h/2 + elliptic top h/2 (local 0..1 → y..y+h)

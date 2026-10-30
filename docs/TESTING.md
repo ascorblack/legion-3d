@@ -24,8 +24,13 @@ They need no browser and no network. Fixtures are sanitized copies of real site 
 | file | what |
 |---|---|
 | `store.test.ts` | reactive store: batching of events, chat de-duplication / order / cap, walkers |
-| `bridge.test.ts` | the document_start tee: EventSource named events and watched fetch() JSON reach `__L3D_BUS`, the page still gets its own data |
+| `bridge.test.ts` | the document_start tee: EventSource named events and (while the fetch tee is on) watched fetch() JSON reach `__L3D_BUS`, the page still gets its own data; `window.fetch` untouched until `fetchTee.on()`, restored exactly by `off()` |
+| `fetch-telemetry.test.ts` | the site's real anti-bot probe (`test/fixtures/site-telemetry.js`, mine.js `tlPi`) against the real bridge bundle after the site's own fetch wrapper: `pi` is 0 in 2D, in every start mode, and after 3D → F8; 1 while the tee is on (proves the probe sees it). Also checks the fixture against the newest site dump in `.local` |
+| `site-tee.test.ts` | `replayCityEnter`: City tab already open when 3D starts → another tab, then the City again, so the tee catches `enter` |
 | `world`, `avatar`, `engine*`, `props`, `quest`, `ui-money` | the modules' own logic (layout → geometry, appearance mapping, camera and quality maths…) |
+
+`CHROMIUM=/usr/bin/google-chrome node e2e/fetch-tee.mjs` runs the same probe in real Chromium (needs `npm run build`, no network).
+Live: `node e2e/live.mjs --start=2d --steps='[{"wait":4000},{"pi":"2d"},{"press":"F8"},{"wait":30000},{"pi":"3d"},{"press":"F8"},{"wait":2000},{"pi":"classic"}]'` prints the site's `pi` per mode (0 = nothing detected; 3D on is 1 by design, classic back to 0).
 
 ## 2. Offline demo
 
@@ -124,7 +129,7 @@ in-game overlay (F3).
 
 ## 4. Firefox extension integration (offline)
 
-The Firefox build requires Firefox 128+ because both content scripts use `world: "MAIN"`.
+The Firefox build requires Firefox 140+ (Android 142+): content scripts use `world: "MAIN"` (128+) and AMO wants `data_collection_permissions` (140 / Android 142).
 Unlike the live runner, this check installs the actual extension into a disposable browser profile.
 It serves a local HTTPS fixture under the matching game hostname (mapped to localhost only in that
 profile), so no game account or live server requests are involved. It checks early MAIN-world injection
@@ -162,8 +167,8 @@ npx --yes web-ext@10.8.0 lint --source-dir dist-firefox
 npm run pack:firefox
 ```
 
-`data_collection_permissions` is ignored before desktop Firefox 140; the validator reports this
-compatibility warning when supporting Firefox 128. The `none` declaration describes the existing
-privacy policy (no developer-operated data collection). Existing dynamic `innerHTML` warnings
-must be reviewed separately before signing/submitting to AMO; passing lint is not an AMO approval.
+`data_collection_permissions` needs desktop Firefox 140 / Android 142, so `strict_min_version` is 140.0 and
+`gecko_android.strict_min_version` 142.0: lint reports no manifest compatibility warnings. The `none` declaration describes the
+existing privacy policy (no developer-operated data collection). All UI markup goes through `setHtml()` (`src/core/html.ts`),
+so lint reports no `innerHTML` assignments; passing lint is not an AMO approval.
 The resulting ZIP is unsigned and can be loaded temporarily through `about:debugging`.

@@ -13,41 +13,82 @@ const strip = (g: THREE.BufferGeometry, keep: string[]) => {
   return g;
 };
 
+const _wn = new THREE.Vector3();
 /**
- * A squat ribbed pumpkin of radius 1 (6 ribs, flattened to 0.78 high, dimpled poles) with a stalk and two little cat ears.
- * Vertex colours: warm orange with darker rib valleys; stalk green-brown. UVs: the sphere's (a face texture maps at
- * u = .25 → +Z, u = .75 → −Z); the stalk's UVs sit at (0,0), the black corner of the emission map.
+ * A squat ribbed pumpkin of radius 1 (6 ribs, 0.7 high below the centre, flat dimpled base), a curved, tapering
+ * five-sided stalk with ridges. Indexed, ≈ 270 triangles (lod 1, the far set: ≈ 85) (the base is a flat fan: it sits
+ * on the ground or on another pumpkin; the old sphere's hidden bottom rows are gone).
+ * Vertex colours: warm orange with darker rib valleys and a paler crest; stalk green-brown. UVs: the sphere's
+ * (u = .25 → +Z, u = .75 → −Z) so the carved face map lands there; the stalk sits at uv (0,0), the black corner.
  */
-export function pumpkinGeometry(): THREE.BufferGeometry {
-  const body = new THREE.SphereGeometry(1, 12, 7);
-  const p = body.getAttribute('position'), c = new Float32Array(p.count * 3);
-  for (let i = 0; i < p.count; i++) {
-    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const th = Math.atan2(z, x), rib = Math.cos(th * 6);                    // +1 on a rib crest, −1 in a valley
-    const h = Math.sqrt(x * x + z * z), k = 1 + 0.055 * rib * Math.min(1, h * 1.3);
-    x *= k; z *= k;
-    const pole = Math.max(0, Math.abs(y) - 0.86) / 0.14;                    // 0..1 within the polar cap
-    y = y * 0.78 - Math.sign(y) * 0.1 * pole * pole;                        // dimple
-    p.setXYZ(i, x, y, z);
-    const shade = 0.9 + 0.1 * rib * Math.min(1, h * 1.4) - 0.1 * Math.max(0, -p.getY(i) - 0.5);
-    c[i * 3] = 1.0 * shade; c[i * 3 + 1] = 0.42 * shade; c[i * 3 + 2] = 0.05 * shade;
+export function pumpkinGeometry(lod: 0 | 1 = 0): THREE.BufferGeometry {
+  const S = lod ? 12 : 18, pos: number[] = [], uv: number[] = [], colr: number[] = [], idx: number[] = [];
+  // body profile: polar angle rows from the top dimple to the base ring (θ in [0, π]); the base is flattened
+  const TH = lod ? [0.0, 0.95, 1.85, 2.7] : [0.0, 0.55, 1.15, 1.75, 2.3, 2.7];
+  const prof = (th: number): [number, number] => {
+    let y = Math.cos(th), h = Math.sin(th);
+    if (th < 0.01) y = 0.78 - 0.12;                                 // top dimple centre (sunken)
+    else y = y * 0.76 - (th < 0.6 ? 0.07 : 0);
+    if (th > 2.5) { y = -0.7; h *= 1.05; }                          // flat base ring
+    return [h, y];
+  };
+  const v0 = 0;
+  for (let j = 0; j < TH.length; j++) {
+    const [h, y] = prof(TH[j]);
+    for (let i = 0; i <= S; i++) {
+      const u = i / S, ph = u * Math.PI * 2;
+      // 6 lobes with creased valleys: |sin 3φ|^0.4 is round on the lobe and pinched in the valley; the faces (φ = 90°, 270°)
+      // sit on a lobe's crest
+      const lobe = Math.pow(Math.abs(Math.sin(ph * 3)), 0.4), rib = lobe * 2 - 1;   // valleys ON the vertex columns (every 60°)
+      const k = 1 + 0.2 * (lobe - 0.75) * Math.min(1, h * 1.3);
+      const x = -Math.cos(ph) * h * k, z = Math.sin(ph) * h * k;
+      pos.push(x, y, z); uv.push(u, 1 - TH[j] / Math.PI);
+      const shade = 0.84 + 0.16 * rib * Math.min(1, h * 1.4) - 0.18 * Math.max(0, -y - 0.35) + 0.07 * Math.max(0, y - 0.4);
+      const valley = Math.max(0, -rib) * Math.min(1, h * 1.4);      // valleys: deeper, a touch greener-brown
+      colr.push(1.0 * shade * (1 - 0.3 * valley), (0.36 + 0.05 * rib - 0.08 * valley) * shade, (0.035 + 0.02 * valley) * shade);
+    }
   }
-  body.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  for (let j = 0; j + 1 < TH.length; j++) for (let i = 0; i < S; i++) {
+    const a = v0 + j * (S + 1) + i, b = a + S + 1;
+    if (j > 0) idx.push(a, b, a + 1);
+    idx.push(a + 1, b, b + 1);
+  }
+  const base = pos.length / 3;                                       // base fan centre (slightly domed up: a dimple)
+  pos.push(0, -0.66, 0); uv.push(0.5, 0); colr.push(0.55, 0.22, 0.04);
+  const ring = (TH.length - 1) * (S + 1);
+  for (let i = 0; i < S; i++) idx.push(base, ring + i + 1, ring + i);
+  const body = new THREE.BufferGeometry();
+  body.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); body.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  body.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3)); body.setIndex(idx);
   body.computeVertexNormals();
-  const stalk = new THREE.CylinderGeometry(0.1, 0.17, 0.3, 6, 1);
-  stalk.scale(0.8, 0.8, 0.8); stalk.translate(0, 0.12, 0); stalk.rotateZ(-0.22); stalk.translate(0.0, 0.64, 0);
-  const sp = stalk.getAttribute('position'), su = new Float32Array(sp.count * 2);   // all (0,0)
-  stalk.setAttribute('uv', new THREE.BufferAttribute(su, 2));
-  col(stalk, 0.36, 0.52, 0.2, (_x, y) => 0.8 + 0.4 * Math.min(1, (y - 0.64) / 0.25));
-  // little cat ears on the shoulders (the city is a cat town): two 4-sided cones leaning outwards
-  const ears = [-1, 1].map((sx) => {
-    const e = new THREE.ConeGeometry(0.2, 0.36, 4, 1); e.rotateY(Math.PI / 4); e.scale(1, 1, 0.55);
-    e.rotateZ(-sx * 0.38); e.translate(sx * 0.46, 0.58, -0.02);
-    e.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(e.getAttribute('position').count * 2), 2));
-    return col(e, 1.0, 0.4, 0.05, (_x, y) => 0.8 + 0.3 * Math.min(1, Math.max(0, (y - 0.4) / 0.4)));
+  // the top pole column shares one position per u: average its normals to straight up (no pinched shading)
+  { const n = body.getAttribute('normal') as THREE.BufferAttribute; for (let i = 0; i <= S; i++) n.setXYZ(i, 0, 1, 0);
+    for (let j = 1; j < TH.length; j++) {   // weld the u = 0 / u = 1 seam
+      const a = j * (S + 1), b = a + S;
+      _wn.set(n.getX(a) + n.getX(b), n.getY(a) + n.getY(b), n.getZ(a) + n.getZ(b)).normalize();
+      n.setXYZ(a, _wn.x, _wn.y, _wn.z); n.setXYZ(b, _wn.x, _wn.y, _wn.z);
+    } }
+  // stalk: 5 sides × 3 rings, tapering and curling over, ridged (alternate dark / light sides), flat cut top
+  const sp: number[] = [], sc: number[] = [], si: number[] = [], SN = 5, RINGS = lod ? [[0, 0.14], [0.4, 0.075]] : [[0, 0.14], [0.15, 0.1], [0.29, 0.085], [0.4, 0.075]];
+  RINGS.forEach(([t, r], j) => {
+    const bend = t * t * 2.0, cx = bend * 0.5, cy = 0.6 + t * (1 - t * 0.5);
+    for (let i = 0; i < SN; i++) {
+      const a = (i / SN) * Math.PI * 2 + j * 0.25, rr = r * (i % 2 ? 0.82 : 1);
+      sp.push(cx + Math.cos(a) * rr, cy, Math.sin(a) * rr);
+      const k = (0.62 + 0.38 * (j / (RINGS.length - 1))) * (i % 2 ? 0.8 : 1.05);
+      sc.push(0.36 * k, 0.4 * k, 0.16 * k);
+    }
   });
-  strip(body, ['position', 'normal', 'uv', 'color']); strip(stalk, ['position', 'normal', 'uv', 'color']); for (const e of ears) strip(e, ['position', 'normal', 'uv', 'color']);
-  const g = mergeGeometries([body.toNonIndexed(), stalk.toNonIndexed(), ...ears.map((e) => e.toNonIndexed())], false)!;
+  for (let j = 0; j + 1 < RINGS.length; j++) for (let i = 0; i < SN; i++) {
+    const a = j * SN + i, b = j * SN + (i + 1) % SN, c = a + SN, d = b + SN;
+    si.push(a, c, b, b, c, d);
+  }
+  const top = sp.length / 3 - SN; for (let i = 1; i + 1 < SN; i++) si.push(top, top + i + 1, top + i);
+  const stalk = new THREE.BufferGeometry();
+  stalk.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); stalk.setAttribute('color', new THREE.Float32BufferAttribute(sc.map((v, i) => (Math.floor(i / 3) >= top ? v * 1.25 : v)), 3));
+  stalk.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((sp.length / 3) * 2), 2)); stalk.setIndex(si); stalk.computeVertexNormals();
+  const parts = [body, stalk].map((g) => strip(g, ['position', 'normal', 'uv', 'color']));
+  const g = mergeGeometries(parts, false)!;
   g.computeBoundingSphere();
   return g;
 }
@@ -65,9 +106,9 @@ export function batGeometry(): THREE.BufferGeometry {
     else { tri(R, B, A); tri(R, C, B); tri(R, D, C); tri(R, E, D); tri(R, F, E); }
   }
   const wings = new THREE.BufferGeometry(); wings.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  const body = new THREE.SphereGeometry(0.055, 6, 5); body.scale(1, 0.9, 1.5); body.translate(0, 0.0, 0.03);
-  const head = new THREE.SphereGeometry(0.04, 6, 4); head.translate(0, 0.012, -0.075);
-  const ears = [-1, 1].map((s) => { const e = new THREE.ConeGeometry(0.018, 0.06, 4); e.translate(s * 0.026, 0.07, -0.082); return e; });
+  const body = new THREE.SphereGeometry(0.055, 6, 4); body.scale(1, 0.9, 1.5); body.translate(0, 0.0, 0.03);
+  const head = new THREE.SphereGeometry(0.04, 5, 3); head.translate(0, 0.012, -0.075);
+  const ears = [-1, 1].map((s) => { const e = new THREE.ConeGeometry(0.018, 0.06, 3, 1, true); e.translate(s * 0.026, 0.07, -0.082); return e; });
   const wp = wings.getAttribute('position'), wc = new Float32Array(wp.count * 3);
   for (let i = 0; i < wp.count; i++) { const e = Math.min(1, Math.abs(wp.getX(i)) / 0.34); wc[i * 3] = 0.5 + 0.4 * e; wc[i * 3 + 1] = 0.3 + 0.22 * e; wc[i * 3 + 2] = 0.8 + 0.15 * e; }   // lilac, lighter at the tips
   wings.setAttribute('color', new THREE.BufferAttribute(wc, 3));
@@ -80,16 +121,16 @@ export function batGeometry(): THREE.BufferGeometry {
 
 /**
  * A ghost cat lantern ≈ 0.62 m tall: lathe body with a wavy hem, two pointed ears, big dark eyes, pink cheeks and a
- * nose, facing +Z. Vertex colours only (drawn unlit, slightly translucent).
+ * nose, facing +Z. Vertex colours + normals (the material adds a soft rim / translucency), ≈ 400 triangles.
  */
 export function ghostGeometry(): THREE.BufferGeometry {
   const prof: THREE.Vector2[] = [];
   const H = 0.62;
-  for (let i = 0; i <= 10; i++) {            // dome: from the top pole down to the widest point
-    const a = (i / 10) * (Math.PI / 2);
-    prof.push(new THREE.Vector2(Math.sin(a) * 0.27, H - 0.27 + Math.cos(a) * 0.27));
+  for (let i = 0; i <= 6; i++) {             // dome: from the top pole down to the widest point
+    const a = (i / 6) * (Math.PI / 2);
+    prof.push(new THREE.Vector2(Math.max(0.001, Math.sin(a) * 0.27), H - 0.27 + Math.cos(a) * 0.27));
   }
-  prof.push(new THREE.Vector2(0.27, 0.2), new THREE.Vector2(0.285, 0.06), new THREE.Vector2(0.3, 0.0));
+  prof.push(new THREE.Vector2(0.27, 0.2), new THREE.Vector2(0.3, 0.0));
   prof.reverse();                            // lathe wants bottom → top for outward normals
   const body = new THREE.LatheGeometry(prof, 12);
   const p = body.getAttribute('position');
@@ -98,16 +139,17 @@ export function ghostGeometry(): THREE.BufferGeometry {
     if (y < 0.12) { const th = Math.atan2(p.getZ(i), p.getX(i)); p.setY(i, y + (0.05 * (Math.cos(th * 4) * 0.5 + 0.5)) * (1 - y / 0.12)); }
   }
   body.computeVertexNormals();
-  col(body, 0.93, 0.92, 1.0, (_x, y) => 0.82 + 0.18 * Math.min(1, y / H));
-  const ear = (s: number) => { const e = new THREE.ConeGeometry(0.095, 0.22, 4); e.rotateY(Math.PI / 4); e.rotateZ(-s * 0.3); e.translate(s * 0.16, H - 0.005, 0.0); return col(e, 0.97, 0.9, 1.0); };
-  const earIn = (s: number) => { const e = new THREE.ConeGeometry(0.058, 0.15, 4); e.rotateY(Math.PI / 4); e.rotateZ(-s * 0.3); e.translate(s * 0.16 + s * 0.004, H - 0.015, 0.05); return col(e, 1.0, 0.62, 0.8); };
-  const eye = (s: number) => { const e = new THREE.SphereGeometry(0.036, 8, 6); e.scale(0.85, 1.25, 0.5); e.translate(s * 0.095, 0.4, 0.255); return col(e, 0.08, 0.05, 0.16); };
-  const cheek = (s: number) => { const e = new THREE.SphereGeometry(0.04, 8, 5); e.scale(1.2, 0.7, 0.4); e.translate(s * 0.17, 0.32, 0.225); return col(e, 1.0, 0.55, 0.7); };
-  const nose = new THREE.SphereGeometry(0.018, 6, 4); nose.scale(1.2, 0.8, 0.6); nose.translate(0, 0.345, 0.27); col(nose, 1.0, 0.5, 0.65);
-  const mouthL = new THREE.TorusGeometry(0.024, 0.006, 4, 8, Math.PI); mouthL.rotateZ(Math.PI); mouthL.translate(-0.026, 0.31, 0.262); col(mouthL, 0.1, 0.06, 0.18);
+  col(body, 0.93, 0.92, 1.0, (_x, y) => 0.8 + 0.2 * Math.min(1, y / H));
+  const ear = (s: number) => { const e = new THREE.ConeGeometry(0.095, 0.22, 4, 1, true); e.rotateY(Math.PI / 4); e.rotateZ(-s * 0.3); e.translate(s * 0.16, H - 0.005, 0.0); return col(e, 0.97, 0.9, 1.0); };
+  const earIn = (s: number) => { const e = new THREE.ConeGeometry(0.058, 0.15, 3, 1, true); e.rotateZ(-s * 0.3); e.translate(s * 0.16 + s * 0.004, H - 0.015, 0.05); return col(e, 1.0, 0.62, 0.8); };
+  const eye = (s: number) => { const e = new THREE.SphereGeometry(0.036, 7, 4); e.scale(0.85, 1.25, 0.5); e.translate(s * 0.095, 0.4, 0.255); return col(e, 0.08, 0.05, 0.16, (_x, y) => (y > 0.425 ? 2.6 : 1)); };
+  const cheek = (s: number) => { const e = new THREE.SphereGeometry(0.04, 6, 3); e.scale(1.2, 0.7, 0.4); e.translate(s * 0.17, 0.32, 0.225); return col(e, 1.0, 0.55, 0.7); };
+  const nose = new THREE.SphereGeometry(0.018, 5, 3); nose.scale(1.2, 0.8, 0.6); nose.translate(0, 0.345, 0.27); col(nose, 1.0, 0.5, 0.65);
+  const mouthL = new THREE.TorusGeometry(0.024, 0.006, 3, 6, Math.PI); mouthL.rotateZ(Math.PI); mouthL.translate(-0.026, 0.31, 0.262); col(mouthL, 0.1, 0.06, 0.18);
   const mouthR = mouthL.clone(); mouthR.translate(0.052, 0, 0);
-  const whisker = (s: number, k: number) => { const e = new THREE.BoxGeometry(0.15, 0.006, 0.006); e.rotateZ(s * k * 0.18); e.translate(s * 0.265, 0.325 + k * 0.025, 0.2); e.rotateY(-s * 0.35); return col(e, 0.55, 0.5, 0.75); };
-  const parts = [body, ear(-1), ear(1), earIn(-1), earIn(1), eye(-1), eye(1), cheek(-1), cheek(1), nose, mouthL, mouthR, whisker(-1, -1), whisker(-1, 1), whisker(1, -1), whisker(1, 1)].map((g) => strip(g.index ? g.toNonIndexed() : g, ['position', 'color']));
+  // whiskers: thin flat quads (2 triangles each) instead of boxes
+  const whisker = (s: number, k: number) => { const e = new THREE.PlaneGeometry(0.15, 0.007); e.rotateZ(s * k * 0.18); e.translate(s * 0.265, 0.325 + k * 0.025, 0.2); e.rotateY(-s * 0.35); return col(e, 0.55, 0.5, 0.75); };
+  const parts = [body, ear(-1), ear(1), earIn(-1), earIn(1), eye(-1), eye(1), cheek(-1), cheek(1), nose, mouthL, mouthR, whisker(-1, -1), whisker(-1, 1), whisker(1, -1), whisker(1, 1)].map((g) => strip(g.index ? g.toNonIndexed() : g, ['position', 'normal', 'color']));
   const g = mergeGeometries(parts, false)!;
   g.computeBoundingSphere();
   return g;
@@ -124,8 +166,11 @@ export const cornerQuad = () => { const g = new THREE.PlaneGeometry(1, 1); g.tra
  * purple / orange pennants, in turn. `cable` = flat x,y,z,x,y,z… segment list (LineSegments positions).
  * Even-numbered shapes come first, so a prefix of the draw range is an evenly spaced part (`userData.cum[k]` = vertex
  * count of the first k shapes). Attributes: position, color, aHang (0 at the cable, 1 at the tip: sways in the shader).
+ * `strings` > 0 reserves that many thin cords at the START of the buffer (12 vertices each: two crossed ribbons, not
+ * swaying), placed later with `setCord` — the lanterns' strings and wall brackets share the bunting's draw call;
+ * `userData.cum` then counts them in (cum[0] = strings · 12).
  */
-export function buntingGeometry(cable: ArrayLike<number>, step = 0.8, max = 260): THREE.BufferGeometry {
+export function buntingGeometry(cable: ArrayLike<number>, step = 0.8, max = 260, strings = 0): THREE.BufferGeometry {
   const pts: { x: number; y: number; z: number; tx: number; tz: number }[] = [];
   let acc = 0, px = NaN, py = NaN, pz = NaN;
   for (let i = 0; i + 5 < cable.length; i += 6) {
@@ -146,7 +191,9 @@ export function buntingGeometry(cable: ArrayLike<number>, step = 0.8, max = 260)
     { tris: [[-0.12, 0, 0.12, 0, 0, -0.14], [-0.12, 0, -0.12, -0.3, 0, -0.14], [0.12, 0, 0.12, -0.3, 0, -0.14], [-0.12, -0.3, -0.06, -0.23, 0, -0.14], [0.12, -0.3, 0.06, -0.23, 0, -0.14], [-0.06, -0.23, 0, -0.3, 0, -0.14], [0.06, -0.23, 0, -0.3, 0, -0.14]], col: [1, 0.96, 1] },   // ghost
     { tris: [[-0.14, 0, 0.14, 0, 0, -0.4]], col: [1, 0.5, 0.1] },                                                  // orange pennant
   ];
-  const pos: number[] = [], colr: number[] = [], hang: number[] = [], cum: number[] = [0];
+  const pos: number[] = [], colr: number[] = [], hang: number[] = [];
+  for (let i = 0; i < strings * CORD_V; i++) { pos.push(0, 0, 0); colr.push(0.14, 0.1, 0.22); hang.push(0); }
+  const cum: number[] = [pos.length / 3];
   for (const pi of order) {
     const p = pts[pi], sh = SHAPES[pi % SHAPES.length], k0 = 0.8;
     for (const t of sh.tris) for (let v = 0; v < 3; v++) {
@@ -159,7 +206,30 @@ export function buntingGeometry(cable: ArrayLike<number>, step = 0.8, max = 260)
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3)); g.setAttribute('aHang', new THREE.Float32BufferAttribute(hang, 1));
-  g.userData.cum = cum;
+  g.userData.cum = cum; g.userData.cords = strings;
   g.computeBoundingSphere();
   return g;
+}
+
+/** Vertices per cord in `buntingGeometry(…, strings)`. */
+export const CORD_V = 12;
+const _ca = new THREE.Vector3(), _cb = new THREE.Vector3(), _cd = new THREE.Vector3(), _c1 = new THREE.Vector3(), _c2 = new THREE.Vector3();
+/**
+ * Place cord `i` from (ax, ay, az) to (bx, by, bz), `w` metres thick (two crossed ribbons); w = 0 collapses it.
+ * Writes positions only (call `needsUpdate` once after a batch).
+ */
+export function setCord(g: THREE.BufferGeometry, i: number, ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number): void {
+  const a = g.getAttribute('position') as THREE.BufferAttribute, o = i * CORD_V;
+  _ca.set(ax, ay, az); _cb.set(bx, by, bz); _cd.subVectors(_cb, _ca);
+  const len = _cd.length();
+  if (!(len > 1e-5) || !(w > 0)) { for (let k = 0; k < CORD_V; k++) a.setXYZ(o + k, ax, ay, az); return; }
+  _cd.multiplyScalar(1 / len);
+  _c1.set(0, 1, 0); if (Math.abs(_cd.y) > 0.9) _c1.set(1, 0, 0);
+  _c1.cross(_cd).normalize(); _c2.crossVectors(_cd, _c1).normalize();
+  let k = o;
+  for (const s of [_c1, _c2]) {
+    const hx = s.x * w * 0.5, hy = s.y * w * 0.5, hz = s.z * w * 0.5;
+    a.setXYZ(k++, ax - hx, ay - hy, az - hz); a.setXYZ(k++, ax + hx, ay + hy, az + hz); a.setXYZ(k++, bx + hx, by + hy, bz + hz);
+    a.setXYZ(k++, ax - hx, ay - hy, az - hz); a.setXYZ(k++, bx + hx, by + hy, bz + hz); a.setXYZ(k++, bx - hx, by - hy, bz - hz);
+  }
 }

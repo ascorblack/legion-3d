@@ -28,6 +28,7 @@ export function buildTerrain(k: Ctx, L: CityLayout, s: GroundSpec): TerrainOut {
   const P = k.pal, W = toX(L.W), xs0 = -1.5, xs1 = W + 1.5;
   const zEnd = toZ(L.area.y1) + 0.8;
   const stairsM = s.stairs.map((r) => [toX(r[0]), toX(r[1])] as [number, number]);
+  sidewalk(k, xs0, xs1);
   if (!s.hasLow) {
     flatQuad(k, 'paving', '#ffffff', xs0, xs1, BACK_Z, zEnd, 0, 2.4);
     cityWalls(k, W, 0, zEnd);
@@ -45,7 +46,8 @@ export function buildTerrain(k: Ctx, L: CityLayout, s: GroundSpec): TerrainOut {
     k.colliders.push(a, b, 0, 0.85, wallZ - 0.3, wallZ);   // railing: keeps the TP camera on the street side, not behind the bars
     // railing on top
     // (waist-high for the ~1.35 m chibis: top ≈ 0.77 m, under the 1.0 m jump apex — you can hop over and drop down)
-    for (let x = a + 1; x <= b - 0.9; x += 2) k.inst.add('fence', x, 0.12, wallZ - 0.15, 0, 1, 0.72);
+    // (end posts 1 cm clear of the stair cheek walls: never in the cheek's brick plane)
+    for (let x = a + 1.05; x <= b - 0.95; x += 2) k.inst.add('fence', x, 0.12, wallZ - 0.15, 0, 1, 0.72);
   }
   for (const [a, b] of stairsM) {
     flatQuad(k, 'paving', '#ffffff', a, b, BACK_Z, r0, 0, 2.4);
@@ -84,6 +86,7 @@ export function buildTerrain(k: Ctx, L: CityLayout, s: GroundSpec): TerrainOut {
     for (const [a, b] of keep(xs0, xs1, brM)) {
       box(k, 'stone', shade(P.stone, 0.15), a, b, lowH - 0.02, lowH + 0.16, c0 - 0.35, c0 + 0.05, 0.8);
       box(k, 'stone', shade(P.stone, 0.15), a, b, lowH - 0.02, lowH + 0.16, c1 - 0.05, c1 + 0.35, 0.8);
+      (k.solids ||= []).push(a, b, c0 - 0.35, c0 + 0.05, lowH + 0.16, a, b, c1 - 0.05, c1 + 0.35, lowH + 0.16);   // a kerb you step on
     }
     // bridges: humped plank deck along Z + side rails
     for (const [a, b] of brM) {
@@ -111,6 +114,28 @@ export function buildTerrain(k: Ctx, L: CityLayout, s: GroundSpec): TerrainOut {
   } else flatQuad(k, 'lowPaving', '#ffffff', xs0, xs1, c0, zEnd, lowH, 2.4);
   cityWalls(k, W, lowH, zEnd);
   return { waterMeshKeys: ['water'], zEnd };
+}
+
+/**
+ * The pavement along the facades of the upper street: big setts from under the house fronts to a kerb line,
+ * then a dark drain channel before the cobbled roadway — the street reads as pavement | kerb | gutter | road instead of
+ * one uniform cobble sheet. Tops 6 mm / 1.15 cm over the paving (flush: the seasonal decorations stand on the street level) (no shared planes; under the 3 cm a foot notices — no solid, the Halloween
+ * facade probes keep seeing the open street).
+ */
+export const KERB_Z = 1.083;
+export function sidewalk(k: Ctx, xs0: number, xs1: number): void {
+  const P = k.pal;
+  // (the lower street's setts, laid bigger: lit by the lamp pools / contact-darkened like the roadway)
+  box(k, 'lowPaving', '#ffffff', xs0, xs1, -0.02, 0.006, -1.237, KERB_Z, 3.4);
+  // kerb stones (1.1–1.4 m, 5 mm joints, slightly different tints)
+  let x = xs0, i = 0;
+  while (x < xs1 - 0.05) {
+    const l = Math.min(xs1 - x, 1.1 + ((i * 7) % 4) * 0.1);
+    box(k, 'stone', shade(P.stone, 0.16 + ((i * 5) % 3) * 0.04), x + 0.0025, x + l - 0.0025, -0.05, 0.0115, KERB_Z, KERB_Z + 0.2, 0.6);
+    x += l; i++;
+  }
+  // drain channel: a strip of darker setts along the kerb
+  box(k, 'stone', shade(P.stone, -0.35), xs0, xs1, -0.02, 0.0065, KERB_Z + 0.2, KERB_Z + 0.42, 0.45);
 }
 
 /** Low front wall with battlements at the end of the lower street, side walls, gate towers in the corners. */

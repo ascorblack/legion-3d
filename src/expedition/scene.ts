@@ -58,6 +58,7 @@ export class ExpeditionScene implements RoomScene {
   private setKey = '';
   private boss: Boss | null = null;
   private platforms: THREE.InstancedMesh | null = null;
+  private platLight: THREE.PointLight | null = null;
   private platNums: Label[] = [];
   private platSink: number[] = [];
   private bossSign: Label;
@@ -147,7 +148,7 @@ export class ExpeditionScene implements RoomScene {
     const tKey = `${biome}|${mode}|${night}`;
     if (tKey !== this.tKey) {
       this.terrain?.dispose();
-      this.terrain = new Terrain(this.mats, biome, mode, { night, seed: (jhash(s.ter || biome) % 1000) + 3 });
+      this.terrain = new Terrain(this.mats, biome, mode, { night, seed: (jhash(s.ter || biome) % 1000) + 3, quality: this.env.quality });
       this.root.add(this.terrain.root);
       this.tKey = tKey;
       if (this.sceneRef) this.terrain.apply(this.sceneRef);
@@ -174,6 +175,7 @@ export class ExpeditionScene implements RoomScene {
 
   private clearPlatforms() {
     if (this.platforms) { this.platforms.dispose(); this.platforms.removeFromParent(); this.platforms = null; }
+    if (this.platLight) { this.platLight.dispose(); this.platLight.removeFromParent(); this.platLight = null; }
     for (const l of this.platNums) l.dispose();
     this.platNums = []; this.platSink = [];
   }
@@ -371,12 +373,14 @@ export class ExpeditionScene implements RoomScene {
     }
   }
 
+  private dustT = 0;
   private dropLeft: number[] = [];
   /** A blow landed on foe i: big hit fx, its hp drop number once. */
   private landed(A: FoeActor | null, x: number, y: number, z: number, dx: number, dz: number, col: THREE.Color) {
     this.fx.impact(x, y, z, dx, dz, col);
     this.fx.emit(1, x, y + 0.2, z, 0, 0.6, 0, 0.28, 1.0, 0.3, 1, 0.95, 0.6, 1, 0, 0, false, this.fx.rnd() * 6, 8);
     this.fx.ring(x, 0.05, z, 0.2, 1.4, 0.35, '#fff2c8', 1, 0.2);
+    if (this.terrain) { const d = this.terrain.dust; this.fx.dust(x, 0, z, 7, d.r, d.g, d.b, 1.0, 0.8); this.decals.scorch(x, z); }
     this.shake = Math.max(this.shake, 0.18);
     if (A) { this.foes.hurt(A); this.popDrop(this.foes.list.indexOf(A)); }
   }
@@ -476,6 +480,8 @@ export class ExpeditionScene implements RoomScene {
       this.platforms.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, Z.length) * 3).fill(1), 3);
       this.platforms.frustumCulled = false; this.platforms.name = 'exp-platforms';
       this.root.add(this.platforms);
+      if (!this.platLight) { this.platLight = new THREE.PointLight('#3ae8ff', 16, 15, 1.6); this.platLight.position.set(0, 1.2, -1); this.root.add(this.platLight); }
+      { let cx = 0, cz = 0; for (const z of Z) { cx += z.x; cz += z.z; } this.platLight.position.set(cx / Math.max(1, Z.length), 1.2, cz / Math.max(1, Z.length)); }
       for (const z of Z) { const l = new Label('num', 128, 128, 0.85); l.set(String(z.n)); this.root.add(l.obj); this.platNums.push(l); this.platSink.push(z.gone ? 1 : 0); }
     }
   }
@@ -516,9 +522,18 @@ export class ExpeditionScene implements RoomScene {
       if (e.at <= this.clock) { this.timeline.splice(i, 1); i--; try { e.run(); } catch (err) { console.warn('[l3d] expedition anim', err); } }
     }
     const s = this.state;
-    this.decals.begin(); this.bars.begin();
+    this.decals.begin(); this.decals.marksStep(dt); this.bars.begin();
     if (s) {
-      if (s.kind === 'travel') { this.travel += dt * 1.9; this.terrain?.scroll(this.travel); }
+      if (s.kind === 'travel') {
+        this.travel += dt * 1.9; this.terrain?.scroll(this.travel);
+        // footstep dust behind a couple of walkers (cheap: ~9 puffs per second)
+        this.dustT -= dt;
+        if (this.dustT <= 0 && this.env.quality > 0 && this.terrain) {
+          this.dustT = 0.22;
+          const A = this.crowd.actors, d = this.terrain.dust;
+          for (let k = 0; k < 2 && A.length; k++) { const a = A[Math.floor(this.fx.rnd() * A.length)]; this.fx.dust(a.x - 0.25, 0, a.z, 1, d.r, d.g, d.b, 0.45, 0.35); }
+        }
+      }
       this.labelT += dt;
       this.relabel = this.labelT >= 0.25 || s !== this.lastLabelS;
       if (this.relabel) { this.labelT = 0; this.lastLabelS = s; }
@@ -537,6 +552,7 @@ export class ExpeditionScene implements RoomScene {
     this.floats.update(dt);
     const cam = camera as THREE.PerspectiveCamera;
     this.camera(dt, t, cam, s);
+    this.crowd.declutter(cam);
     this.fx.update(dt, cam, (typeof innerHeight === 'number' ? innerHeight : 720));
   }
 
@@ -616,6 +632,7 @@ export class ExpeditionScene implements RoomScene {
             else if (z.goal) this.decals.add(z.x, y + 0.06, z.z, r * 1.25, '#3aff6a', 1, 0.7, 6);
             else if (z.safe) this.decals.add(z.x, y + 0.06, z.z, r * 1.1, '#3aff6a', 0.7, 0, 0);
             if (z.mine) this.decals.add(z.x, y + 0.07, z.z, r * 0.55, '#ffd34d', 0.8, 0, 0);
+            if (!z.danger && !z.goal && !z.safe) this.decals.add(z.x, y + 0.03, z.z, r * 1.5, '#3ae8ff', 0.2, 1, 1.6);   // rune glow bleeding onto the ground
           }
         }
         this.platforms.instanceMatrix.needsUpdate = true;
@@ -645,9 +662,9 @@ export class ExpeditionScene implements RoomScene {
 
   /** Soft contact shadows under everybody (grounds the figures, separates a crowd). */
   private shadows() {
-    for (const a of this.crowd.actors) this.decals.add(a.x, 0.005, a.z, 0.42, '#000000', 0.55, 1, 0);
-    for (const A of this.foes.list) if (!(A.dead && A.deadT > 7)) this.decals.add(A.x, 0.005, A.z, this.foes.radius(A) * 1.1, '#000000', 0.5, 1, 0);
-    if (this.boss && !this.boss.dead) this.decals.add(this.boss.x, 0.005, this.boss.z, 1.0 * this.boss.scale, '#000000', 0.55, 1, 0);
+    for (const a of this.crowd.actors) this.decals.add(a.x, 0.005, a.z, 0.5, '#000000', 1, 1, 0);
+    for (const A of this.foes.list) if (!(A.dead && A.deadT > 7)) this.decals.add(A.x, 0.005, A.z, this.foes.radius(A) * 1.25, '#000000', 0.95, 1, 0);
+    if (this.boss && !this.boss.dead) this.decals.add(this.boss.x, 0.005, this.boss.z, 1.15 * this.boss.scale, '#000000', 0.95, 1, 0);
   }
 
   private markers(t: number, s: SceneState | null) {
@@ -685,7 +702,7 @@ export class ExpeditionScene implements RoomScene {
       if (this.boss) r = Math.max(r, Math.abs(this.boss.x - fx) + 2);
       d = Math.max(this.boss ? 14 : 9.5, r * (multi ? 1.5 : 1.42)) / Math.max(0.45, s.battle?.cam ?? 1) * (isTight(s.biome) ? 0.85 : 1);
       d = Math.max(d, span / 0.62);   // the whole width of the fight fits a 16:9 view
-      pitch = multi ? 0.72 : this.boss ? 0.4 : 0.5; yaw = multi ? 0.25 : 0.12;
+      pitch = multi ? 0.62 : this.boss ? 0.34 : 0.38; yaw = multi ? 0.25 : 0.12;
       yaw += Math.sin(t * 0.06) * 0.12;
     } else if (s && s.kind === 'travel') {
       const n = this.crowd.actors.length;

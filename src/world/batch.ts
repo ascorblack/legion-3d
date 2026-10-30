@@ -1,6 +1,6 @@
 /**
  * Static geometry batcher: every piece of the city is added here with a world matrix, a colour and a material key,
- * then merged into one mesh per (material, x-chunk). UVs are box-projected in world space (texture tiles are
+ * then merged into one mesh per (material, x-chunk) — one per material when it is light (≤ SMALL_TRIS). UVs are box-projected in world space (texture tiles are
  * world-sized and continuous across pieces) unless the piece supplies its own ("keep").
  */
 import * as THREE from 'three';
@@ -12,6 +12,8 @@ export type MatKey = 'brick' | 'plaster' | 'wood' | 'roof' | 'stone' | 'metal' |
 export type BatchKey = MatKey | 'rock';
 
 interface Part { geo: THREE.BufferGeometry; chunk: number }
+/** A material with at most this many triangles in total is merged into one mesh instead of one per x-chunk. */
+export const SMALL_TRIS = 4000;
 
 /**
  * World-scale correction of each material's texture (multiplies the UVs of every piece): the procedural tiles hold
@@ -27,6 +29,8 @@ let _jit = 7;
 
 const _n = new THREE.Vector3();
 const _p = new THREE.Vector3();
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
 const _c = new THREE.Color();
 const _nm = new THREE.Matrix3();
 
@@ -34,6 +38,8 @@ export class Batch {
   private parts = new Map<BatchKey, Part[]>();
   /** Dev/test hook: sees every piece in world space (z-fight detector, src/world/zfight.ts). */
   recorder: ((mat: BatchKey, g: THREE.BufferGeometry, tag: string, look: string) => void) | null = null;
+  /** Optional hook: every piece's material + world bounds (static.ts turns low slabs — door steps, plinths — into steps). */
+  onAdd: ((mat: BatchKey, box: THREE.Box3) => void) | null = null;
   /** Name of what is being added (for the recorder), e.g. the building id. */
   tag = '';
   /** Last x-chunk index (pieces beyond go into it); set from the city width. */
@@ -56,14 +62,24 @@ export class Batch {
     if (typeof uv === 'number' || !uvA) {
       const t = typeof uv === 'number' ? 1 / uv : 1;
       const arr = new Float32Array(n * 2);
-      for (let i = 0; i < n; i++) {
-        _p.fromBufferAttribute(pos, i); _n.fromBufferAttribute(nor, i);
+      // the projection axis is chosen per TRIANGLE (its face normal), never per vertex: on smooth-shaded round pieces
+      // (towers, columns, poles) the vertex normals of one triangle can pick different axes, and the u of one vertex
+      // would come from x and of the next from z — tens of tiles squeezed across one face (smeared bands; bug class
+      // «texture smear», test/world-texmap.test.ts)
+      for (let i = 0; i + 2 < n; i += 3) {
+        _p.fromBufferAttribute(pos, i); _a.fromBufferAttribute(pos, i + 1).sub(_p); _b.fromBufferAttribute(pos, i + 2).sub(_p);
+        _n.crossVectors(_a, _b);
+        if (_n.lengthSq() < 1e-14) _n.fromBufferAttribute(nor, i);
         const ax = Math.abs(_n.x), ay = Math.abs(_n.y), az = Math.abs(_n.z);
-        let u: number, v: number;
-        if (ay >= ax && ay >= az) { u = _p.x; v = _p.z; }
-        else if (ax >= az) { u = _p.z * (_n.x > 0 ? -1 : 1); v = _p.y; }
-        else { u = _p.x * (_n.z > 0 ? 1 : -1); v = _p.y; }
-        arr[i * 2] = u * t; arr[i * 2 + 1] = v * t;
+        const axis = ay >= ax && ay >= az ? 1 : ax >= az ? 0 : 2, sx = _n.x > 0 ? -1 : 1, sz = _n.z > 0 ? 1 : -1;
+        for (let j = i; j < i + 3; j++) {
+          _p.fromBufferAttribute(pos, j);
+          let u: number, v: number;
+          if (axis === 1) { u = _p.x; v = _p.z; }
+          else if (axis === 0) { u = _p.z * sx; v = _p.y; }
+          else { u = _p.x * sz; v = _p.y; }
+          arr[j * 2] = u * t; arr[j * 2 + 1] = v * t;
+        }
       }
       uvA = new THREE.BufferAttribute(arr, 2);
     } else if (Array.isArray(uv)) {
@@ -90,7 +106,10 @@ export class Batch {
       for (let i = 0; i < n; i++) { col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; }
     }
     // look signature: identical (material, colour, uv mapping) pieces shade identically → coplanar overlap is invisible
-    if (this.recorder) this.recorder(mat, g0, this.tag, ownCol ? 'own' + Math.random() : `${mat}|${col[0].toFixed(3)},${col[1].toFixed(3)},${col[2].toFixed(3)}|${Array.isArray(uv) ? uv.join('x') : uv}`);
+    if (this.recorder) {
+      g0.setAttribute('uv', uvA);   // the final UVs too (texture-mapping test: test/world-texmap.test.ts)
+      this.recorder(mat, g0, this.tag, ownCol ? 'own' + Math.random() : `${mat}|${col[0].toFixed(3)},${col[1].toFixed(3)},${col[2].toFixed(3)}|${Array.isArray(uv) ? uv.join('x') : uv}`);
+    }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', pos);
     g.setAttribute('normal', nor);
@@ -99,6 +118,7 @@ export class Batch {
     g0.dispose();
     // chunk by centre x
     g.computeBoundingBox();
+    if (this.onAdd) this.onAdd(mat, g.boundingBox!);
     const cx = (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2;
     // pieces far outside the city (backdrop ring windows) join the edge chunks: no draw call per 14 m of the far ring
     const chunk = mat === 'back' || mat === 'water' || mat === 'sign' ? 0 : Math.max(-1, Math.min(this.maxChunk, Math.floor(cx / this.chunkW)));
@@ -112,7 +132,11 @@ export class Batch {
     const out: THREE.Mesh[] = [];
     for (const [key, parts] of this.parts) {
       const byChunk = new Map<number, THREE.BufferGeometry[]>();
-      for (const p of parts) { let a = byChunk.get(p.chunk); if (!a) byChunk.set(p.chunk, (a = [])); a.push(p.geo); }
+      // a light material (few triangles in the whole city: roofs, glass, signs, paving quads, emissive bits) is ONE mesh:
+      // drawing its off-screen pieces costs less than a draw call per x-chunk
+      let tris = 0; for (const p of parts) tris += p.geo.getAttribute('position').count / 3;
+      const one = tris <= SMALL_TRIS;
+      for (const p of parts) { const c = one ? 0 : p.chunk; let a = byChunk.get(c); if (!a) byChunk.set(c, (a = [])); a.push(p.geo); }
       for (const [, geos] of byChunk) {
         const merged = mergeGeometries(geos, false);
         for (const g of geos) g.dispose();

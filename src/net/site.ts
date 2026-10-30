@@ -8,6 +8,7 @@ import type { SiteSession, ArtProvider } from '../contracts/modules';
 import { createStore, type StoreWriter } from '../store/store';
 import { SX, SZ } from '../world/coords';
 import type { Bus } from '../bridge/bridge';
+import { setFetchTee } from './fetch-tee';
 import { createGoSender } from '../flight/sendpoint';
 import CONTRACT from '../data/site-contract.json';
 import { runtimeContract, describeFails, type ContractCheck } from './contract';
@@ -184,10 +185,13 @@ function buildTownLayout(hero: Hero | null, id: string, meta: any): CityLayout |
 function buildCampLayout(hero: Hero | null): CityLayout | null {
   try {
     const CM = W.LGCampMap; if (!CM || typeof CM.get !== 'function' || typeof CM.map !== 'function') return null;
-    const TL = CM.get(), map = CM.map(TL), camp = campScene(TL); if (!camp) return null;
+    // site 30.10 (fix/camp-magic-shop): the magic shop stands between the Storage and the Forge for a hero with the shop open (hero.ms) —
+    // `magic: true` building of the layout, walk grid with it (CM.map(TL, { magic }); an older campmap.js ignores the argument)
+    const MS = !!(hero as any)?.ms;
+    const TL = CM.get(), map = CM.map(TL, { magic: MS }), camp = campScene(TL); if (!camp) return null;
     const L: CityLayout & { camp: CampScene; spawn: [number, number]; title?: string } = {
       id: CAMP, styleId: styleId(), W: TL.W, H: TL.H, QW: 0, area: TL.AREA,
-      obstacles: (TL.OBST || []) as Obstacle[], buildings: townBuildings(TL.BUILDINGS, hero, false),
+      obstacles: (TL.OBST || []) as Obstacle[], buildings: townBuildings(TL.BUILDINGS, hero, MS),
       free: (x, y) => map.free(x, y), nearest: (x, y) => map.nearest(x, y), path: (a, b) => map.path(a, b),
       camp, spawn: camp.spawn, title: String(TL.name || 'Перепутье'),
     };
@@ -237,6 +241,20 @@ export function siteGuard(phase: 'page' | 'city'): { breaks: string[]; degrades:
   return { breaks, degrades };
 }
 
+/** The City tab was already open when 3D started, so the fetch tee (src/net/fetch-tee.ts: on only for 3D) missed the City's
+ *  `enter` answer — the full list of players, the chat history, the moderator role and the ignore list live nowhere else.
+ *  Do what a user does: another tab, then the City tab again; the site leaves and enters the City by itself (under our
+ *  splash) and the tee catches the answer. No request of ours, nothing is replayed. */
+export async function replayCityEnter(cityBtn: HTMLButtonElement, B: Bus): Promise<void> {
+  const other = document.querySelector<HTMLButtonElement>('.tabs button[data-tab="hero"]:not([hidden])')
+    || Array.from(document.querySelectorAll<HTMLButtonElement>('.tabs button[data-tab]:not([hidden])')).find((b) => b !== cityBtn && b.getAttribute('aria-disabled') !== 'true');
+  if (!other || other.getAttribute('aria-disabled') === 'true') return;
+  other.click();
+  await sleep(300);
+  cityBtn.click();
+  await waitFor(() => B.last['city:enter'], 8000, 100);
+}
+
 export async function connectSite(opts: { onStatus?: (s: string) => void } = {}): Promise<SiteSession | { error: 'no_login' | 'no_hero' | 'city_locked' | 'site_changed' | 'quest_running'; loginUrl?: string; missing?: string[] }> {
   const say = opts.onStatus || (() => {});
   const B = bus();
@@ -254,6 +272,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   if (!cityBtn) return { error: 'site_changed' };
   if (cityBtn.getAttribute('aria-disabled') === 'true') return { error: 'city_locked' };
   if (!document.querySelector('#tab-city.on')) cityBtn.click();
+  else if (B && !B.last['city:enter']) await replayCityEnter(cityBtn, B);
   const ok = await waitFor(() => W.LGCity && W.LGCityMap && W.MDDoodle && W.LGCity.debug && W.LGCity.debug(), 30000, 200);
   if (!ok) return { error: document.querySelector('#tab-city.on') ? 'site_changed' : 'city_locked' };
   { const g = siteGuard('city'); if (g.breaks.length) return { error: 'site_changed', missing: g.breaks }; }
@@ -448,10 +467,15 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
 
   /* ---------------- overlays (site interiors, mine, trade, dialogs) ---------------- */
   let ovAt = 0, ovVal: string | null = null;
+  // The bridge's fetch tee (src/net/fetch-tee.ts) sits on window.fetch only in 3D mode and never over the site's own
+  // mine screen: its dig telemetry compares window.fetch with the native/site one (see src/bridge/bridge.ts).
+  let teeOn = true;   // main.ts put it on before connectSite
+  const syncTee = () => { const want = !classic && ovVal !== 'mine'; if (want !== teeOn) { teeOn = want; setFetchTee(want); } };
   const overlay = (): string | null => {
     const t = performance.now(); if (t - ovAt < 250) return ovVal; ovAt = t;
     ovVal = anyShown('.cy-room') ? 'room' : anyShown('.mn') ? 'mine' : anyShown('.tr-win') ? 'trade'
       : anyShown('.mn-board-w') ? 'board' : anyShown('.cy-read') ? 'read' : anyShown(DIALOGS) ? 'dialog' : null;
+    syncTee();
     return ovVal;
   };
   const closeOverlay = () => {
@@ -463,6 +487,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   /* ---------------- classic panels ---------------- */
   const setClassic = (on: boolean) => {
     if (classic === on) return; classic = on;
+    syncTee();   // classic 2D site: the page's own fetch back; 3D again: tee on (unless the site's mine is open)
     if (on) {
       flush();
       document.documentElement.classList.remove('l3d-on');

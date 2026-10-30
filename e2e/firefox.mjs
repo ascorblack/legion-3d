@@ -115,9 +115,14 @@ try {
   assert.deepEqual(Object.keys(upd).filter(k => !['__l3d', 'current', 'store', 'latest', 'url'].includes(k)), []);
   if (upd.latest) assert.ok(upd.url.startsWith('https://github.com/ascorblack/legion-3d/releases/'));
   checks.push('update notice relay: background worker -> notify.js -> page message (latest=' + (upd.latest || 'unavailable') + ')');
+  // 2D (default): the bridge must leave window.fetch to the page (the site's anti-bot check sees any foreign wrapper);
+  // the fetch tee is put on only for 3D and taken out again exactly
+  assert.equal(await js('return /\\{\\s*\\[native code\\]\\s*\\}\\s*$/.test(Function.prototype.toString.call(window.fetch))'), true, 'window.fetch must be the native one in 2D');
+  assert.equal(await js('window.__fetch0 = window.fetch; return window.__L3D_BUS.fetchTee.on() && window.fetch !== window.__fetch0'), true);
   await cmd('POST', '/execute/async', { script: "const done=arguments[0];fetch('/api/me').then(r=>r.json()).then(()=>{const es=new EventSource('/api/live');es.addEventListener('city',()=>{es.close();done(true);});});", args: [] });
   await until('return !!window.__L3D_BUS.last.me?.fixture && !!window.__L3D_BUS.last["sse:city"]?.fixture');
-  checks.push('fetch and EventSource bridge');
+  assert.equal(await js('return window.__L3D_BUS.fetchTee.off() && window.fetch === window.__fetch0'), true, 'off() must give back the very same fetch');
+  checks.push('fetch and EventSource bridge; window.fetch native in 2D, tee on for 3D only and restored exactly');
   await cmd('POST', '/url', { url: `https://localhost:${port}/game.html?bots=4` });
   await until('return !!window.__demo || !!document.querySelector("pre")', 60000);
   assert.equal(await js('return document.querySelector("pre")?.textContent || null'), null);

@@ -4,6 +4,7 @@
  * controls hint and the black veil between sets. Shadow DOM; rebuilt only when the content changes.
  */
 import type { Cmd, SceneState } from './adapter';
+import { setHtml } from '../core/html';
 
 const CSS = `
 :host{all:initial}
@@ -49,7 +50,7 @@ export class ExpeditionHud {
     this.el.style.cssText = 'position:fixed;inset:0;z-index:130;pointer-events:none;';
     root.appendChild(this.el);
     this.sh = this.el.attachShadow({ mode: 'open' });
-    this.sh.innerHTML = `<style>${CSS}</style><div class="veil"></div><div class="top" role="status" aria-live="polite"></div><div class="cmd"></div><div class="hint">${hintText}</div>`;
+    setHtml(this.sh, `<style>${CSS}</style><div class="veil"></div><div class="top" role="status" aria-live="polite"></div><div class="cmd"></div><div class="hint">${hintText}</div>`);
     this.veil = this.sh.querySelector('.veil') as HTMLElement;
     this.top = this.sh.querySelector('.top') as HTMLElement;
     this.cmd = this.sh.querySelector('.cmd') as HTMLElement;
@@ -60,14 +61,14 @@ export class ExpeditionHud {
   setFade(a: number): void { this.veil.style.opacity = String(Math.round(a * 100) / 100); }
   /** Rebuild when the content changes; the countdown is patched in place. */
   update(s: SceneState | null, secLeft: number): void {
-    if (!s || s.kind === 'off') { this.top.style.display = 'none'; this.cmd.innerHTML = ''; this.key = ''; return; }
+    if (!s || s.kind === 'off') { this.top.style.display = 'none'; setHtml(this.cmd, ''); this.key = ''; return; }
     this.top.style.display = '';
     const key = JSON.stringify([s.kind, s.title, s.status, s.cmds, s.inParty, !!s.until]);
     if (key !== this.key) {
       this.key = key;
-      this.top.innerHTML = `<i>${ICON[s.kind] || '🗺'}</i><span>${esc(s.title || 'Поход')}</span><em>${esc(s.status && s.status !== s.title ? s.status : '')}</em>${s.until ? '<b class="tm"></b>' : ''}`;
+      setHtml(this.top, `<i>${ICON[s.kind] || '🗺'}</i><span>${esc(s.title || 'Поход')}</span><em>${esc(s.status && s.status !== s.title ? s.status : '')}</em>${s.until ? '<b class="tm"></b>' : ''}`);
       this.timer = this.top.querySelector('.tm');
-      this.cmd.innerHTML = '';
+      setHtml(this.cmd, '');
       if (s.cmds.length) {
         const h = document.createElement('small'); h.className = 'h';
         const silent = s.cmds[0].kind === 'silent';

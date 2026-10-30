@@ -569,18 +569,24 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px;
 `;
 
 /**
- * The site's own city chat (#tab-city .cy-chat, light DOM) docked over the game: fixed bottom-left above our canvas
+ * The site's own chat (the City's `#tab-city .cy-chat`, or — site 30.10 «chatone» — the one window LGChatOne: in the City's slot, in our
+ * mine host `.l3d-co-host`, or its own `.co-float` outside scenes; light DOM) docked over the game: fixed bottom-left above our canvas
  * (z 160: over the UI layer 150, under the site's building screens 200), in the HUD's den palette; faded when idle
  * (.l3d-idle, set by src/ui/chat.ts) unless hovered or focused; hidden over our menus / with the HUD off
  * (html.l3d-chat-off) and while the game is hidden for a site screen (#l3d-ui[hidden]). Only active with html.l3d-on
  * (3D mode): classic mode gets the site's own layout back untouched.
+ * Size (site 30.10): the window has a fixed height (280–340 px, `.cy-chat-b`) and the viewer drags its top / right edges on a PC
+ * (`.cy-chat-rz` handles, inline width / height) — the list and the DMs fill it (flex), nothing here caps them; idle is compact (auto height).
  */
 export const SITE_CHAT_CSS = String.raw`
-html.l3d-on.l3d-chat-dock #tab-city .cy-chat { position: fixed !important; left: 16px; bottom: 16px; top: auto; right: auto; z-index: 160; margin: 0 !important;
+html.l3d-on.l3d-chat-dock :is(#tab-city, .l3d-co-host, .co-float) .cy-chat { position: fixed !important; left: 16px; bottom: 16px; top: auto; right: auto; z-index: 160; margin: 0 !important;
   width: min(410px, calc(100vw - 32px)); visibility: visible !important; pointer-events: auto !important; transition: opacity .45s ease;
   font: 600 13.5px/1.34 'Nunito', var(--tx, 'Golos Text'), 'Segoe UI', sans-serif; color: #f7eadf; text-shadow: 0 1px 2px #000a; }
-html.l3d-on.l3d-chat-dock #tab-city .cy-chat * { visibility: visible; }
-html.l3d-on.l3d-chat-off #tab-city .cy-chat, html.l3d-on:has(#l3d-ui[hidden]) #tab-city .cy-chat { display: none !important; }
+html.l3d-on.l3d-chat-dock :is(#tab-city, .l3d-co-host, .co-float) .cy-chat * { visibility: visible; }
+html.l3d-on.l3d-chat-off :is(#tab-city, .l3d-co-host, .co-float) .cy-chat, html.l3d-on:has(#l3d-ui[hidden]) :is(#tab-city, .l3d-co-host, .co-float) .cy-chat { display: none !important; }
+/* the mine host of the single chat (src/ui/chat.ts attachMineChat): the whole viewport, so the site's resize limits (its rect) are the window's; the chat inside takes the clicks */
+.l3d-co-host { position: fixed; inset: 0; z-index: 160; pointer-events: none; }
+html.l3d-on .co-float { z-index: 160; }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-t { min-height: 34px; padding: 0 13px; background: rgba(29,22,32,.86); box-shadow: 0 0 0 1.5px #ffcf6a47, 0 8px 20px #0008; font: 800 13px/1 'Nunito', var(--tx, sans-serif); }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-n { background: #ffcf6a; color: #2a1d18; }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-b { padding: 7px 9px 9px; border-radius: 16px; background: rgba(20,14,24,.78); box-shadow: 0 0 0 1.5px #ffcf6a47, 0 12px 30px #0008; transition: background .45s, box-shadow .45s; }
@@ -590,7 +596,6 @@ html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-x, html.l3d-on.l3d-chat-dock .cy-cha
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-tabs { gap: 4px; margin-bottom: 5px; }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-tabs button { min-height: 26px; padding: 0 10px; border: 0; background: rgba(29,22,32,.8); box-shadow: 0 0 0 1px #ffcf6a47; color: #bfaab7; font: 800 11.5px/1 'Nunito', var(--tx, sans-serif); }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-tabs button[aria-selected="true"] { background: #ffcf6a; box-shadow: none; color: #2a1d18; }
-html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-l { max-height: min(230px, 32vh); }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-l li { padding-top: 2px; padding-bottom: 2px; }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-ev { color: #ffcf6a; font-style: italic; }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-sys { color: #bfaab7; font-style: italic; }
@@ -602,7 +607,10 @@ html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) { opa
 html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .cy-chat-b { background: rgba(20,14,24,.3); box-shadow: none; }
 /* idle = compact: the last ~5 lines, no header (bottom-anchored, so it grows upwards under the cursor on hover) */
 html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .cy-chat-h { display: none; }
-html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .cy-chat-l { max-height: 112px; overflow: hidden;
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .cy-chat-b { height: auto !important; }
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) :is(.cy-chat-dmx, .dm) { flex: 0 1 auto; }
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .cy-chat-rz { display: none !important; }
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .cy-chat-l { flex: 0 1 auto; max-height: 112px; overflow: hidden;
   -webkit-mask: linear-gradient(transparent, #000 22px); mask: linear-gradient(transparent, #000 22px); }
 html.l3d-on.l3d-chat-dock .cy-chat .cy-chat-tabs button.l3d-mine-tab { white-space: nowrap; }
 html.l3d-on.l3d-chat-dock .cy-chat.l3d-mine-on .cy-chat-tabs button[aria-selected="true"]:not(.l3d-mine-tab) { background: rgba(29,22,32,.8); box-shadow: 0 0 0 1px #ffcf6a47; color: #bfaab7; }
@@ -633,7 +641,6 @@ html.l3d-on.l3d-chat-dock .cy-chat .dm-un, html.l3d-on.l3d-chat-dock .cy-chat .d
 html.l3d-on.l3d-chat-dock .cy-chat .dm-who { color: #f7eadf; }
 html.l3d-on.l3d-chat-dock .cy-chat .dm-acts button, html.l3d-on.l3d-chat-dock .cy-chat .dm-rep button { border-color: #ffcf6a47; color: #bfaab7; font-weight: 700; }
 html.l3d-on.l3d-chat-dock .cy-chat .dm-acts button:hover, html.l3d-on.l3d-chat-dock .cy-chat .dm-rep button:hover { background: #ffcf6a22; color: #f7eadf; }
-html.l3d-on.l3d-chat-dock .cy-chat .dm-l { max-height: min(200px, 28vh); }
 html.l3d-on.l3d-chat-dock .cy-chat .dm-l li { padding: 2px 0; }
 html.l3d-on.l3d-chat-dock .cy-chat .dm-l .dm-0 { color: #bfaab7; font-style: italic; }
 html.l3d-on.l3d-chat-dock .cy-chat .dm-old button { color: #ffcf6a; }
@@ -641,7 +648,7 @@ html.l3d-on.l3d-chat-dock .cy-chat .dm-f input, html.l3d-on.l3d-chat-dock .cy-ch
 html.l3d-on.l3d-chat-dock .cy-chat .dm-f input:focus, html.l3d-on.l3d-chat-dock .cy-chat .dm-rep input:focus { outline: 0; box-shadow: 0 0 0 2px #ffcf6a; }
 html.l3d-on.l3d-chat-dock .cy-chat .dm-f button { width: 34px; height: 34px; border-radius: 999px; background: #ffcf6a; color: #2a1d18; }
 html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .dm-h, html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .dm-f { display: none; }
-html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .dm-l { max-height: 112px; overflow: hidden; -webkit-mask: linear-gradient(transparent, #000 22px); mask: linear-gradient(transparent, #000 22px); }
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .dm-l { flex: 0 1 auto; max-height: 112px; overflow: hidden; -webkit-mask: linear-gradient(transparent, #000 22px); mask: linear-gradient(transparent, #000 22px); }
 /* the site's small DM window (bottom-left, when LGDm has no chat to live in): above our canvas and UI layer, hidden with the HUD / over menus */
 html.l3d-on .dm-float { z-index: 165; font-family: 'Nunito', var(--tx, sans-serif); box-shadow: 0 0 0 1.5px #ffcf6a47, 0 12px 30px #0008; }
 html.l3d-on .dm-float .dm-f input { background: rgba(29,22,32,.94); }

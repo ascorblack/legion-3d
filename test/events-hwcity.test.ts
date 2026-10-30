@@ -15,7 +15,7 @@ const city = eventCity();
 const info = (g: THREE.Object3D): any => { let r: any = null; g.traverse((o) => { if (o.userData.halloween) r = o.userData.halloween; }); return r; };
 const drawables = (root: THREE.Object3D) => {
   const out: THREE.Object3D[] = [];
-  root.traverse((o) => { const m = o as THREE.Mesh; if ((m.isMesh || (o as THREE.Points).isPoints || (o as THREE.LineSegments).isLine) && o.visible && ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count > 0 : true)) out.push(o); });
+  root.traverse((o) => { const m = o as THREE.Mesh; if ((m.isMesh || (o as THREE.Points).isPoints || (o as THREE.LineSegments).isLine) && (o.userData.viewCulled || (o.visible && ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count > 0 : true)))) out.push(o); });   // view-culled meshes count as drawn (upper bound)
   return out;
 };
 

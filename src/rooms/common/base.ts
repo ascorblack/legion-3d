@@ -7,6 +7,18 @@ import type { Building, Store, Actions, Hero } from '../../contracts';
 import type { Interactable, InteractSystem, ItemModelFactory, Registry, RoomContext, RoomScene } from '../../contracts/ext';
 import { paletteOf, type Pal } from '../../world/palette';
 import { RoomKit, hitBox, hitPlane } from './kit';
+import { PoolLights, type PoolOpts } from '../../world/lightPools';
+import { AoField } from './ao';
+import { buildAtmos } from './atmos';
+import { dressRoom } from './dress';
+
+/** Per-material options of the light-pool patch in rooms (walls get the contact AO; floors the variation). */
+const ROOM_POOL: Record<string, PoolOpts> = {
+  // interiors: no moonlight rim (it shifted reds to mauve), stronger contact AO at the wall feet, warm lamp pools
+  brick: { vary: 0.1, ao: 0.55, gain: 0.6, rim: 0 }, plaster: { vary: 0.08, ao: 0.55, gain: 0.6, rim: 0 }, wood: { vary: 0.1, ao: 0.5, gain: 0.6, rim: 0 },
+  stone: { vary: 0.12, ao: 0.5, gain: 0.6, rim: 0 }, rock: { vary: 0.14, ao: 0.5, gain: 0.6, rim: 0 }, paving: { vary: 0.16, ao: 0, gain: 0.7, rim: 0 },
+  lowPaving: { vary: 0.16, ao: 0, gain: 0.7, rim: 0 }, canvas: { vary: 0.05, ao: 0.3, gain: 0.55, rim: 0 }, metal: { vary: 0.04, ao: 0.25, gain: 0.45, rim: 0 },
+};
 import { Npc, type NpcDef } from './npc';
 import { BuyCard } from './card';
 import { TagAtlas, type TagSpec } from './tags';
@@ -116,6 +128,8 @@ export class RoomBase {
   private fogSave: { fog: THREE.Fog | THREE.FogExp2 | null; bg: THREE.Color | THREE.Texture | null } | null = null;
   bg = '#1a1424';
   fogNear = 16; fogFar = 42;
+  /** Colour of the dust motes (room light). */
+  moteCol = '#ffd9a0';
 
   constructor(readonly env: RoomEnv, name: string) {
     this.pal = paletteOf(env.styleId);
@@ -269,6 +283,13 @@ export class RoomBase {
   /** Bake goods + tags, build static meshes, lights, fog; returns the RoomScene. */
   finish(): RoomScene {
     const K = this.kit;
+    // automatic set dressing of what the builder left empty (upper walls, beams, wall feet): q1+, occupancy-checked
+    if (this.env.quality >= 1) {
+      const keep: number[] = [];
+      for (const p of this.pending) keep.push(p.x, p.y + p.fit * 0.4, p.z, p.fit * 0.6 + 0.12);
+      for (const n of this.npcs) keep.push(n.def.x, 0.8, n.def.z, 0.7);
+      dressRoom({ kit: K, id: this.env.building.id, style: this.env.styleId, quality: this.env.quality, keep });
+    }
     // tags (goods + extra) in one atlas
     const nTags = this.pendingGoods.filter((g) => g.tag).length + this.extraTags.length;
     this.tags = nTags ? new TagAtlas(nTags) : null;
@@ -319,6 +340,27 @@ export class RoomBase {
     const hemi = new THREE.HemisphereLight('#b6a8ff', '#5a3a30', this.env.quality <= 0 ? 1.6 : 1.1); hemi.name = 'room:hemi';
     this.root.add(hemi);
     const amb = new THREE.AmbientLight('#ffe2c8', 0.35); amb.name = 'room:ambient'; this.root.add(amb);
+    // the city's baked-look patch on the room materials: contact AO at the wall feet, macro variation (no visible
+    // texture tiling), a cool rim, and warm pools from every requested lamp (also the ones the light cap dropped)
+    const pools = new PoolLights(K.poolCandidates(), 1e6, 0);
+    pools.setCount(this.env.quality <= 0 ? 8 : 16);
+    pools.update(0, 0, 0, 0, 1);
+    for (const [key, o] of Object.entries(ROOM_POOL)) { const m = (K.mats as Record<string, THREE.Material>)[key]; if (m) pools.patch(m, o); }
+    // baked AO (contact shadows under / beside everything standing on the floor, darker corners and wall-ceiling joints)
+    // and the atmosphere (moonbeams from the windows, dust motes): q1+
+    if (this.env.quality >= 1) {
+      const B = K.bounds, V = K.vestibule, C = K.circle;
+      const ao = new AoField(B.x0 - 0.4, B.z0 - 0.4, B.x1 + 0.4, B.z1 + V + 0.4, this.env.quality >= 2 ? 0.07 : 0.1);
+      for (const s of K.solids) ao.solid(s.x0, s.x1, s.z0, s.z1, s.top);
+      for (let i = 0; i < K.aoExtra.length; i += 5) ao.solid(K.aoExtra[i], K.aoExtra[i + 1], K.aoExtra[i + 2], K.aoExtra[i + 3], K.aoExtra[i + 4]);
+      ao.walls(C ? null : [B.x0, B.x1, B.z0, B.z1], C ? [C.x, C.z, C.r + 0.15] : null);
+      ao.setCeiling(K.shellH);
+      ao.bake();
+      for (const m of new Set(Object.values(K.mats))) ao.patch(m);
+      K.owned.push(ao);
+      const at = buildAtmos({ quality: this.env.quality, box: { x0: B.x0 + 0.2, x1: B.x1 - 0.2, z0: B.z0 + 0.2, z1: B.z1 - 0.2, y0: 0.25, y1: (K.shellH || 3.4) - 0.25 }, shafts: K.shafts, circle: C, warm: this.moteCol });
+      if (at) { this.root.add(at.group); this.onUpdate((_dt, t) => at.update(t)); this.onDispose(() => at.dispose()); }
+    }
     return this.asScene();
   }
 

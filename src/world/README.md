@@ -36,7 +36,7 @@ Everything is real 3D geometry built from the `CityLayout`; the site's 2D art is
 | `zfight.ts` | dev/test z-fight detector: coplanar overlapping faces of different pieces (with burial + identical-look filters) |
 | `supported.ts` | plain list of ids with a street model (drift script) |
 | `kit.ts` | architectural helpers (box, gable roofs, windows, doors, signs, timber, awnings, wall lamps, flags) |
-| `batch.ts` | static batcher: world-space box UVs, vertex colours, merged per material and 14 m x-chunk |
+| `batch.ts` | static batcher: world-space box UVs, vertex colours, merged per material and 14 m x-chunk; a light material (≤ `SMALL_TRIS` = 4000 tris in the whole city: roofs, glass, signs, paving quads, brick, emissive bits) is one mesh — fewer draws, nothing more drawn in practice |
 | `place.ts` | props from obstacles + LOW (fountain, well, dummy, signpost, lamps, benches, beds, decor, statue, masts, garland spans) |
 | `protoProps.ts` | cheap instanced kinds for repeated props (lamp, bench, crate, barrel, bed, tree, bush, fence, mast) |
 | `sky.ts` | gradient dome from `layout.sky` + lighter horizon band (`userData.horizon` = fog colour), twinkling stars, additive glow points shader |

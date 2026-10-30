@@ -156,6 +156,7 @@ export const createEngine: CreateEngine = (opts) => {
         catch (e) { console.warn('[l3d] post-processing unavailable', e); postWanted = false; post = null; return; }
       }
       post.setSize(w, h, renderer.getPixelRatio());
+      post.setOptions({ ao: postOpts.ao ?? PRESETS[level].ao });   // contact AO at the top level (q3)
     }
   }
 

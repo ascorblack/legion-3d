@@ -707,9 +707,12 @@ function lairOf(q: any, s: SceneState) {
   if (I?.pick) s.cmds.push(my ? { kind: 'ok', text: `ты на острове ${my}` } : { kind: 'num', text: '1–4', note: 'номер острова' });
   if (I?.doom) s.cmds.push({ kind: 'num', text: arr<number>(I.doom.opts).join(' / ') || '1–4', note: 'какой остров уничтожить' });
   if (my && !I?.pick) s.cmds.push({ kind: 'say', text: 'прыгнуть 2', note: 'на соседний остров', dim: true });
-  if (L.tele?.word) s.cmds.push(L.tele.ok ? { kind: 'ok', text: 'слово принято' } : { kind: 'word', text: str(L.tele.word) });
+  // site 30.10 (anti-bot): lair words are sent only once they reached the stream (hid, no word / words) — the card points at the stream
+  if (L.tele?.hid && !L.tele.ok) s.cmds.push({ kind: 'info', text: 'Слово — на экране стрима' });
+  else if (L.tele?.word) s.cmds.push(L.tele.ok ? { kind: 'ok', text: 'слово принято' } : { kind: 'word', text: str(L.tele.word) });
   const phrase = arr<string>(L.spell?.words || L.mass?.words);
   if (phrase.length) s.cmds.push({ kind: 'word', text: phrase.join(' '), note: 'повтори фразу целиком' });
+  else if (L.spell?.hid || L.mass?.hid) s.cmds.push({ kind: 'info', text: 'Фраза — на экране стрима' });
   if (L.st === 'party' && L.hp > 0) s.cmds.push(L.acted ? { kind: 'ok', text: 'ход принят' } : { kind: 'say', text: baseOf(s.myRole), note: 'твой ход' });
   if (!s.cmds.length) s.cmds.push({ kind: 'info', text: L.st === 'end' ? 'бой окончен' : 'наблюдай за боем' });
   if (L.deal) s.cmds.push({ kind: 'say', text: 'сделка', note: 'полжизни за монеты', dim: true });

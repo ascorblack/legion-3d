@@ -12,8 +12,16 @@
 // Never prints cookie values.
 //   --allow-mine: additionally allow the mine presence calls (/api/mine/enter|leave|ping|state) for a read-only capture
 //   {"eval":"…","save":"file.json"}: also write the eval result to a file (raw captures go to .local/, never committed)
+//   --no-go-timing: do not inject the page-side /api/city/go timing wrapper (it is itself a foreign fetch wrapper: the site's
+//     telemetry would flag the harness, not the extension). Needed for {"pi":…} checks in 3D.
+//   --start=2d: the default start mode of the extension (classic site, 3D by F8 / the button) instead of '3d' (implies
+//     --no-go-timing). Nothing waits for the game then:
+//     use {"press":"F8"}, {"wait":ms}, {"pi":"label"}. {"pi":"label"} runs the site's own bot-telemetry probe (mine.js tlPi,
+//     e2e/site-telemetry.mjs) and prints pi (0 = nothing of ours detected), whether window.fetch is the site's wrapper over a
+//     native fetch, and whether our fetch tee is on.
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { probeSource } from './site-telemetry.mjs';
 
 const args = process.argv.slice(2);
 const url = args.find((a) => !a.startsWith('--')) || process.env.L3D_URL || 'https://play.multidonate.ru/c/zakvielchannel/';
@@ -58,14 +66,16 @@ p.on('response', async (r) => {
   if (!/\/api\/city\/go/.test(r.url())) return;
   try { const j = await r.json(); if (!j.ok) { net.slow.push(j.error || JSON.stringify(j)); console.log(ts(), '[go !ok]', JSON.stringify(j).slice(0, 200)); } } catch { /* */ }
 });
-await p.addInitScript({ content: "try { localStorage.setItem('l3d.start', '3d'); } catch (e) {}" });   // 0.5.1: 2D by default
+const START2D = opt.start === '2d';
+await p.addInitScript({ content: `try { localStorage.setItem('l3d.start', '${START2D ? '2d' : '3d'}'); } catch (e) {}` });   // 0.5.1: 2D by default
 await p.addInitScript({ content: readFileSync((opt.dist || 'dist') + '/bridge.js', 'utf8') });
 // page-side timing of /api/city/go calls (Node-side request events clump when the machine is loaded)
-await p.addInitScript({ content: `(() => { const f0 = window.fetch; window.__goT = []; window.fetch = function (u, i) { try { if (/\\/api\\/city\\/go/.test(String(u && u.url || u))) { const t = Math.round(performance.now()); window.__goT.push(t); const r = f0.apply(this, arguments); (window.__goLog = window.__goLog || []).push(t + ' ' + (i && i.body)); r.then((x) => { if (!x.ok) window.__goLog.push(t + ' -> ' + x.status); }, () => {}); return r; } } catch (e) {} return f0.apply(this, arguments); }; })();` });
+if (!START2D && !opt['no-go-timing']) await p.addInitScript({ content: `(() => { const f0 = window.fetch; window.__goT = []; window.fetch = function (u, i) { try { if (/\\/api\\/city\\/go/.test(String(u && u.url || u))) { const t = Math.round(performance.now()); window.__goT.push(t); const r = f0.apply(this, arguments); (window.__goLog = window.__goLog || []).push(t + ' ' + (i && i.body)); r.then((x) => { if (!x.ok) window.__goLog.push(t + ' -> ' + x.status); }, () => {}); return r; } } catch (e) {} return f0.apply(this, arguments); }; })();` });
 await p.goto(url, { waitUntil: 'load' });
 await p.evaluate(readFileSync((opt.dist || 'dist') + '/game.js', 'utf8'));
 const t0 = Date.now();
-await p.waitForFunction(() => (!!window.__l3dGame && !document.getElementById('l3d-splash')) || !!document.querySelector('#l3d-splash .l3d-sp-x button'), null, { timeout: 120000 }).catch(() => {});
+if (START2D) await p.waitForSelector('#l3d-launch', { timeout: 60000 }).catch(() => {});
+else await p.waitForFunction(() => (!!window.__l3dGame && !document.getElementById('l3d-splash')) || !!document.querySelector('#l3d-splash .l3d-sp-x button'), null, { timeout: 120000 }).catch(() => {});
 console.log(ts(), 'boot ms', Date.now() - t0);
 const splash = await p.evaluate(() => { const s = document.querySelector('#l3d-splash'); return s ? { text: s.querySelector('.l3d-sp-t')?.textContent, buttons: [...s.querySelectorAll('.l3d-sp-x a, .l3d-sp-x button')].map((e) => e.textContent + (e.href ? ' → ' + new URL(e.href).pathname : '')) } : null; });
 if (splash) console.log(ts(), 'splash:', JSON.stringify(splash));
@@ -112,6 +122,11 @@ for (const s of steps) {
     }
     if (s.key) { await p.keyboard.down(s.key); await p.waitForTimeout(s.ms || 300); await p.keyboard.up(s.key); }
     if (s.press) await p.keyboard.press(s.press);
+    if (s.pi) {
+      await p.evaluate(probeSource());
+      const r = await p.evaluate(() => { const F = window.LG_FETCH, t = window.__L3D_BUS && window.__L3D_BUS.fetchTee; return { pi: window.__l3dPi(), siteWrapperOverNative: !!(F && window.fetch === F.w && F.n), teeOn: !!(t && t.installed()), game: !!window.__l3dGame, classic: window.__l3dGame ? !!window.__l3dGame.ctx.game.classic : null }; });
+      console.log(ts(), 'PI', s.pi, JSON.stringify(r));
+    }
     if (s.click) await p.click(s.click, { timeout: 5000 });
     if (s.wait) await p.waitForTimeout(s.wait);
     if (s.shot) await shot(s.shot);

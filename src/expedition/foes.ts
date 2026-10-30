@@ -259,6 +259,16 @@ export class Decals {
     this.mesh = new THREE.InstancedMesh(g, mats.decal, cap);
     this.mesh.frustumCulled = false; this.mesh.count = 0; this.mesh.renderOrder = 2; this.mesh.name = 'exp-decals';
   }
+  private marks: { x: number; z: number; t: number }[] = [];
+  /** A fading scorch / dust mark where a blow landed (re-added every frame by `marksStep`). */
+  scorch(x: number, z: number): void { if (this.marks.length < 14) this.marks.push({ x, z, t: 2.4 }); else { this.marks.shift(); this.marks.push({ x, z, t: 2.4 }); } }
+  marksStep(dt: number): void {
+    for (let i = this.marks.length - 1; i >= 0; i--) {
+      const m = this.marks[i]; m.t -= dt;
+      if (m.t <= 0) { this.marks.splice(i, 1); continue; }
+      this.add(m.x, 0.01, m.z, 0.55 + (2.4 - m.t) * 0.25, '#000000', Math.min(1, m.t / 1.2) * 0.4, 1, 0);
+    }
+  }
   begin(): void { this.n = 0; }
   add(x: number, y: number, z: number, r: number, color: THREE.ColorRepresentation, a = 1, soft = 0, pulse = 0): void {
     if (this.n >= this.cap) return;

@@ -121,10 +121,13 @@ export class ZRecorder {
           if (area < 1e-6) continue;
           // the overlap's centre in 3D, nudged off the surface on the visible side(s): buried → no flicker on screen
           const c3 = unproject(t, ov[1], ov[2]);
+          // only the sides BOTH faces are drawn on can flicker: a single-sided face on its front side, a double-sided one on
+          // both (a double-sided sheet under a closed object: seen from below, the object's bottom face is culled)
           const sgn = t.flip ? -1 : 1, e = 0.006;
-          const front = !this.buried(c3[0] + t.nx * e * sgn, c3[1] + t.ny * e * sgn, c3[2] + t.nz * e * sgn, t.piece, u.piece, ground);
-          const twoSided = DOUBLE.has(ma) || DOUBLE.has(mb);
-          const back = twoSided && !this.buried(c3[0] - t.nx * e * sgn, c3[1] - t.ny * e * sgn, c3[2] - t.nz * e * sgn, t.piece, u.piece, ground);
+          const dt = DOUBLE.has(ma), du = DOUBLE.has(mb), same = t.flip === u.flip;
+          const sideT = du || same, sideB = dt && (du || !same);   // t's facing side · the opposite side
+          const front = sideT && !this.buried(c3[0] + t.nx * e * sgn, c3[1] + t.ny * e * sgn, c3[2] + t.nz * e * sgn, t.piece, u.piece, ground);
+          const back = sideB && !this.buried(c3[0] - t.nx * e * sgn, c3[1] - t.ny * e * sgn, c3[2] - t.nz * e * sgn, t.piece, u.piece, ground);
           if (!front && !back) continue;
           const pk = t.piece < u.piece ? t.piece + ':' + u.piece : u.piece + ':' + t.piece;
           const h = pairs.get(pk);

@@ -14,6 +14,7 @@ import { esc, rarOf, coinStyle, CLASS_NAME } from '../../ui/data';
 import { moneyParts } from '../../ui/money';
 import { offerOf, sampleOffer, tipItem, LOCK_T, type Offer, type PriceEnv, type StockItem, type Booth, type BoothSample } from './stock';
 import { RARITY_HEX } from './items';
+import { setHtml } from '../../core/html';
 
 export interface CardHost {
   store: Pick<Store, 'hero' | 'on'>;
@@ -84,7 +85,7 @@ export class BuyCard {
     this.host.className = 'l3d-roomcard';
     Object.assign(this.host.style, { position: 'fixed', inset: '0', zIndex: '170', pointerEvents: 'none' });
     this.root = this.host.attachShadow({ mode: 'open' });
-    this.root.innerHTML = `<style>${CSS}${EXTRA_CSS}</style><div class="ui rmc"></div>`;
+    setHtml(this.root, `<style>${CSS}${EXTRA_CSS}</style><div class="ui rmc"></div>`);
     this.box = this.root.querySelector('.rmc') as HTMLElement;
     (H.mount || document.body).appendChild(this.host);
     this.unHero = H.store.on('hero', () => { if (this.view && this.view.step !== 'busy') this.render(); });
@@ -113,7 +114,7 @@ export class BuyCard {
   }
   close(): void {
     if (!this.view) return;
-    this.view = null; this.box.innerHTML = '';
+    this.view = null; setHtml(this.box, '');
     this.shown(false);
   }
   dispose(): void {
@@ -197,7 +198,7 @@ export class BuyCard {
     const fullBag = v.t === 'good' && h?.sg && typeof h.sg === 'object' && Number((h.sg as { used?: number }).used) === Number((h.sg as { cap?: number }).cap);
     if (fullBag) price += '<p class="note">В сумке нет места.</p>';
     const hint = `<div class="rm-hint"><kbd>Enter</kbd> ${ask ? 'да' : 'выбрать'} · <kbd>Esc</kbd> ${ask ? 'назад' : 'закрыть'}</div>`;
-    this.box.innerHTML = `<div class="rm-card" role="dialog" aria-modal="true" aria-label="Покупка" style="--rc:${rc}"><button type="button" class="rm-x" aria-label="Закрыть" data-close>×</button>${body}${price}<div class="rm-acts">${acts}</div>${hint}</div>`;
+    setHtml(this.box, `<div class="rm-card" role="dialog" aria-modal="true" aria-label="Покупка" style="--rc:${rc}"><button type="button" class="rm-x" aria-label="Закрыть" data-close>×</button>${body}${price}<div class="rm-acts">${acts}</div>${hint}</div>`);
     this.bind();
   }
 

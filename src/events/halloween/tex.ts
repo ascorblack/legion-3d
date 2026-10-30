@@ -39,12 +39,13 @@ export const FACE_W = 512, FACE_H = 256;
  * Emission map of the jack-o'-lantern faces for a SphereGeometry(UV): black everywhere except the carved shapes.
  * Face A is centred at u = 0.25 (local +Z): triangle eyes, a little nose and a smile with two teeth.
  * Face B at u = 0.75 (local −Z): happy ^ ^ eyes and a cat "ω" mouth with whiskers. Row 0 is the bottom (v up).
+ * rgb = the cut (deep orange walls → yellow core), alpha = the glow through the rind around the cuts (halloween/mats.ts).
  */
 export function jackFaceTexture(): THREE.DataTexture {
   const W = FACE_W, H = FACE_H, d = new Uint8Array(W * H * 4);
   const cy = H / 2 + 6;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    let cov = 0, depth = 0;
+    let cov = 0, depth = 0, near = 99;
     for (let f = 0; f < 2; f++) {
       const cx = f === 0 ? W * 0.25 : W * 0.75;
       const px = x - cx, py = y - cy;   // py > 0 = up
@@ -70,14 +71,17 @@ export function jackFaceTexture(): THREE.DataTexture {
         for (const s of [-1, 1]) for (const k of [-1, 0, 1]) sd = Math.min(sd, sdSeg(px, py, s * 50, k * 9 + 2, s * 74, k * 17 + 4) - 1.7);   // whiskers
       }
       const c = 1 - smooth(-1.1, 1.1, sd);
-      if (c > cov) { cov = c; depth = clamp01(-sd / 7); }
+      if (c > cov) { cov = c; depth = clamp01(-sd / 6); }
+      if (sd < near) near = sd;
     }
     const i = (y * W + x) * 4;
-    // warm core → deeper orange rim; cov also drives the (unused) alpha
-    d[i] = Math.round(255 * cov);
-    d[i + 1] = Math.round(255 * cov * (0.58 + 0.34 * depth));
-    d[i + 2] = Math.round(255 * cov * (0.16 + 0.34 * depth));
-    d[i + 3] = 255;
+    // a cut: the walls of the cut (just inside the edge) are deep orange-red flesh lit from inside, the hole's centre a
+    // hot yellow core; alpha = the skin glow around the carving (light through the thin rind), soft, ~22 px wide
+    const k = smooth(0.05, 0.75, depth);
+    d[i] = Math.round(255 * cov * (0.72 + 0.28 * k));
+    d[i + 1] = Math.round(255 * cov * (0.2 + 0.62 * k));
+    d[i + 2] = Math.round(255 * cov * (0.03 + 0.3 * k * k));
+    d[i + 3] = Math.round(255 * Math.exp(-Math.max(0, near) / 9) * (1 - cov * 0.6));
   }
   const t = make(W, H, d);
   t.wrapS = THREE.RepeatWrapping;
@@ -91,6 +95,20 @@ export function glowTexture(size = 64, power = 2): THREE.DataTexture {
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const dx = (x + 0.5) / size * 2 - 1, dy = (y + 0.5) / size * 2 - 1;
     const a = Math.pow(1 - smooth(0, 1, Math.hypot(dx, dy)), power);
+    const i = (y * size + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; d[i + 3] = Math.round(255 * a);
+  }
+  return make(size, size, d);
+}
+
+/**
+ * Halo sprite: a tight warm core with a long faint tail (gaussian + exponential), so an additive halo reads as light
+ * round a lantern, not as a flat disc. rgb white, alpha carries the shape; exactly 0 at the rim.
+ */
+export function haloTexture(size = 64): THREE.DataTexture {
+  const d = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const dx = (x + 0.5) / size * 2 - 1, dy = (y + 0.5) / size * 2 - 1, r = Math.hypot(dx, dy);
+    const a = (0.62 * Math.exp(-r * r * 16) + 0.38 * Math.exp(-r * 4.2)) * (1 - smooth(0.7, 1, r));
     const i = (y * size + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; d[i + 3] = Math.round(255 * a);
   }
   return make(size, size, d);
@@ -140,4 +158,16 @@ export function webTexture(size = 128): THREE.DataTexture {
     const i = (y * size + x) * 4; d[i] = 238; d[i + 1] = 232; d[i + 2] = 255; d[i + 3] = Math.round(255 * aa * fade);
   }
   return make(size, size, d);
+}
+
+/** Fog (left half) and cobweb (right half) in one texture: both drawn by one instanced mesh (aK picks the half). */
+export function fogWebAtlas(size = 128): THREE.DataTexture {
+  const f = fogTexture(size), w = webTexture(size), d = new Uint8Array(size * 2 * size * 4);
+  const fd = f.image.data as Uint8Array, wd = w.image.data as Uint8Array;
+  for (let y = 0; y < size; y++) {
+    d.set(fd.subarray(y * size * 4, (y + 1) * size * 4), y * size * 8);
+    d.set(wd.subarray(y * size * 4, (y + 1) * size * 4), y * size * 8 + size * 4);
+  }
+  f.dispose(); w.dispose();
+  return make(size * 2, size, d);
 }

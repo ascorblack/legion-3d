@@ -152,14 +152,13 @@ function well(): PropPart[] {
   const b = new PB();
   b.add('stone', lathe([[0.44, 0.1], [0.44, 0.75], [0.67, 0.75], [0.67, 0.67], [0.62, 0.62], [0.62, 0], [0.44, 0]].reverse() as [number, number][], 18), PC.stone, { uv: [6, 1] });
   b.add('water', cyl(0.45, 0.45, 0.03, 16), PC.waterD, { p: [0, 0.45, 0] });
-  for (const s of [-1, 1]) {
-    b.add('wood', rbox(0.11, 1.75, 0.11, 0.02), PC.woodD, { p: [s * 0.74, 0.87, 0] });
-    b.add('wood', rbox(0.2, 0.12, 0.3, 0.03), PC.woodD, { p: [s * 0.74, 0.06, 0] });
-  }
-  b.add('wood', cyl(0.045, 0.045, 1.6, 8), PC.wood, { p: [0, 1.32, 0], r: [0, 0, PI / 2] });
+  // posts stand on the rim and the crank grip points along z: nothing at body height sticks out of the rim's walk
+  // solid (test/world-collide.test.ts — you no longer walk through the posts / the crank)
+  for (const s of [-1, 1]) b.add('wood', rbox(0.11, 1.75, 0.11, 0.02), PC.woodD, { p: [s * 0.58, 0.87, 0] });
+  b.add('wood', cyl(0.045, 0.045, 1.3, 8), PC.wood, { p: [0, 1.32, 0], r: [0, 0, PI / 2] });
   b.add('wood', cyl(0.08, 0.08, 0.3, 8), PC.woodL, { p: [0, 1.32, 0], r: [0, 0, PI / 2] });
-  b.add('metal', rbox(0.04, 0.22, 0.04, 0.01), PC.iron, { p: [0.84, 1.24, 0] });
-  b.add('metal', rbox(0.18, 0.04, 0.04, 0.01), PC.iron, { p: [0.92, 1.14, 0] });
+  b.add('metal', rbox(0.04, 0.22, 0.04, 0.01), PC.iron, { p: [0.68, 1.24, 0] });
+  b.add('metal', rbox(0.04, 0.04, 0.18, 0.01), PC.iron, { p: [0.68, 1.14, 0.09] });
   b.add('paint', cyl(0.016, 0.016, 0.3, 5), PC.hayD, { p: [0, 1.15, 0] });
   b.add('wood', lathe([[0, 0.78], [0.12, 0.78], [0.15, 0.98], [0.13, 0.98], [0, 0.96]], 12), PC.woodR, { uv: [2, 0.5] });
   for (const y of [0.83, 0.95]) b.add('metal', torus(0.135 + (y - 0.83) * 0.12, 0.012, 4, 12), PC.iron, { p: [0, y, 0], r: [PI / 2, 0, 0] });
@@ -167,7 +166,7 @@ function well(): PropPart[] {
   // roof: two tiled slopes + ridge
   for (const s of [-1, 1]) b.add('roof', rbox(1.85, 0.07, 0.78, 0.03), PC.roof, { p: [0, 1.88, s * 0.3], r: [s * 0.72, 0, 0], uv: 0.6 });
   b.add('wood', rbox(1.95, 0.09, 0.09, 0.03), PC.woodD, { p: [0, 2.13, 0] });
-  for (const s of [-1, 1]) b.add('wood', rbox(0.08, 0.5, 0.08, 0.02), PC.woodD, { p: [s * 0.74, 1.95, 0] });
+  for (const s of [-1, 1]) b.add('wood', rbox(0.08, 0.5, 0.08, 0.02), PC.woodD, { p: [s * 0.58, 1.95, 0] });
   // potted sprout on the ridge
   b.add('stone', cyl(0.07, 0.05, 0.1, 8), PC.stoneR, { p: [0.45, 2.22, 0] });
   b.add('paint', sph(0.05, 6, 4), PC.leaf, { p: [0.42, 2.31, 0], s: [1, 0.6, 0.5] });
@@ -250,9 +249,10 @@ function dummy(): PropPart[] {
   b.add('paint', torus(0.035, 0.008, 3, 8, PI), '#2b1d18', { p: [0, 1.58, 0.17], r: [0, 0, PI] });
   for (let i = 0; i < 5; i++) b.add('paint', cone(0.03, 0.14, 4), PC.hay, { p: [Math.cos(i * 1.3) * 0.06, 1.81, Math.sin(i * 1.3) * 0.06], r: [Math.sin(i) * 0.5, 0, Math.cos(i) * 0.5] });
   // target painted on the chest
-  b.add('paint', cyl(0.13, 0.13, 0.02, 14), PC.cream, { p: [0, 1.1, 0.19], r: [PI / 2, 0, 0] });
-  b.add('paint', cyl(0.09, 0.09, 0.025, 14), PC.red, { p: [0, 1.1, 0.19], r: [PI / 2, 0, 0] });
-  b.add('paint', cyl(0.04, 0.04, 0.03, 10), PC.cream, { p: [0, 1.1, 0.19], r: [PI / 2, 0, 0] });
+  // (rings ≥ 1 cm proud of each other: their fronts never share a depth-buffer plane — no flicker at a distance)
+  b.add('paint', cyl(0.13, 0.13, 0.02, 14), PC.cream, { p: [0, 1.1, 0.195], r: [PI / 2, 0, 0] });
+  b.add('paint', cyl(0.09, 0.09, 0.025, 14), PC.red, { p: [0, 1.1, 0.207], r: [PI / 2, 0, 0] });
+  b.add('paint', cyl(0.04, 0.04, 0.03, 10), PC.cream, { p: [0, 1.1, 0.219], r: [PI / 2, 0, 0] });
   // button eyes
   for (const s of [-1, 1]) b.add('paint', sph(0.025, 6, 4), '#2b1d18', { p: [s * 0.06, 1.65, 0.16] });
   return b.build();
@@ -452,24 +452,25 @@ function fenceWood(): PropPart[] {
 function signpost(): PropPart[] {
   const b = new PB();
   b.add('stone', cyl(0.18, 0.22, 0.14, 10), PC.stoneD, { p: [0, 0.07, 0] });
-  b.add('wood', rbox(0.11, 2.1, 0.11, 0.025), PC.woodD, { p: [0, 1.05, 0] });
+  b.add('wood', rbox(0.11, 2.08, 0.11, 0.025), PC.woodD, { p: [0, 1.06, 0] });
   for (const s of [-1, 1]) b.add('wood', cone(0.05, 0.12, 4), PC.woodD, { p: [s * 0.035, 2.14, 0], r: [0, PI / 4, -s * 0.4] });
   const arrow = (w: number) => {
     const sh = new THREE.Shape(), h = 0.2;
     sh.moveTo(0, -h / 2); sh.lineTo(w - 0.12, -h / 2); sh.lineTo(w, 0); sh.lineTo(w - 0.12, h / 2); sh.lineTo(0, h / 2); sh.closePath();
     return slab(sh, 0.045, 0.012);
   };
-  const boards: [number, number, string, number][] = [[1.85, 0.0, PC.woodL, 0.72], [1.58, PI * 0.85, PC.wood, 0.64], [1.32, -0.6, PC.woodL, 0.6]];
+  // the lowest board clears a chibi's head (≥ 1.3 m): nothing sticks out of the post's walk solid at body height
+  const boards: [number, number, string, number][] = [[1.9, 0.0, PC.woodL, 0.72], [1.64, PI * 0.85, PC.wood, 0.64], [1.4, -0.6, PC.woodL, 0.6]];
   for (const [y, ry, c, w] of boards) {
     b.add('wood', arrow(w), c, { p: [0, y, 0], r: [0, ry, 0], uv: 0.5 });
     // paw dot on each board
     const cx = Math.cos(ry), cz = -Math.sin(ry);
-    b.add('paint', cyl(0.045, 0.045, 0.062, 10), PC.plum, { p: [cx * (w * 0.42), y, cz * (w * 0.42)], r: [PI / 2, ry, 0] });
+    b.add('paint', cyl(0.045, 0.045, 0.08, 10), PC.plum, { p: [cx * (w * 0.42), y, cz * (w * 0.42)], r: [PI / 2, ry, 0] });
     for (let i = 0; i < 4; i++) {
       const a = (i - 1.5) * 0.5, d = w * 0.42 + Math.sin(a) * 0.055;
-      b.add('paint', cyl(0.016, 0.016, 0.064, 6), PC.plum, { p: [cx * d - (-Math.sin(ry)) * 0 , y + Math.cos(a) * 0.06 + 0.005, cz * d], r: [PI / 2, ry, 0] });
+      b.add('paint', cyl(0.016, 0.016, 0.082, 6), PC.plum, { p: [cx * d - (-Math.sin(ry)) * 0 , y + Math.cos(a) * 0.06 + 0.005, cz * d], r: [PI / 2, ry, 0] });
     }
-    b.add('metal', cyl(0.018, 0.018, 0.075, 6), PC.ironD, { p: [cx * 0.1, y, cz * 0.1], r: [PI / 2, ry, 0] });
+    b.add('metal', cyl(0.018, 0.018, 0.092, 6), PC.ironD, { p: [cx * 0.1, y, cz * 0.1], r: [PI / 2, ry, 0] });
   }
   return b.build();
 }

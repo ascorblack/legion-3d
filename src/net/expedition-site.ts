@@ -20,6 +20,7 @@ import type { SiteSession } from '../contracts/modules';
 import type { Bus } from '../bridge/bridge';
 import { createStore } from '../store/store';
 import { lookStyle, styleId } from './site';
+import { setFetchTee } from './fetch-tee';
 
 const W = window as any;
 const bus = (): Bus | null => W.__L3D_BUS || null;
@@ -105,6 +106,7 @@ export async function connectExpedition(meData?: any): Promise<ExpSiteSession | 
   const setClassic = (on: boolean) => {
     if (classic === on) return; classic = on;
     document.documentElement.classList.toggle('l3d-exp', !on);
+    setFetchTee(!on);   // the classic 2D site gets its own window.fetch back (src/net/fetch-tee.ts)
   };
   const actions: Actions = {
     equip: (uid) => post('/api/equip', { uid }),
@@ -138,6 +140,7 @@ export async function connectExpedition(meData?: any): Promise<ExpSiteSession | 
     closeOverlay: () => { /* */ },
     dispose() {
       for (const u of unsubs) u();
+      setFetchTee(false);
       document.documentElement.classList.remove('l3d-exp');
       style.remove();
     },

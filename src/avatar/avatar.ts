@@ -7,6 +7,7 @@ import type { Appearance } from '../contracts';
 import type { Avatar } from '../contracts/modules';
 import { getModel, releaseModel, faceKeyOf, B, BONE_COUNT, BONE_PARENT, type ModelData } from './model';
 import { faceTexture, facePatch, moodFace, MOOD_FACE, type Mood, type FaceKey } from './face';
+import { ContactShadow } from './shadows';
 import { toonMat, outlineMat, faceMat, alphaLevel, ALPHA_LEVELS, uTime, auraPointsMat, glowMat, glowSolidMat, type Variant } from './materials';
 import { nickExtras, jhash } from './appearance';
 import { TP_TRACKS, TP_CONTACT, TP_VALUES, FAMILY_TRACK, trackLen, sampleTrack } from './attacks';
@@ -138,6 +139,8 @@ class AvatarImpl implements Avatar, AvatarCombat, AvatarSocial {
   private armLRest = new THREE.Vector3(); private armRRest = new THREE.Vector3();
   /** Time since the bow was loosed (−1 = not recently). */
   private relT = -1;
+  /** Soft contact shadow under the feet (one shared instanced draw per scene). */
+  private shadow = new ContactShadow();
 
   constructor(app: Appearance) {
     this.root.name = 'avatar';
@@ -269,6 +272,10 @@ class AvatarImpl implements Avatar, AvatarCombat, AvatarSocial {
     uTime.value = t;
     const bones = this.bones;
     if (!bones.length) return;
+    if (this.model && this.lvl > 0) {
+      const gh = !!this.app.ghost, air = this.jumpT >= 0 ? 0.6 : 1;
+      this.shadow.stamp(this.root, (this.model.dims.w * 1.7 + 0.08) * (2 - air), (this.lvl / ALPHA_LEVELS) * (gh ? 0.3 : 0.85) * air);
+    }
     if (this.moodT > 0) { this.moodT -= dt; if (this.moodT <= 0) { this.mood = null; this.applyState(); } }
     const sitTarget = this.sitOn ? 1 : 0;
     if (this.sitAmt !== sitTarget) this.sitAmt = Math.abs(sitTarget - this.sitAmt) < 0.01 ? sitTarget : this.sitAmt + (sitTarget - this.sitAmt) * Math.min(1, dt * 9);
@@ -605,6 +612,7 @@ class AvatarImpl implements Avatar, AvatarCombat, AvatarSocial {
   }
 
   dispose(): void {
+    this.shadow.release();
     if (this.bowKit) { this.bowKit.dispose(); this.bowKit = null; }
     if (this.flash) { (this.flash.material as THREE.Material).dispose(); this.flash = null; }
     if (this.model) releaseModel(this.model);

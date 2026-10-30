@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MineModel, stoneProgress, gotText, floorOf } from '../src/rooms/mine/state';
-import { MineClient, GO_MS, type Timers } from '../src/rooms/mine/net';
+import { MineClient, GO_MS, mineFloorKey, type Timers } from '../src/rooms/mine/net';
 import { makeBus } from '../src/rooms/mine/fake';
 import enter from './fixtures/mine-enter.json';
 import state from './fixtures/mine-state.json';
@@ -96,7 +96,7 @@ describe('mine client mirrors mine.js requests', () => {
     const C = clock(), { api, calls } = fakeApi();
     const c = new MineClient({ api, login: LOGIN, c: 'home', timers: C.T, now: C.now, hero });
     expect(await c.enter({ x: 303, y: 2393 })).toBe(true);
-    expect(calls[0]).toEqual({ p: '/api/mine/enter?c=home', b: { x: 303, y: 2393 } });
+    expect(calls[0]).toEqual({ p: '/api/mine/enter?c=home', b: { x: 303, y: 2393, tab: expect.stringMatching(/^[0-9a-f]{16}$/) } });   // site 29.10: the page's tab mark
     expect(c.sid).toBe((enter as any).sid);
     await C.advance(3000);
     const poll = calls.find((x) => x.p.startsWith('/api/mine/state'))!;
@@ -128,7 +128,20 @@ describe('mine client mirrors mine.js requests', () => {
     expect(calls.filter((x) => x.p.startsWith('/api/mine/state')).length).toBeLessThanOrEqual(1);
     c.close();
   });
-  it('dig: checks front/reach, sends {i,c,sid,x,y,k,vh,pt}; stop sends {c,sid}', async () => {
+  it('polls with mc= (no live channel), not once the single chat window feeds the mine tab (chat.poll = false); f= is the site floor key', async () => {
+    for (const poll of [true, false]) {
+      const C = clock(), { api, calls } = fakeApi(), c = new MineClient({ api, login: LOGIN, c: 'home', timers: C.T, now: C.now });
+      await c.enter({ x: 303, y: 2393 });
+      expect(c.chat.on).toBe(true); c.chat.poll = poll;
+      await C.advance(3000);
+      const q = calls.filter((x) => x.p.startsWith('/api/mine/state')).map((x) => x.p);
+      expect(q.length).toBeGreaterThan(0);
+      expect(q.every((p) => /mc=/.test(p) === poll)).toBe(true);
+      expect(q.every((p) => new URLSearchParams(p.split('?')[1]).get('f') === mineFloorKey(c.model.st!))).toBe(true);
+      c.close();
+    }
+  });
+  it('dig: checks front/reach, sends {i,c,sid,x,y,pt} (site 30.10: no k / vh); stop sends {c,sid}', async () => {
     const C = clock(), { api, calls } = fakeApi();
     const c = new MineClient({ api, login: LOGIN, c: 'home', timers: C.T, now: C.now, hero });
     await c.enter({ x: 303, y: 2393 });
@@ -141,7 +154,7 @@ describe('mine client mirrors mine.js requests', () => {
     const sp = { x: 64 + (i % 7) * 128 + 64, y: 420 + Math.floor(i / 7) * 128 + 64 + 128 + 34 };
     expect(await c.dig(i, sp, { x: 500, y: 600 })).toBe(true);
     const d = calls.find((x) => x.p === '/api/mineDig')!;
-    expect(d.b).toEqual({ i, c: 'home', sid: c.sid, x: sp.x, y: sp.y, k: 1, vh: 0, pt: [500, 600] });
+    expect(d.b).toEqual({ i, c: 'home', sid: c.sid, x: sp.x, y: sp.y, pt: [500, 600] });
     expect(c.model.myI).toBe(i);
     await c.stop();
     expect(calls[calls.length - 1]).toEqual({ p: '/api/mineStop', b: { c: 'home', sid: c.sid } });

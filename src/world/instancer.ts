@@ -12,6 +12,7 @@ const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _col = new THREE.Color();
 
 export class Instancer {
   private kinds = new Map<string, PartDef[]>();
@@ -46,6 +47,14 @@ export class Instancer {
         const mesh = new THREE.InstancedMesh(part.geo, mats[part.mat] || mats.flat, list.length);
         for (let i = 0; i < list.length; i++) mesh.setMatrixAt(i, list[i]);
         mesh.instanceMatrix.needsUpdate = true;
+        if (part.mat === 'leaf') {   // every tree / bush its own shade: value ±10 %, a warm / cool shift
+          for (let i = 0; i < list.length; i++) {
+            const e = list[i].elements, h = Math.sin(e[12] * 12.9898 + e[14] * 78.233) * 43758.5453, r1 = h - Math.floor(h), r2 = (h * 7.13) - Math.floor(h * 7.13);
+            const v = 0.88 + r1 * 0.22, w = (r2 - 0.5) * 0.16;
+            mesh.setColorAt(i, _col.setRGB(v * (1 + w), v * (1 + w * 0.3), v * (1 - w)));
+          }
+          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        }
         mesh.computeBoundingSphere();
         mesh.name = 'prop:' + kind + ':' + part.mat;
         mesh.castShadow = !!part.castShadow;
@@ -72,6 +81,27 @@ export function part(src: THREE.BufferGeometry, color: THREE.ColorRepresentation
   const n = g.attributes.position.count, col = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+  g.setAttribute('uv', boxUv(g, 1));
   return g;
+}
+
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _f = new THREE.Vector3();
+/**
+ * Box-projected UVs in the part's own (prop-local, metre) space, the axis chosen per triangle: the same texel density as
+ * the city's world-projected pieces (one texture tile per `tile` metres). The primitives' own 0..1-per-face UVs would
+ * squeeze a whole tile onto a 2 cm strap (bug class «texture density», test/world-texmap.test.ts).
+ */
+export function boxUv(g: THREE.BufferGeometry, tile: number): THREE.BufferAttribute {
+  const pos = g.attributes.position as THREE.BufferAttribute, n = pos.count, uv = new Float32Array(n * 2), t = 1 / tile;
+  for (let i = 0; i + 2 < n; i += 3) {
+    _a.fromBufferAttribute(pos, i); _b.fromBufferAttribute(pos, i + 1).sub(_a); _c.fromBufferAttribute(pos, i + 2).sub(_a);
+    _f.crossVectors(_b, _c);
+    const ax = Math.abs(_f.x), ay = Math.abs(_f.y), az = Math.abs(_f.z);
+    const axis = ay >= ax && ay >= az ? 1 : ax >= az ? 0 : 2;
+    for (let j = i; j < i + 3; j++) {
+      const x = pos.getX(j), y = pos.getY(j), z = pos.getZ(j);
+      uv[j * 2] = (axis === 0 ? z : x) * t; uv[j * 2 + 1] = (axis === 1 ? z : y) * t;
+    }
+  }
+  return new THREE.BufferAttribute(uv, 2);
 }

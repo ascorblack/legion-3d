@@ -6,6 +6,7 @@
  *   &pitch=deg      look up/down
  *   &tp=1           third-person-ish view (behind and above the point)
  *   &q=0..3         quality (default 2)
+ *   &town=camp|village  &style=cats|cherts|…   another fixture town / channel style
  *   &map=1          show world.mapImage() (top-down map) over the view
  * HUD: solidTop (jumping) under the camera, door interactable count.
  *   (art: buildCity takes opts.art but the real-3D city does not use it for facades)
@@ -13,7 +14,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { fixtureLayout, campFixtureLayout } from './fixtures';
+import { fixtureLayout, campFixtureLayout, villageFixtureLayout } from './fixtures';
 import { buildCity } from '../src/world';
 import { toX, toZ, fromX, fromZ, EYE } from '../src/world/coords';
 import type { QualityLevel } from '../src/contracts';
@@ -36,7 +37,9 @@ const app = document.getElementById('app')!;
   const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 400);
   camera.rotation.order = 'YXZ';
 
-  const layout = qs.get('town') === 'camp' ? campFixtureLayout() : fixtureLayout();
+  const st = qs.get('style') || 'cats';
+  const layout = qs.get('town') === 'camp' ? campFixtureLayout(st) : qs.get('town') === 'village' ? villageFixtureLayout(st) : fixtureLayout();
+  layout.styleId = st;
   const t0 = performance.now();
   const world = await buildCity(layout, { quality: q, renderer });
   const buildMs = performance.now() - t0;

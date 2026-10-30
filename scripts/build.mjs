@@ -40,9 +40,11 @@ if (only !== 'dev') {
     manifest.background = { scripts: ['background.js'] };
     manifest.browser_specific_settings = { gecko: {
       id: 'legion-3d@ascorblack',
-      strict_min_version: '128.0',
+      // 140 / 142 (Android) = first releases that know data_collection_permissions, which AMO requires for new add-ons;
+      // a lower minimum makes web-ext lint warn (KEY_FIREFOX_UNSUPPORTED_BY_MIN_VERSION)
+      strict_min_version: process.env.L3D_FF_MIN_VERSION || '140.0',   // env override: e2e runs on the older Firefox the test harness ships
       data_collection_permissions: { required: ['none'] },
-    } };
+    }, gecko_android: { strict_min_version: '142.0' } };
     writeFileSync(`${dist}/manifest.json`, JSON.stringify(manifest, null, 2) + '\n');
   }
   ctxs.push(await esbuild.context({ ...common, entryPoints: { bridge: 'src/bridge/bridge.ts', game: 'src/content/main.ts', background: 'src/update/background.ts', notify: 'src/update/notify.ts' }, outdir: dist }));

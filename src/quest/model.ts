@@ -121,8 +121,11 @@ export interface LairIsles {
 }
 export interface QuestLair {
   is?: LairIsles; hp?: number | null; st?: string; phase?: number; round?: number; acted?: boolean; rt?: number;
-  tele?: BattleTele; spell?: { words: string[]; until?: number }; mass?: { words: string[] }; deal?: boolean | object;
+  /** Site 30.10 (anti-bot): the room sends lair words (telegraph, spell, mass) only once they reached the stream — until then `hid: 1`
+   *  and no `word` / `words` (the card says «на экране стрима»); `id` ties the two views of one event together. */
+  tele?: Partial<BattleTele> & { hid?: 0 | 1; id?: number | string }; spell?: LairWords; mass?: LairWords; deal?: boolean | object;
 }
+export interface LairWords { words?: string[]; until?: number; hid?: 0 | 1; id?: number | string }
 export type TrapType = 'react' | 'gas' | 'ropes' | 'ceiling' | 'plates' | 'bait' | 'greed' | 'code' | 'share' | string;
 export interface TrapResMe { dmg?: number | 'dead'; gain?: number; xp?: number; it?: string[]; st?: string }
 export interface QuestTrap {
@@ -452,6 +455,16 @@ export function mergeOwn(cur: QuestPayload, newest: QuestPayload, now = 0, adj =
     if (c.lair.is.pick && n.lair.is.pick) is.pick = { ...c.lair.is.pick, my: n.lair.is.pick.my };
     if (c.lair.is.at && n.lair.is.at) is.at = { ...c.lair.is.at, my: n.lair.is.at.my };
     v.lair = { ...c.lair, is };
+  }
+  // site 30.10 (anti-bot): lair words come from the room only after they reached the stream (hid) — take them from the freshest view of
+  // the same event: the card follows the stream, the word shows as soon as it arrived (quest.js view())
+  if (c.lair && n.lair) {
+    const lw: Partial<Pick<QuestLair, 'tele' | 'spell' | 'mass'>> = {};
+    for (const k of ['tele', 'spell', 'mass'] as const) {
+      const a = c.lair[k], b = n.lair[k];
+      if (a && a.hid && b && !b.hid && b.id && a.id === b.id) (lw as Record<string, unknown>)[k] = { ...a, ...(k === 'tele' ? { word: (b as { word?: string }).word } : { words: (b as LairWords).words }), hid: 0 };
+    }
+    if (lw.tele || lw.spell || lw.mass) v.lair = { ...(v.lair || c.lair), ...lw };
   }
   if (c.vote && n.vote && c.vote.id === n.vote.id) v.vote = { ...c.vote, my: n.vote.my };
   if (c.dgn?.vote && n.dgn?.vote && c.dgn.vote.id === n.dgn.vote.id) v.dgn = { ...c.dgn, vote: { ...c.dgn.vote, my: n.dgn.vote.my } };

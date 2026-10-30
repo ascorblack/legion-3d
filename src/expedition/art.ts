@@ -34,6 +34,29 @@ export class GB {
     this.parts.push(geo);
     return this;
   }
+  /** Emissive part: the tint material treats vertex colours above 1 as glow (colour × k). */
+  addGlow(g: THREE.BufferGeometry, color: THREE.ColorRepresentation, m?: THREE.Matrix4, k = 2.2): this {
+    this.add(g, color, m);
+    const col = this.parts[this.parts.length - 1].attributes.color as THREE.BufferAttribute;
+    for (let i = 0; i < col.array.length; i++) (col.array as Float32Array)[i] *= k;
+    return this;
+  }
+  /** Part with a vertical colour gradient (c0 at y0 → c1 at y1, measured after the transform `m`). */
+  addG(g: THREE.BufferGeometry, c0: THREE.ColorRepresentation, c1: THREE.ColorRepresentation, m: THREE.Matrix4, y0: number, y1: number, tint = 0): this {
+    g.deleteAttribute('uv'); g.deleteAttribute('uv1');
+    g.applyMatrix4(m);
+    const n = g.attributes.position.count, A = new THREE.Color(c0), B = new THREE.Color(c1);
+    const col = new Float32Array(n * 3), tt = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const t = Math.max(0, Math.min(1, (g.attributes.position.getY(i) - y0) / (y1 - y0 || 1)));
+      _c.copy(A).lerp(B, t); col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; tt[i] = tint;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aTint', new THREE.BufferAttribute(tt, 1));
+    if (!g.index) { const idx = new Array(n); for (let i = 0; i < n; i++) idx[i] = i; g.setIndex(idx); }
+    this.parts.push(g);
+    return this;
+  }
   build(): THREE.BufferGeometry {
     const g = mergeGeometries(this.parts, false) || new THREE.BufferGeometry();
     for (const p of this.parts) p.dispose();
@@ -1298,130 +1321,381 @@ export function bossGeo(pal: number): THREE.BufferGeometry {
 /* ------------------------------------------------------------------ nature props */
 
 export type PropKind = 'tree' | 'pine' | 'dead' | 'bush' | 'rock' | 'grass' | 'flower' | 'reed' | 'mushroom' | 'stalag' | 'crystal' | 'pillar' | 'torch'
-  | 'stone' | 'mound' | 'cliff' | 'snowpine' | 'cactus' | 'support' | 'lily' | 'fence';
+  | 'stone' | 'mound' | 'cliff' | 'snowpine' | 'cactus' | 'support' | 'lily' | 'fence'
+  | 'birch' | 'willow' | 'fern' | 'boulder' | 'stump' | 'fallen' | 'tomb' | 'ruin' | 'bones' | 'barrel' | 'crate' | 'drift' | 'ice' | 'agave' | 'hang'
+  | 'pebbles' | 'dry' | 'snowtuft' | 'menhir' | 'dolmen' | 'brazier' | 'moss' | 'spire' | 'tumble' | 'cattail' | 'berry'
+  | 'sandrock' | 'scree' | 'shrub' | 'ribs' | 'arch' | 'slab';
+/** Vertical-gradient colour of a part (AO-like: dark at the bottom, light on top) — baked per vertex. */
+const grad = (b: GB, g: THREE.BufferGeometry, c0: string, c1: string, m: THREE.Matrix4, y0: number, y1: number, tint = 0) => b.addG(g, c0, c1, m, y0, y1, tint);
+/** tiny hash for deterministic variety inside geometry builders */
+const hh = (i: number) => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 export function propGeo(k: PropKind, pal = 0): THREE.BufferGeometry {
   return cached(`prop:${k}:${pal}`, () => {
     const b = new GB();
     switch (k) {
       case 'tree': {
-        const leaf = ['#5fb85a', '#7ac86a', '#e8a04a', '#4fa86a'][pal % 4];
-        b.add(cyl(0.12, 0.18, 1.4, 7), '#7a5436', T(0, 0.7, 0));
-        b.add(ico(0.85, 1), leaf, T(0, 1.9, 0, 0, 0, 0, [1, 0.9, 1]));
-        b.add(ico(0.6, 0), leaf, T(0.45, 1.55, 0.2));
-        b.add(ico(0.55, 0), leaf, T(-0.4, 1.6, -0.15));
-        b.add(sph(0.08, 6, 4), '#ff5a6a', T(0.5, 1.9, -0.55));
-        b.add(sph(0.08, 6, 4), '#ff5a6a', T(-0.3, 2.3, -0.6));
+        const L = [['#3f8a4a', '#8ad060'], ['#58a85a', '#b4e070'], ['#d0782e', '#ffc860'], ['#2f8a6a', '#7ae0a8']][pal % 4];
+        grad(b, cyl(0.1, 0.2, 1.7, 7), '#4a3022', '#7a5436', T(0, 0.85, 0), 0, 1.7);
+        b.add(cyl(0.2, 0.32, 0.22, 6), '#4a3022', T(0, 0.1, 0));
+        for (const a of [0.6, 3.4]) b.add(cyl(0.04, 0.09, 0.5, 3), '#5a3e28', T(Math.cos(a) * 0.2, 1.5, Math.sin(a) * 0.2, Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9));
+        grad(b, ico(0.95, 1), L[0], L[1], T(0, 2.15, 0, 0, 0, 0, [1, 0.9, 1]), 1.3, 3.0);
+        grad(b, ico(0.62, 0), L[0], L[1], T(0.66, 1.72, 0.25), 1.1, 2.4);
+        grad(b, ico(0.6, 0), L[0], L[1], T(-0.62, 1.78, -0.2), 1.1, 2.4);
+        grad(b, ico(0.55, 0), L[0], L[1], T(0.1, 2.75, -0.1), 1.8, 3.3);
+        grad(b, ico(0.5, 0), L[0], L[1], T(-0.2, 2.1, 0.62), 1.3, 2.8);
+        if (pal % 4 === 0) { b.add(sph(0.08, 4, 3), '#ff5a6a', T(0.5, 1.9, -0.7)); b.add(sph(0.08, 4, 3), '#ff5a6a', T(-0.3, 2.4, -0.78)); }
+        break;
+      }
+      case 'birch': {
+        const L = pal % 2 ? ['#8aa84a', '#e0e070'] : ['#5aa860', '#b8e878'];
+        grad(b, cyl(0.07, 0.12, 2.6, 6), '#d8d4c8', '#f4f0e4', T(0, 1.3, 0), 0, 2.6);
+        for (let i = 0; i < 5; i++) b.add(box(0.15, 0.05, 0.14), '#3a3430', T(0, 0.4 + i * 0.42, 0, 0, i * 1.7, 0));
+        grad(b, ico(0.7, 1), L[0], L[1], T(0, 2.9, 0, 0, 0, 0, [0.9, 1.15, 0.9]), 2.0, 3.8);
+        grad(b, ico(0.48, 0), L[0], L[1], T(0.42, 2.3, 0.1), 1.8, 3.0);
+        grad(b, ico(0.44, 0), L[0], L[1], T(-0.38, 2.4, -0.12), 1.8, 3.0);
+        break;
+      }
+      case 'willow': {
+        grad(b, cyl(0.14, 0.26, 1.8, 7), '#4a3a2a', '#6a5238', T(0, 0.9, 0, 0, 0, 0.08), 0, 1.8);
+        grad(b, ico(1.05, 1), '#3f7a52', '#8ac078', T(0, 2.1, 0, 0, 0, 0, [1.25, 0.7, 1.25]), 1.5, 2.8);
+        for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, r = 0.95 + hh(i) * 0.3, len = 1.1 + hh(i + 9) * 0.8; grad(b, cone(0.1, len, 3), '#4a8a58', '#a8d884', T(Math.cos(a) * r, 2.0 - len / 2 + 0.2, Math.sin(a) * r, 0, 0, 0, [1, -1, 1]), 2.1 - len, 2.1, 0); }
         break;
       }
       case 'pine': case 'snowpine': {
-        const leaf = k === 'snowpine' ? '#3f7a6a' : '#3f8a5a';
-        b.add(cyl(0.1, 0.15, 0.8, 6), '#6a4a30', T(0, 0.4, 0));
-        for (let i = 0; i < 3; i++) {
-          b.add(cone(1.0 - i * 0.24, 1.1, 8), leaf, T(0, 1.1 + i * 0.62, 0));
-          if (k === 'snowpine') b.add(cone(0.55 - i * 0.14, 0.45, 8), '#f4f8ff', T(0, 1.5 + i * 0.62, 0));
+        const snow = k === 'snowpine';
+        const L = snow ? ['#2f5f68', '#5a9a98'] : pal % 2 ? ['#2f6a4a', '#6ab070'] : ['#2a6a42', '#58a860'];
+        grad(b, cyl(0.1, 0.18, 0.9, 6), '#4a3022', '#6a4a30', T(0, 0.45, 0), 0, 0.9);
+        for (let i = 0; i < 4; i++) {
+          const r = 1.05 - i * 0.2, y = 0.85 + i * 0.58;
+          grad(b, cone(r, 1.15, 7), L[0], L[1], T(0, y + 0.45, 0, 0, i * 0.4, 0), y - 0.1, y + 1.0);
+          if (snow) grad(b, cone(r * 0.78, 0.5, 7), '#dce8f4', '#ffffff', T(0, y + 0.82, 0, 0, i * 0.4, 0), y + 0.5, y + 1.1);
         }
+        if (snow) b.add(sph(0.12, 5, 3), '#ffffff', T(0, 3.35, 0));
         break;
       }
       case 'dead':
-        b.add(cyl(0.08, 0.16, 1.8, 6), '#5a4a42', T(0, 0.9, 0, 0, 0, 0.06));
-        b.add(cyl(0.04, 0.07, 0.8, 5), '#5a4a42', T(0.3, 1.4, 0, 0, 0, -0.9));
-        b.add(cyl(0.03, 0.06, 0.7, 5), '#5a4a42', T(-0.25, 1.65, 0.05, 0, 0, 0.8));
+        grad(b, cyl(0.07, 0.17, 2.0, 6), '#4a3c38', '#7a6a5e', T(0, 1.0, 0, 0, 0, 0.06), 0, 2.0);
+        b.add(cyl(0.2, 0.3, 0.2, 6), '#4a3c38', T(0, 0.08, 0));
+        b.add(cyl(0.035, 0.07, 0.9, 5), '#6a5a50', T(0.32, 1.45, 0, 0, 0, -0.95));
+        b.add(cyl(0.03, 0.06, 0.8, 5), '#6a5a50', T(-0.28, 1.7, 0.05, 0, 0, 0.85));
+        b.add(cyl(0.025, 0.05, 0.6, 5), '#6a5a50', T(0.05, 1.95, 0.25, 0.9, 0, 0.1));
+        b.add(cyl(0.02, 0.04, 0.5, 4), '#6a5a50', T(0.55, 1.9, 0, 0, 0, -0.5));
         break;
       case 'bush': {
-        const c = ['#5aa85a', '#4f9a6a', '#8ab84a', '#6a7a5a'][pal % 4];
-        b.add(ico(0.5, 1), c, T(0, 0.35, 0, 0, 0, 0, [1.2, 0.8, 1]));
-        b.add(ico(0.35, 0), c, T(0.4, 0.3, 0.1));
-        b.add(ico(0.32, 0), c, T(-0.35, 0.28, -0.1));
-        if (pal % 2 === 0) for (let i = 0; i < 3; i++) b.add(sph(0.06, 5, 4), ['#ff8ab0', '#ffffff', '#ffd34d'][i], T(-0.3 + i * 0.3, 0.6, -0.35));
+        const L = [['#3f8a4a', '#8ad060'], ['#2f7a5a', '#6ac888'], ['#6a9a2a', '#c8e060'], ['#5a6a4a', '#a0b078']][pal % 4];
+        grad(b, ico(0.52, 1), L[0], L[1], T(0, 0.38, 0, 0, 0, 0, [1.25, 0.8, 1.05]), 0, 0.85);
+        grad(b, ico(0.36, 0), L[0], L[1], T(0.45, 0.3, 0.12), 0, 0.7);
+        grad(b, ico(0.33, 0), L[0], L[1], T(-0.4, 0.28, -0.12), 0, 0.65);
+        grad(b, ico(0.3, 0), L[0], L[1], T(0.05, 0.3, 0.42), 0, 0.6);
+        if (pal % 2 === 0) for (let i = 0; i < 4; i++) b.add(sph(0.06, 4, 3), ['#ff8ab0', '#ffffff', '#ffd34d', '#ff6a6a'][i], T(-0.35 + i * 0.24, 0.62 + hh(i) * 0.1, -0.38));
+        break;
+      }
+      case 'berry': {
+        grad(b, ico(0.45, 1), '#2f7a4a', '#6ab060', T(0, 0.35, 0, 0, 0, 0, [1.2, 0.8, 1]), 0, 0.8);
+        for (let i = 0; i < 6; i++) b.add(sph(0.06, 4, 3), '#d83a5a', T(Math.cos(i * 1.1) * 0.42, 0.35 + hh(i) * 0.25, Math.sin(i * 1.1) * 0.4));
         break;
       }
       case 'rock': {
-        const c = ['#9a94a8', '#8a8070', '#6a6478', '#b8b0a0'][pal % 4];
-        b.add(dod(0.55), c, T(0, 0.25, 0, 0.3, 0.5, 0.1, [1.2, 0.7, 1]));
-        b.add(dod(0.3), c, T(0.55, 0.12, 0.2, 0.4, 0.2, 0.3, [1, 0.7, 1]));
+        const c = [['#6a6478', '#b4aec4'], ['#6a6050', '#b4a890'], ['#4a4658', '#8a869c'], ['#8a8274', '#d0c8b8']][pal % 4];
+        grad(b, dod(0.58), c[0], c[1], T(0, 0.25, 0, 0.3, 0.5, 0.1, [1.2, 0.7, 1]), 0, 0.6);
+        grad(b, dod(0.32), c[0], c[1], T(0.6, 0.12, 0.22, 0.4, 0.2, 0.3, [1, 0.7, 1]), 0, 0.4);
+        if (pal === 0 || pal === 1) grad(b, dod(0.34), '#4a8a3a', '#7ac050', T(-0.05, 0.42, 0, 0.2, 0.4, 0.1, [1.1, 0.35, 0.9]), 0.3, 0.55);
+        break;
+      }
+      case 'boulder': {
+        const c = [['#5a566a', '#a8a2b8'], ['#6a5e50', '#b8a888'], ['#4a4658', '#8a869c'], ['#8a7a68', '#d8c8a8']][pal % 4];
+        grad(b, dod(1.0), c[0], c[1], T(0, 0.6, 0, 0.3, 0.7, 0.1, [1.25, 0.85, 1.05]), 0, 1.5);
+        grad(b, dod(0.6), c[0], c[1], T(1.0, 0.3, 0.4, 0.5, 0.2, 0.3, [1, 0.8, 1]), 0, 0.9);
+        grad(b, dod(0.45), c[0], c[1], T(-0.8, 0.25, -0.5, 0.2, 0.9, 0.3, [1, 0.8, 1]), 0, 0.7);
+        if (pal < 2) grad(b, dod(0.7), '#3f8a3a', '#78c050', T(0.05, 1.05, 0, 0.2, 0.4, 0.1, [1.2, 0.3, 1]), 0.9, 1.2);
+        break;
+      }
+      case 'pebbles': {
+        const c = [['#6a6478', '#b4aec4'], ['#7a6a52', '#c4b498'], ['#8a7a68', '#dccdb0'], ['#5a5668', '#9a96ac']][pal % 4];
+        grad(b, new THREE.IcosahedronGeometry(0.16, 0), c[0], c[1], T(0, 0.07, 0, 0.3, 0.5, 0, [1.3, 0.7, 1]), 0, 0.2);
+        grad(b, new THREE.IcosahedronGeometry(0.11, 0), c[0], c[1], T(0.26, 0.05, 0.12, 0.2, 1, 0, [1.2, 0.7, 1]), 0, 0.15);
+        grad(b, new THREE.IcosahedronGeometry(0.08, 0), c[0], c[1], T(-0.2, 0.04, 0.18, 0.5, 0.2, 0, [1.2, 0.7, 1]), 0, 0.12);
+        break;
+      }
+      case 'dry': {
+        const c = pal % 2 ? ['#7a6a3a', '#cdb26a'] : ['#8a7a42', '#e0cc82'];
+        for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + hh(i) * 0.6, lean = 0.45 + hh(i + 4) * 0.3; grad(b, new THREE.ConeGeometry(0.07, 0.55 + hh(i + 2) * 0.2, 3, 1, true), c[0], c[1], T(Math.cos(a) * 0.08, 0.26, Math.sin(a) * 0.08, Math.sin(a) * lean, 0, -Math.cos(a) * lean), 0, 0.6); }
+        break;
+      }
+      case 'snowtuft': {
+        grad(b, ico(0.2, 0), '#c0d2ea', '#ffffff', T(0, 0.08, 0, 0, 0, 0, [1.5, 0.6, 1.2]), 0, 0.3);
+        for (let i = 0; i < 3; i++) b.add(new THREE.ConeGeometry(0.04, 0.28 + hh(i) * 0.1, 3), '#6a8a6a', T(Math.cos(i * 2.1) * 0.12, 0.2, Math.sin(i * 2.1) * 0.12, Math.sin(i * 2.1) * 0.3, 0, -Math.cos(i * 2.1) * 0.3));
         break;
       }
       case 'grass': {
-        const c = ['#6ac85a', '#8ad86a', '#c8b86a', '#5aa86a'][pal % 4];
-        for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; b.add(cone(0.05, 0.38, 3), c, T(Math.cos(a) * 0.08, 0.18, Math.sin(a) * 0.08, Math.sin(a) * 0.3, 0, Math.cos(a) * 0.3)); }
+        const c = [['#3f8a3a', '#9ae070'], ['#58a848', '#c8f080'], ['#8a8a3a', '#e0d078'], ['#2f7a4a', '#78d098']][pal % 4];
+        for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + hh(i) * 0.6, lean = 0.3 + hh(i + 4) * 0.25; grad(b, new THREE.ConeGeometry(0.1, 0.5 + hh(i + 2) * 0.2, 3, 1, true), c[0], c[1], T(Math.cos(a) * 0.06, 0.2, Math.sin(a) * 0.06, Math.sin(a) * lean, 0, -Math.cos(a) * lean), 0, 0.5); }
         break;
       }
       case 'flower': {
         const c = ['#ff8ab0', '#ffd34d', '#9ab8ff', '#ffffff'][pal % 4];
         b.add(cyl(0.012, 0.012, 0.3, 3), '#4f9a4a', T(0, 0.15, 0));
-        for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; b.add(sph(0.045, 4, 2), c, T(Math.cos(a) * 0.05, 0.31, Math.sin(a) * 0.05)); }
-        b.add(sph(0.03, 5, 4), '#ffb02a', T(0, 0.32, 0));
+        b.add(new THREE.ConeGeometry(0.11, 0.08, 5), c, T(0, 0.32, 0, Math.PI, 0, 0));
+        b.add(sph(0.04, 4, 2), '#ffb02a', T(0, 0.35, 0));
         break;
       }
+      case 'fern': {
+        const c = pal % 2 ? ['#2f7a4a', '#80d080'] : ['#3a8a3a', '#a8e068'];
+        for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2, lean = 0.9 + hh(i) * 0.2; grad(b, new THREE.ConeGeometry(0.11, 0.85, 3, 1, true), c[0], c[1], T(Math.cos(a) * 0.28, 0.3, Math.sin(a) * 0.28, Math.sin(a) * lean, 0, -Math.cos(a) * lean), 0, 0.65); }
+        break;
+      }
+      case 'cattail':
+        for (let i = 0; i < 3; i++) { const x = (i - 1) * 0.1, h = 1.0 + hh(i) * 0.5; b.add(cyl(0.015, 0.022, h, 3), '#6a8a4a', T(x, h / 2, (i % 2) * 0.06, 0, 0, (i - 1) * 0.08)); b.add(cyl(0.04, 0.04, 0.22, 4), '#6a4228', T(x + (i - 1) * 0.08 * h * 0.45, h * 0.85, (i % 2) * 0.06)); }
+        grad(b, new THREE.ConeGeometry(0.06, 0.8, 3, 1, true), '#4a7a3a', '#9ac060', T(0.12, 0.35, 0.1, 0.4, 0, -0.45), 0, 0.8);
+        break;
       case 'reed':
-        for (let i = 0; i < 4; i++) { b.add(cyl(0.015, 0.02, 1.1, 3), '#6a8a4a', T(i * 0.07 - 0.1, 0.55, (i % 2) * 0.06, 0, 0, (i - 1.5) * 0.08)); if (i % 2) b.add(cyl(0.035, 0.035, 0.2, 5), '#6a4a2a', T(i * 0.07 - 0.1 + (i - 1.5) * -0.04, 1.05, (i % 2) * 0.06)); }
+        for (let i = 0; i < 5; i++) { const h = 0.9 + hh(i + 3) * 0.5; grad(b, cyl(0.012, 0.02, h, 3), '#4a6a3a', '#a8c870', T(i * 0.06 - 0.12, h / 2, (i % 2) * 0.06, 0, 0, (i - 2) * 0.09), 0, h); }
         break;
       case 'lily':
-        b.add(cyl(0.3, 0.3, 0.02, 10), '#4fa85a', T(0, 0.01, 0));
-        if (pal % 2) b.add(sph(0.07, 6, 4), '#ffc8e0', T(0.05, 0.06, 0));
+        b.add(cyl(0.3, 0.3, 0.02, 7), '#3f9a58', T(0, 0.01, 0));
+        b.add(cyl(0.18, 0.18, 0.025, 6), '#58b86a', T(0.2, 0.012, 0.15));
+        if (pal % 2) b.add(new THREE.ConeGeometry(0.1, 0.1, 5), '#ff9ac0', T(0.05, 0.05, 0));
         break;
       case 'mushroom': {
         const cap = ['#e84a4a', '#c88a4a', '#9a6ad8', '#4ad8c8'][pal % 4];
-        b.add(cyl(0.06, 0.08, 0.25, 6), '#f4eedc', T(0, 0.12, 0));
-        b.add(sph(0.18, 8, 4), cap, T(0, 0.26, 0, 0, 0, 0, [1, 0.6, 1]));
-        for (let i = 0; i < 3; i++) b.add(sph(0.03, 4, 2), '#ffffff', T(Math.cos(i * 2) * 0.1, 0.34, Math.sin(i * 2) * 0.1));
+        b.add(cyl(0.06, 0.08, 0.28, 5), '#f4eedc', T(0, 0.13, 0));
+        b.add(sph(0.2, 7, 3, 0, Math.PI * 2, 0, Math.PI / 2), cap, T(0, 0.26, 0, 0, 0, 0, [1, 0.8, 1]));
+        b.add(sph(0.03, 4, 2), '#ffffff', T(0.07, 0.36, 0.05)); b.add(sph(0.03, 4, 2), '#ffffff', T(-0.08, 0.35, -0.02));
+        b.add(cyl(0.035, 0.05, 0.15, 4), '#f4eedc', T(0.2, 0.07, 0.1));
+        b.add(sph(0.1, 5, 2, 0, Math.PI * 2, 0, Math.PI / 2), cap, T(0.2, 0.14, 0.1, 0, 0, 0, [1, 0.8, 1]));
+        break;
+      }
+      case 'moss': {
+        grad(b, dod(0.5), '#3a6a3a', '#7ab050', T(0, 0.15, 0, 0, 0.4, 0, [1.4, 0.45, 1.2]), 0, 0.35);
+        grad(b, dod(0.3), '#3a6a3a', '#8ac058', T(0.4, 0.1, 0.2, 0, 0, 0, [1.2, 0.5, 1]), 0, 0.3);
         break;
       }
       case 'stalag': {
-        const c = pal % 2 ? '#5a4e6a' : '#6a5a52';
-        b.add(cone(0.35, 1.6, 6), c, T(0, 0.8, 0));
-        b.add(cone(0.2, 0.9, 6), c, T(0.35, 0.45, 0.1));
+        const c = pal % 2 ? ['#3a3048', '#7a6a90'] : ['#4a3c38', '#8a7a6e'];
+        grad(b, cone(0.38, 1.7, 6), c[0], c[1], T(0, 0.85, 0), 0, 1.7);
+        grad(b, cone(0.22, 1.0, 6), c[0], c[1], T(0.38, 0.5, 0.12), 0, 1.0);
+        grad(b, cone(0.15, 0.6, 5), c[0], c[1], T(-0.3, 0.3, -0.2), 0, 0.6);
+        break;
+      }
+      case 'hang': {
+        const c = pal % 2 ? ['#7a6a90', '#3a3048'] : ['#8a7a6e', '#4a3c38'];
+        grad(b, cone(0.34, 1.5, 6), c[0], c[1], T(0, -0.75, 0, 0, 0, Math.PI), -1.5, 0);
+        grad(b, cone(0.2, 0.9, 6), c[0], c[1], T(0.35, -0.45, 0.1, 0, 0, Math.PI), -0.9, 0);
+        grad(b, cone(0.14, 0.6, 5), c[0], c[1], T(-0.3, -0.3, -0.12, 0, 0, Math.PI), -0.6, 0);
         break;
       }
       case 'crystal': {
         const c = ['#7af0ff', '#ff7af0', '#9aff7a', '#ffd37a'][pal % 4];
-        b.add(new THREE.OctahedronGeometry(0.25, 0), c, T(0, 0.45, 0, 0, 0, 0, [0.6, 1.8, 0.6]));
-        b.add(new THREE.OctahedronGeometry(0.16, 0), c, T(0.2, 0.25, 0.05, 0, 0, 0.5, [0.6, 1.6, 0.6]));
-        b.add(new THREE.OctahedronGeometry(0.14, 0), c, T(-0.18, 0.2, -0.05, 0, 0, -0.5, [0.6, 1.6, 0.6]));
+        const o = (r: number) => new THREE.OctahedronGeometry(r, 0);
+        b.add(o(0.28), c, T(0, 0.5, 0, 0, 0.3, 0, [0.6, 2.0, 0.6]));
+        b.add(o(0.18), c, T(0.24, 0.28, 0.06, 0, 0.6, 0.5, [0.6, 1.7, 0.6]));
+        b.add(o(0.16), c, T(-0.2, 0.22, -0.05, 0, 0.2, -0.5, [0.6, 1.7, 0.6]));
+        b.add(o(0.12), c, T(0.05, 0.14, 0.24, 0.5, 0, 0.1, [0.6, 1.5, 0.6]));
+        grad(b, dod(0.3), '#3a3448', '#6a6480', T(0, 0.05, 0, 0, 0, 0, [1.5, 0.4, 1.3]), 0, 0.2);
+        break;
+      }
+      case 'ice': {
+        const o = (r: number) => new THREE.OctahedronGeometry(r, 0);
+        grad(b, o(0.35), '#7ab8e0', '#e8faff', T(0, 0.6, 0, 0, 0.3, 0, [0.7, 2.2, 0.7]), 0, 1.4);
+        grad(b, o(0.22), '#7ab8e0', '#e8faff', T(0.3, 0.35, 0.1, 0, 0.6, 0.4, [0.7, 2.0, 0.7]), 0, 0.9);
+        grad(b, o(0.2), '#7ab8e0', '#e8faff', T(-0.25, 0.3, -0.05, 0, 0.2, -0.4, [0.7, 2.0, 0.7]), 0, 0.8);
+        break;
+      }
+      case 'drift': {
+        grad(b, ico(0.8, 1), '#b8cce8', '#ffffff', T(0, 0.05, 0, 0, 0, 0, [1.8, 0.45, 1.2]), 0, 0.5);
+        grad(b, ico(0.5, 0), '#b8cce8', '#ffffff', T(0.9, 0.0, 0.3, 0, 0, 0, [1.5, 0.45, 1]), 0, 0.3);
         break;
       }
       case 'pillar':
-        b.add(cyl(0.32, 0.36, 3.2, 8), '#8a8498', T(0, 1.6, 0));
-        b.add(box(0.9, 0.25, 0.9), '#6e687e', T(0, 3.25, 0));
-        b.add(box(0.9, 0.25, 0.9), '#6e687e', T(0, 0.12, 0));
+        grad(b, cyl(0.32, 0.36, 3.2, 8), '#6a6478', '#a8a2b8', T(0, 1.6, 0), 0, 3.2);
+        b.add(box(0.95, 0.26, 0.95), '#7e788e', T(0, 3.25, 0));
+        b.add(box(1.05, 0.28, 1.05), '#6e687e', T(0, 0.14, 0));
+        b.add(box(0.5, 0.1, 0.5), '#8e889e', T(0, 3.43, 0));
+        if (pal % 2) b.add(cyl(0.34, 0.34, 0.05, 8), '#5a5468', T(0, 1.2, 0));
         break;
       case 'torch':
         b.add(cyl(0.05, 0.06, 1.4, 6), '#6a4a30', T(0, 0.7, 0));
-        b.add(cyl(0.11, 0.07, 0.18, 8), '#4a3a32', T(0, 1.45, 0));
-        b.add(cone(0.12, 0.32, 7), '#ffb02a', T(0, 1.68, 0));
-        b.add(cone(0.06, 0.2, 6), '#fff2a8', T(0, 1.64, 0));
+        b.add(cyl(0.12, 0.07, 0.18, 8), '#3a2c28', T(0, 1.45, 0));
+        b.add(cone(0.12, 0.34, 7), '#ff8a1a', T(0, 1.7, 0));
+        b.add(cone(0.07, 0.24, 6), '#fff0a0', T(0, 1.66, 0));
+        break;
+      case 'brazier':
+        b.add(cyl(0.05, 0.05, 0.9, 5), '#3a3038', T(0, 0.45, 0));
+        b.add(cyl(0.35, 0.18, 0.28, 8), '#4a3c42', T(0, 1.0, 0));
+        b.add(cone(0.25, 0.55, 7), '#ff8a1a', T(0, 1.4, 0));
+        b.add(cone(0.14, 0.4, 6), '#fff0a0', T(0, 1.36, 0));
+        for (let i = 0; i < 3; i++) b.add(cyl(0.04, 0.04, 0.6, 4), '#3a3038', T(Math.cos(i * 2.1) * 0.18, 0.28, Math.sin(i * 2.1) * 0.18, Math.sin(i * 2.1) * 0.3, 0, -Math.cos(i * 2.1) * 0.3));
         break;
       case 'stone':
-        b.add(box(0.7, 2.0, 0.4), '#8a8a92', T(0, 1.0, 0, 0, 0, 0.05));
-        b.add(box(0.35, 0.3, 0.42), '#6aa86a', T(0.1, 0.08, 0));
+        grad(b, box(0.7, 2.0, 0.4), '#6a6a74', '#a8a8b0', T(0, 1.0, 0, 0, 0, 0.05), 0, 2.0);
+        b.add(box(0.35, 0.3, 0.42), '#5a9a5a', T(0.1, 0.08, 0));
         break;
-      case 'mound':
-        b.add(new THREE.SphereGeometry(2.6, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), '#6aa85a', T(0, -0.2, 0, 0, 0, 0, [1.4, 0.75, 1]));
-        b.add(box(0.8, 1.0, 0.25), '#7a7480', T(0, 0.2, -3.4, 0, 0, 0));
-        break;
-      case 'cliff': {
-        const c = ['#9a8a7a', '#7a6e66', '#a8a0b8', '#c8a878'][pal % 4];
-        b.add(dod(2.0), c, T(0, 1.6, 0, 0.2, 0.4, 0.1, [1.3, 1.5, 1]));
-        b.add(dod(1.4), c, T(1.6, 0.9, 0.5, 0.5, 0.1, 0.3, [1, 1.3, 1]));
-        b.add(dod(1.2), '#6aa85a', T(0.3, 3.4, 0, 0.1, 0.3, 0, [1.5, 0.35, 1.2]));
+      case 'menhir': {
+        const c = pal % 2 ? ['#5a5a66', '#a0a0aa'] : ['#6a6a74', '#b4b4bc'];
+        grad(b, dod(0.7), c[0], c[1], T(0, 1.3, 0, 0, 0.5, 0.06, [0.62, 1.9, 0.5]), 0, 2.6);
+        grad(b, dod(0.4), '#3f7a3a', '#78b050', T(0, 0.12, 0, 0, 0, 0, [1.6, 0.4, 1.4]), 0, 0.3);
+        b.add(box(0.12, 0.5, 0.04), '#5ad0c8', T(0.0, 1.5, -0.3));
         break;
       }
-      case 'cactus':
-        b.add(cyl(0.18, 0.2, 1.5, 8), '#5a9a4a', T(0, 0.75, 0));
-        b.add(cyl(0.1, 0.1, 0.5, 6), '#5a9a4a', T(0.3, 0.9, 0, 0, 0, -1.2));
-        b.add(cyl(0.09, 0.09, 0.4, 6), '#5a9a4a', T(0.45, 1.15, 0));
-        b.add(sph(0.08, 6, 4), '#ff8ab0', T(0, 1.55, 0));
+      case 'dolmen': {
+        b.add(box(0.55, 1.7, 0.5), '#7a7a84', T(-0.9, 0.85, 0, 0, 0.1, 0.04));
+        b.add(box(0.55, 1.7, 0.5), '#7a7a84', T(0.9, 0.85, 0, 0, -0.1, -0.03));
+        grad(b, box(2.8, 0.5, 1.0), '#7a7a84', '#b0b0b8', T(0, 1.85, 0, 0, 0.05, 0.03), 1.6, 2.1);
+        b.add(box(0.4, 0.3, 0.4), '#5a9a5a', T(0.1, 2.15, 0));
+        break;
+      }
+      case 'tomb':
+        grad(b, box(0.7, 0.95, 0.16), '#6a6a74', '#a8a8b0', T(0, 0.47, 0, 0, 0, 0.08 * (pal % 2 ? 1 : -1)), 0, 0.95);
+        b.add(cyl(0.35, 0.35, 0.16, 8, ), '#a8a8b0', T(0, 0.95, 0, Math.PI / 2, 0, 0.08 * (pal % 2 ? 1 : -1)));
+        b.add(box(0.08, 0.5, 0.03), '#4a4a54', T(0, 0.55, -0.09)); b.add(box(0.3, 0.08, 0.03), '#4a4a54', T(0, 0.65, -0.09));
+        b.add(box(0.7, 0.15, 0.9), '#5a8a4a', T(0, 0.05, 0.4));
+        break;
+      case 'ruin': {
+        const c = pal % 2 ? ['#6a6070', '#a8a0b0'] : ['#7a7060', '#b8b098'];
+        grad(b, box(0.9, 3.0, 0.9), c[0], c[1], T(-1.5, 1.5, 0), 0, 3.0);
+        grad(b, box(0.9, 2.0, 0.9), c[0], c[1], T(1.5, 1.0, 0, 0, 0, 0.04), 0, 2.0);
+        grad(b, box(3.9, 0.8, 0.9), c[0], c[1], T(-0.2, 2.9, 0, 0, 0, 0.1), 2.5, 3.3);
+        b.add(box(0.7, 0.5, 0.7), '#5a5260', T(0.8, 0.25, 1.0, 0, 0.5, 0)); b.add(box(0.5, 0.4, 0.5), '#6a6070', T(-0.4, 0.2, 1.3, 0, 0.2, 0.2));
+        b.add(box(1.0, 0.1, 1.0), '#4f8a4a', T(-1.5, 3.02, 0));
+        break;
+      }
+      case 'bones': {
+        b.add(sph(0.2, 6, 5), '#f0e8d8', T(0, 0.18, 0, 0, 0, 0, [1, 0.9, 1.1]));
+        b.add(box(0.2, 0.12, 0.14), '#f0e8d8', T(0, 0.08, -0.17));
+        b.add(sph(0.05, 4, 3), '#2a2230', T(-0.08, 0.2, -0.17)); b.add(sph(0.05, 4, 3), '#2a2230', T(0.08, 0.2, -0.17));
+        for (let i = 0; i < 4; i++) b.add(cyl(0.03, 0.03, 0.7, 4), '#e8e0d0', T(0.5 + i * 0.12, 0.05, 0.3 - i * 0.25, Math.PI / 2, i * 1.4, 0.1));
+        break;
+      }
+      case 'barrel':
+        grad(b, cyl(0.34, 0.3, 0.8, 9), '#7a5030', '#a87848', T(0, 0.4, 0), 0, 0.8);
+        for (const y of [0.2, 0.6]) b.add(cyl(0.355, 0.355, 0.05, 9), '#3a3038', T(0, y, 0));
+        break;
+      case 'crate':
+        grad(b, box(0.8, 0.8, 0.8), '#7a5a38', '#b08850', T(0, 0.4, 0, 0, 0.3, 0), 0, 0.8);
+        b.add(box(0.84, 0.08, 0.84), '#5a4028', T(0, 0.04, 0, 0, 0.3, 0)); b.add(box(0.84, 0.08, 0.84), '#5a4028', T(0, 0.76, 0, 0, 0.3, 0));
+        break;
+      case 'stump':
+        grad(b, cyl(0.32, 0.4, 0.5, 8), '#4a3022', '#7a5436', T(0, 0.25, 0), 0, 0.5);
+        b.add(cyl(0.3, 0.3, 0.03, 8), '#d8b078', T(0, 0.51, 0));
+        b.add(cyl(0.18, 0.18, 0.035, 8), '#b88c58', T(0, 0.515, 0));
+        b.add(sph(0.08, 4, 3), '#e84a4a', T(0.34, 0.12, 0.2));
+        break;
+      case 'fallen':
+        grad(b, cyl(0.2, 0.24, 2.6, 8), '#4a3022', '#7a5436', T(0, 0.22, 0, 0, 0, Math.PI / 2), 0, 0.5);
+        b.add(cyl(0.2, 0.2, 0.03, 8), '#d8b078', T(1.3, 0.22, 0, 0, 0, Math.PI / 2));
+        b.add(cyl(0.05, 0.08, 0.6, 5), '#5a3e28', T(0.4, 0.5, 0.1, 0, 0, -0.7));
+        grad(b, dod(0.25), '#3a6a3a', '#78b050', T(-0.4, 0.38, 0, 0, 0, 0, [2, 0.4, 0.9]), 0.3, 0.5);
+        break;
+      case 'mound': {
+        const m = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+        grad(b, m, '#4f8a3a', '#9ad870', T(0, -0.2, 0, 0, 0, 0, [4.2, 2.2, 3.8]), -0.2, 2.0);
+        b.add(box(1.0, 1.4, 0.35), '#6a6878', T(-0.8, 0.5, -3.55)); b.add(box(1.0, 1.4, 0.35), '#6a6878', T(0.8, 0.5, -3.55));
+        b.add(box(2.8, 0.5, 0.45), '#7a7888', T(0, 1.4, -3.55));
+        b.add(box(1.4, 1.3, 0.2), '#14101c', T(0, 0.55, -3.5));
+        break;
+      }
+      case 'cliff': {
+        const c = [['#6a5a50', '#b0a090'], ['#5a5058', '#a09aa8'], ['#7a7488', '#c0bace'], ['#a0804e', '#e0c088']][pal % 4];
+        grad(b, dod(2.0), c[0], c[1], T(0, 1.6, 0, 0.2, 0.4, 0.1, [1.3, 1.5, 1]), -1, 4.5);
+        grad(b, dod(1.4), c[0], c[1], T(1.6, 0.9, 0.5, 0.5, 0.1, 0.3, [1, 1.3, 1]), -1, 3.0);
+        grad(b, dod(1.2), '#4f9a3a', '#88d058', T(0.3, 3.4, 0, 0.1, 0.3, 0, [1.5, 0.35, 1.2]), 3.0, 3.8);
+        break;
+      }
+      case 'spire': {
+        const c = pal % 2 ? ['#9a5a3c', '#d89860'] : ['#7a5a4c', '#b89a78'];
+        grad(b, cone(1.1, 4.5, 6), c[0], c[1], T(0, 2.2, 0, 0, 0.3, 0.04), 0, 4.4);
+        grad(b, cone(0.7, 3.0, 5), c[0], c[1], T(1.1, 1.4, 0.3, 0, 0.5, -0.06), 0, 2.9);
+        b.add(box(2.6, 0.18, 2.6), '#c8a070', T(0, 1.2, 0, 0, 0.2, 0)); b.add(box(1.8, 0.15, 1.8), '#b08858', T(0, 2.4, 0, 0, 0.1, 0));
+        break;
+      }
+      case 'sandrock': {
+        // stratified sandstone: stacked, slightly skewed slabs in banded reds / ochres (pal 0 red, 1 ochre, 2 grey-violet)
+        const P = [['#7a3a2c', '#c8643c', '#e0a068'], ['#7a4e30', '#b8803e', '#d8aa68'], ['#5a4658', '#8a6a78', '#c0a0a0']][pal % 3];
+        grad(b, box(1.5, 0.42, 1.2), P[0], P[1], T(0, 0.2, 0, 0, 0.3, 0.02), 0, 0.42);
+        grad(b, box(1.25, 0.34, 1.0), P[1], P[2], T(0.05, 0.57, 0.02, 0, 0.45, -0.03), 0.4, 0.74);
+        grad(b, box(0.95, 0.3, 0.8), P[0], P[2], T(0.1, 0.87, 0, 0, 0.7, 0.03), 0.72, 1.02);
+        b.add(box(1.0, 0.07, 0.8), P[2], T(0.1, 1.04, 0, 0, 0.7, 0.03));
+        grad(b, dod(0.3), P[0], P[1], T(0.95, 0.15, 0.4, 0.4, 0.3, 0, [1.2, 0.6, 1]), 0, 0.35);
+        grad(b, dod(0.22), P[0], P[1], T(-0.9, 0.1, 0.5, 0.2, 0.9, 0, [1.3, 0.6, 1]), 0, 0.25);
+        break;
+      }
+      case 'scree': {
+        const c = [['#7a3a2c', '#d07848'], ['#6a5a50', '#b8a490'], ['#5a4a50', '#a08890']][pal % 3];
+        for (let i = 0; i < 7; i++) {
+          const a = i * 2.4, r = 0.12 + hh(i) * 0.7, sc = 0.07 + hh(i + 9) * 0.13;
+          grad(b, ico(1, 0), c[0], c[1], T(Math.cos(a) * r, sc * 0.35, Math.sin(a) * r, hh(i + 3) * 3, hh(i + 5) * 3, 0, [sc * 1.5, sc * 0.7, sc * 1.1]), 0, sc * 1.1);
+        }
+        break;
+      }
+      case 'shrub': {
+        const c = pal % 2 ? ['#4a4a2a', '#9a9a56'] : ['#5a4a2a', '#a8884a'];
+        for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2 + hh(i) * 0.5, lean = 0.5 + hh(i + 4) * 0.4; grad(b, new THREE.ConeGeometry(0.06, 0.62 + hh(i + 2) * 0.25, 3, 1, true), c[0], c[1], T(Math.cos(a) * 0.07, 0.28, Math.sin(a) * 0.07, Math.sin(a) * lean, 0, -Math.cos(a) * lean), 0, 0.7); }
+        grad(b, ico(0.2, 0), c[0], c[1], T(0, 0.28, 0, 0, 0, 0, [1.4, 0.8, 1.2]), 0.1, 0.45);
+        break;
+      }
+      case 'ribs': {
+        // bleached ribcage half-buried in the sand: spine, arched ribs, skull
+        const iv = ['#c8bca4', '#f6eedc'];
+        b.add(box(0.07, 0.07, 1.7), '#d8ccb4', T(0, 0.63, 0, 0, 0.0, 0));
+        for (let i = 0; i < 5; i++) {
+          const z = -0.55 + i * 0.3, sc = 1 - Math.abs(i - 2) * 0.1;
+          for (const sd of [-1, 1]) grad(b, tor(0.34 * sc, 0.032, Math.PI * 0.7, 3, 7), iv[0], iv[1], T(0, 0.3 + 0.0, z, 0, 0.1, sd > 0 ? -0.2 * Math.PI : 0.5 * Math.PI), 0.0, 0.64);
+        }
+        grad(b, sph(0.2, 6, 5), iv[0], iv[1], T(0.1, 0.2, -1.05, 0, 0, 0, [1, 0.8, 1.2]), 0.05, 0.4);
+        b.add(sph(0.05, 4, 3), '#2a2230', T(0.02, 0.25, -1.24)); b.add(sph(0.05, 4, 3), '#2a2230', T(0.2, 0.25, -1.24));
+        for (let i = 0; i < 2; i++) b.add(cyl(0.035, 0.035, 0.8, 4), '#e8e0d0', T(0.7 + i * 0.12, 0.05, 0.5 - i * 0.3, Math.PI / 2, i * 1.4 + 0.5, 0.1));
+        break;
+      }
+      case 'slab': {
+        // leaning canyon slabs (gorge floor): flat shards propped against each other
+        const P = [['#6a3438', '#b86a58'], ['#7a4a3a', '#d08a68']][pal % 2];
+        grad(b, box(1.2, 1.3, 0.26), P[0], P[1], T(0, 0.55, 0, 0.0, 0.3, 0.38), 0, 1.2);
+        grad(b, box(0.9, 0.9, 0.22), P[0], P[1], T(0.75, 0.38, 0.35, 0.1, 0.8, -0.5), 0, 0.8);
+        grad(b, box(0.8, 0.5, 0.5), P[0], P[1], T(-0.5, 0.22, 0.5, 0, 0.2, 0.1), 0, 0.5);
+        break;
+      }
+      case 'arch': {
+        // wind-carved sandstone arch (~5.5 m): two tapered legs, a thick stratified span, ledges
+        const P = pal % 2 ? ['#7a4a34', '#d89460', '#f0c890'] : ['#7a3a2c', '#cc6a40', '#eaa874'];
+        grad(b, cyl(0.95, 1.5, 3.4, 7), P[0], P[1], T(-2.1, 1.7, 0, 0, 0.2, 0.05, [1, 1, 0.9]), 0, 3.4);
+        grad(b, cyl(0.8, 1.35, 3.1, 7), P[0], P[1], T(2.1, 1.55, 0, 0, 0.8, -0.05, [1, 1, 0.9]), 0, 3.1);
+        const span = new THREE.TorusGeometry(2.1, 0.8, 5, 12, Math.PI);
+        grad(b, span, P[1], P[2], T(0, 3.1, 0, 0, 0, 0, [1, 0.85, 1.1]), 3.0, 5.0);
+        for (let i = 0; i < 3; i++) b.add(box(2.4 - i * 0.45, 0.07, 1.9 - i * 0.25), P[0], T(-2.1 + (i % 2) * 0.05, 0.55 + i * 0.85, 0, 0, i * 0.4, 0));
+        grad(b, dod(0.6), P[0], P[1], T(-3.2, 0.3, 0.8, 0.4, 0.2, 0, [1.3, 0.6, 1]), 0, 0.7);
+        grad(b, dod(0.5), P[0], P[1], T(3.1, 0.25, 0.6, 0.2, 0.8, 0, [1.3, 0.6, 1]), 0, 0.6);
+        break;
+      }
+      case 'cactus': {
+        grad(b, cyl(0.2, 0.24, 1.7, 8), '#3a7a3a', '#78c060', T(0, 0.85, 0), 0, 1.7);
+        b.add(sph(0.2, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), '#78c060', T(0, 1.7, 0));
+        grad(b, cyl(0.1, 0.1, 0.55, 6), '#3a7a3a', '#78c060', T(0.32, 0.88, 0, 0, 0, -1.3), 0.6, 1.2);
+        grad(b, cyl(0.09, 0.09, 0.5, 6), '#3a7a3a', '#78c060', T(0.54, 1.2, 0), 0.95, 1.5);
+        b.add(sph(0.09, 5, 4, 0, Math.PI * 2, 0, Math.PI / 2), '#78c060', T(0.54, 1.45, 0));
+        grad(b, cyl(0.09, 0.09, 0.45, 6), '#3a7a3a', '#78c060', T(-0.3, 0.7, 0, 0, 0, 1.3), 0.5, 1.0);
+        grad(b, cyl(0.08, 0.08, 0.4, 6), '#3a7a3a', '#78c060', T(-0.5, 0.98, 0), 0.8, 1.2);
+        b.add(sph(0.1, 5, 3), '#ff8ab0', T(0, 1.85, 0));
+        break;
+      }
+      case 'agave': {
+        for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2, lean = 0.55 + hh(i) * 0.3; grad(b, new THREE.ConeGeometry(0.12, 0.9, 4, 1, true), '#3a7a5a', '#9ad0a0', T(Math.cos(a) * 0.2, 0.38, Math.sin(a) * 0.2, Math.sin(a) * lean, 0, -Math.cos(a) * lean), 0, 0.8); }
+        break;
+      }
+      case 'tumble':
+        b.add(new THREE.IcosahedronGeometry(0.35, 0), '#a88858', T(0, 0.3, 0)); b.add(new THREE.IcosahedronGeometry(0.28, 0), '#8a6a44', T(0.1, 0.32, 0.05, 0.5, 0.4, 0, 1));
         break;
       case 'support':
-        b.add(box(0.22, 3.0, 0.22), '#8a6a42', T(-1.6, 1.5, 0));
-        b.add(box(0.22, 3.0, 0.22), '#8a6a42', T(1.6, 1.5, 0));
-        b.add(box(3.6, 0.25, 0.3), '#7a5a36', T(0, 3.05, 0));
-        b.add(sph(0.14, 8, 6), '#ffd37a', T(0, 2.75, -0.15));
+        b.add(box(0.24, 3.0, 0.24), '#8a6a42', T(-1.6, 1.5, 0));
+        b.add(box(0.24, 3.0, 0.24), '#8a6a42', T(1.6, 1.5, 0));
+        b.add(box(3.8, 0.28, 0.32), '#7a5a36', T(0, 3.05, 0));
+        b.add(box(0.12, 0.12, 0.9), '#6a4a2c', T(-1.6, 3.22, 0)); b.add(box(0.12, 0.12, 0.9), '#6a4a2c', T(1.6, 3.22, 0));
+        b.add(box(0.1, 0.9, 0.1), '#6a4a2c', T(-1.1, 2.55, 0, 0, 0, 0.7)); b.add(box(0.1, 0.9, 0.1), '#6a4a2c', T(1.1, 2.55, 0, 0, 0, -0.7));
+        b.add(cyl(0.005, 0.005, 0.3, 3), '#2a2020', T(0, 2.8, -0.15)); b.add(sph(0.15, 8, 6), '#ffd37a', T(0, 2.62, -0.15));
         break;
       case 'fence':
-        for (let i = 0; i < 3; i++) b.add(box(0.1, 0.8, 0.1), '#8a6a42', T(-0.8 + i * 0.8, 0.4, 0));
-        b.add(box(1.8, 0.08, 0.06), '#9a7a52', T(0, 0.6, 0));
-        b.add(box(1.8, 0.08, 0.06), '#9a7a52', T(0, 0.3, 0));
+        for (let i = 0; i < 3; i++) grad(b, box(0.1, 0.85, 0.1), '#6a4a2c', '#9a7a52', T(-0.8 + i * 0.8, 0.42, 0), 0, 0.85);
+        b.add(box(1.8, 0.08, 0.06), '#9a7a52', T(0, 0.65, 0.01));
+        b.add(box(1.8, 0.08, 0.06), '#9a7a52', T(0, 0.32, 0.01));
         break;
     }
     return b.build();
@@ -1549,8 +1823,55 @@ export function doorSlabGeo(): THREE.BufferGeometry {
 export function platformGeo(): THREE.BufferGeometry {
   return cached('platform', () => {
     const b = new GB();
-    b.add(cyl(1, 0.92, 0.35, 6), '#8a8498', T(0, -0.17, 0));
-    b.add(cyl(0.98, 0.98, 0.06, 6), '#a8a0b8', T(0, 0.02, 0));
+    const rnd = (i: number, k: number) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
+    // packed-earth berm blending the slab into the ground (stone grey at the rim → dirt at the foot)
+    b.addG(new THREE.CylinderGeometry(0.97, 1.32, 0.12, 12, 1, true), '#6e6678', '#5a4a3a', T(0, 0.0, 0, 0, Math.PI / 12, 0), 0.06, -0.06);
+    // plinth + core, darker and chipped toward the foot
+    b.addG(cyl(0.94, 0.78, 0.55, 6), '#7c7690', '#403a54', T(0, -0.245, 0), 0.03, -0.5);
+    // masonry: one block per side, each its own height / tone (no coplanar tops), dark caps read as mortar lines
+    const tones = ['#9a94ac', '#8c869e', '#a8a2b8', '#908aa2', '#a0a0b6', '#8a849c'];
+    for (let k = 0; k < 6; k++) {
+      const ph = Math.PI / 6 + k * Math.PI / 3, rho = 0.76, h = 0.3 + 0.026 * k;
+      b.add(box(0.98, h, 0.3), tones[k], T(Math.sin(ph) * rho, 0.075 - h / 2 + 0.004 * k, Math.cos(ph) * rho, 0, ph, 0));
+      b.add(box(0.46, 0.012, 0.31), '#5a546c', T(Math.sin(ph) * rho + Math.cos(ph) * 0.0, 0.0825 + 0.004 * k, Math.cos(ph) * rho, 0, ph, 0));
+      // block seams on the outer face
+      for (const sd of [-1, 1]) b.add(box(0.012, h * 0.9, 0.012), '#3e3850', T(Math.sin(ph) * (rho + 0.152) + Math.cos(ph) * sd * 0.24, 0.075 - h / 2 + 0.004 * k, Math.cos(ph) * (rho + 0.152) - Math.sin(ph) * sd * 0.24, 0, ph, 0));
+      // pylon at the vertex: dark stone post with a glowing crystal cap — it is what makes the hexagon read from afar
+      const pv = k * Math.PI / 3;
+      b.addG(box(0.24, 0.62 + 0.02 * k, 0.24), '#5e5874', '#8a849e', T(Math.sin(pv) * 0.96, 0.0, Math.cos(pv) * 0.96, 0, pv + 0.25, 0), -0.3, 0.3);
+      b.addGlow(ico(0.11, 0), k % 2 ? '#c8a0ff' : '#8affea', T(Math.sin(pv) * 0.96, 0.45 + 0.02 * k, Math.cos(pv) * 0.96, 0.3, pv, 0, [1, 1.9, 1]), 2.6);
+    }
+    // the floor: lighter slab, a darker inner dais
+    b.add(cyl(0.8, 0.82, 0.06, 6), '#aaa4bc', T(0, 0.02, 0));
+    b.add(cyl(0.54, 0.56, 0.02, 6), '#76708a', T(0, 0.062, 0, 0, Math.PI / 6, 0));
+    // glowing rune circle + a glyph on every side + a lamp line along the inside of each block
+    b.addGlow(tor(0.44, 0.028, Math.PI * 2, 3, 24), '#7af0ff', T(0, 0.08, 0, Math.PI / 2, 0, 0), 2.4);
+    for (let k = 0; k < 6; k++) {
+      const ph = Math.PI / 6 + k * Math.PI / 3, c = Math.sin(ph), d = Math.cos(ph);
+      const at = (rr: number, tt: number) => [c * rr + d * tt, d * rr - c * tt] as const;
+      const col = k % 2 ? '#c8a0ff' : '#8affea';
+      const glyph = (rr: number, tt: number, w: number, l: number, rot: number) => { const [x, z] = at(rr, tt); b.addGlow(box(w, 0.016, l), col, T(x, 0.06, z, 0, ph + rot, 0), 2.4); };
+      b.addGlow(box(0.82, 0.014, 0.05), '#6ab0ff', T(c * 0.58, 0.058, d * 0.58, 0, ph, 0), 2.2);
+      // a rune ᛉ: stem + two arms + a dot
+      glyph(0.66, 0, 0.07, 0.34, Math.PI / 2);
+      glyph(0.68, 0.1, 0.06, 0.24, Math.PI / 2 + 0.6);
+      glyph(0.68, -0.1, 0.06, 0.24, Math.PI / 2 - 0.6);
+      glyph(0.68, 0.28, 0.07, 0.07, 0); glyph(0.68, -0.28, 0.07, 0.07, 0);
+    }
+    // cracks: dark zig-zag fissures from the rim
+    for (let k = 0; k < 3; k++) {
+      let x = Math.sin(k * 2.2 + 0.4) * 0.74, z = Math.cos(k * 2.2 + 0.4) * 0.74, a = k * 2.2 + 0.4 + Math.PI;
+      for (let i = 0; i < 4; i++) {
+        a += (rnd(k, i) - 0.5) * 1.5; const l = 0.13 + 0.07 * rnd(i, k);
+        b.add(box(0.05, 0.008, l), '#1e1a2c', T(x + Math.sin(a) * l / 2, 0.056, z + Math.cos(a) * l / 2, 0, a, 0));
+        x += Math.sin(a) * l; z += Math.cos(a) * l;
+      }
+    }
+    // rubble round the foot (earthier than the slab, so it reads as debris and not as part of it)
+    for (let i = 0; i < 7; i++) {
+      const a = i * 0.9 + rnd(i, 3) * 0.5, r = 1.06 + rnd(i, 5) * 0.26, sc = 0.06 + rnd(i, 7) * 0.07;
+      b.addG(dod(1), i % 3 ? '#6a6274' : '#4a4252', i % 2 ? '#8a8294' : '#7a6e68', T(Math.sin(a) * r, 0.02 + sc * 0.3, Math.cos(a) * r, rnd(i, 1) * 3, rnd(i, 2) * 3, 0, [sc * 1.3, sc * 0.8, sc]), 0, sc * 1.1);
+    }
     return b.build();
   });
 }

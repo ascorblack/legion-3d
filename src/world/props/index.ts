@@ -147,6 +147,57 @@ export const PropKit = {
     return meshesFor(kind, parts, outline, transforms, opts.castShadow ?? BIG.has(kind));
   },
 
+  /**
+   * Unique "hero" props (fountain, well, statue… — 1–2 of each in a town) baked into ONE plain Mesh per material for
+   * all kinds together (+ one outline mesh): the same shared materials and look as instanced(), but ≈ 8 draw calls for
+   * every hero in town instead of 4–7 per kind. The returned group owns its (merged) geometries.
+   */
+  merged(items: { kind: PropKind; list: PropTransform[]; opts?: KindOpts }[], o: { outline?: boolean } = {}): THREE.Group {
+    const byMat = new Map<PropMat, THREE.BufferGeometry[]>();
+    const outl: THREE.BufferGeometry[] = [];
+    const put = (src: THREE.BufferGeometry, m: THREE.Matrix4, into: THREE.BufferGeometry[]) => {
+      const g = src.index ? src.toNonIndexed() : src.clone();
+      for (const n of Object.keys(g.attributes)) if (n !== 'position' && n !== 'normal' && n !== 'uv' && n !== 'color') g.deleteAttribute(n);
+      g.applyMatrix4(m);
+      into.push(g);
+    };
+    let cast = false;
+    for (const it of items) {
+      const ko: KindOpts = it.opts ?? {};
+      const parts = partsOf(it.kind, ko), ol = o.outline === false ? null : outlineFor(it.kind, ko);
+      if (it.list.length && BIG.has(it.kind)) cast = true;
+      for (const t of it.list) {
+        const s = t.scale ?? 1;
+        _q.setFromAxisAngle(_up, t.rotY ?? 0);
+        _m.compose(_p.set(t.x, t.y, t.z), _q, _s.set(s, s, s));
+        for (const part of parts) { let a = byMat.get(part.mat); if (!a) byMat.set(part.mat, (a = [])); put(part.geo, _m, a); }
+        if (ol) put(ol, _m, outl);
+      }
+    }
+    const grp = new THREE.Group(); grp.name = 'props:hero';
+    const mk = (gs: THREE.BufferGeometry[], name: string, mat: THREE.Material) => {
+      // the same attribute set for every piece (an outline hull has no uv / colour)
+      const need = ['uv', 'color'].filter((n) => gs.every((g) => g.attributes[n]));
+      for (const g of gs) for (const n of Object.keys(g.attributes)) if (n !== 'position' && n !== 'normal' && !need.includes(n)) g.deleteAttribute(n);
+      const geo = mergeGeometries(gs, false)!;
+      gs.forEach((g) => g.dispose());
+      geo.computeBoundingSphere(); geo.computeBoundingBox();
+      const mesh = new THREE.Mesh(geo, mat); mesh.name = name;
+      mesh.matrixAutoUpdate = false; mesh.updateMatrix();
+      return mesh;
+    };
+    for (const [mat, gs] of byMat) {
+      if (!gs.length) continue;
+      const mesh = mk(gs, 'prop:hero:' + mat, propMaterial(mat));
+      const fx = mat === 'glow' || mat === 'waterFx';
+      mesh.castShadow = cast && !fx; mesh.receiveShadow = !fx;
+      if (mat === 'waterFx') mesh.renderOrder = 2;
+      grp.add(mesh);
+    }
+    if (outl.length) grp.add(mk(outl, 'prop:hero:outline', propMaterial('outline')));
+    return grp;
+  },
+
   /** Raw cached parts (shared — do not dispose; clone if you modify). */
   parts(kind: PropKind, opts: KindOpts = {}): PropPart[] { return partsOf(kind, opts); },
 

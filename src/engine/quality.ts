@@ -20,6 +20,8 @@ export interface LevelPreset {
   shadowMapSize: number;
   /** Post-processing (bloom + grade + vignette, see post.ts). */
   post: boolean;
+  /** Screen-space ambient occlusion strength in the post chain (0 = off; GTAO on the frame's depth, post.ts). */
+  ao: number;
 }
 
 /**
@@ -28,10 +30,10 @@ export interface LevelPreset {
  * (−31% pixels). Dynamic resolution takes it lower when the frame budget is missed.
  */
 export const PRESETS: Record<QualityLevel, LevelPreset> = {
-  0: { pixelRatioCap: 0.75, shadows: false, minScale: 0.5, fixedMinScale: 0.6, shadowMapSize: 512, post: false },
-  1: { pixelRatioCap: 1.0, shadows: false, minScale: 0.5, fixedMinScale: 0.65, shadowMapSize: 512, post: false },
-  2: { pixelRatioCap: 1.25, shadows: false, minScale: 0.55, fixedMinScale: 0.7, shadowMapSize: 1024, post: true },
-  3: { pixelRatioCap: 2.0, shadows: true, minScale: 0.6, fixedMinScale: 0.75, shadowMapSize: 2048, post: true },
+  0: { pixelRatioCap: 0.75, shadows: false, minScale: 0.5, fixedMinScale: 0.6, shadowMapSize: 512, post: false, ao: 0 },
+  1: { pixelRatioCap: 1.0, shadows: false, minScale: 0.5, fixedMinScale: 0.65, shadowMapSize: 512, post: false, ao: 0 },
+  2: { pixelRatioCap: 1.25, shadows: false, minScale: 0.55, fixedMinScale: 0.7, shadowMapSize: 1024, post: true, ao: 0 },
+  3: { pixelRatioCap: 2.0, shadows: true, minScale: 0.6, fixedMinScale: 0.75, shadowMapSize: 2048, post: true, ao: 0.85 },
 };
 
 export const LS_QUALITY = 'l3d.quality';

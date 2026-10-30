@@ -4,6 +4,7 @@ import type { UiSettings } from './settings';
 import type { GameContext } from '../contracts/ext';
 import type { TabRegistry } from './tabs';
 import type { MapSource } from './map';
+import { setHtml } from '../core/html';
 
 export interface Ctx {
   host: UiHost;
@@ -32,7 +33,7 @@ export interface Ctx {
 export const h = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (html != null) e.innerHTML = html;
+  if (html != null) setHtml(e, html);
   return e;
 };
 

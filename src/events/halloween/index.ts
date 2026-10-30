@@ -8,14 +8,17 @@
  *  - ghost-cat lanterns floating above head height, turning to look at the player;
  *  - ground fog patches on flat ground (two soft planes each), cobwebs in doorway corners, a violet-tinted sky and a
  *    bigger, warmer moon.
- * Budget at q2: 9 draw calls, ≈ 0.1 ms CPU/frame. Dispose restores the scene, the garland bulbs, the sky and the moon.
+ * Budget at q2: 8 draw calls (pumpkins near / far, ground decals, bunting + cords, halos, bats, ghosts, fog + webs), the
+ * pumpkins and ghosts culled to the view on the CPU (far pumpkins: a low mesh), ≈ 0.1 ms CPU/frame.
+ * Dispose restores the scene, the garland bulbs, the sky and the moon.
  */
 import * as THREE from 'three';
 import type { SeasonalEvent, EventContext } from '../types';
 import { inWindow, windowDistance } from '../calendar';
-import { planHalloween, PUMPKIN_HALF, type PlaceCity, type Plan, type Cluster, type PumpkinSpec } from './placement';
-import { pumpkinGeometry, batGeometry, ghostGeometry, groundQuad, cornerQuad, buntingGeometry } from './geo';
-import { jackFaceTexture, glowTexture, fogTexture, webTexture } from './tex';
+import { type WallLantern, planHalloween, PUMPKIN_HALF, type PlaceCity, type Plan, type Cluster, type PumpkinSpec } from './placement';
+import { pumpkinGeometry, batGeometry, ghostGeometry, groundQuad, buntingGeometry, setCord } from './geo';
+import { jackFaceTexture, glowTexture, haloTexture, fogWebAtlas } from './tex';
+import { pumpkinMaterial, ghostMaterial } from './mats';
 import { planHwExtras, type HwExtras } from './hwcity';
 import { extrasGeometry, extrasGlows, Parts } from './hwgeo';
 import { stupaGeometry, passGeometry, lanternPoints, poleFlame } from './npcgeo';
@@ -47,7 +50,7 @@ export const HALLOWEEN_BUDGET: Record<QualityLevel, { clusters: number; hang: nu
 export const halloweenOpts: { hw: boolean; npcs: NpcWorld[] | null; npcLv: number } = { hw: false, npcs: null, npcLv: 0 };
 const HW_MORE = { bats: 8, webs: 10 };
 
-const TINTS = [[1, 1, 1], [1, 0.8, 0.62], [1, 1.14, 0.62], [0.9, 0.92, 0.82]];
+const TINTS = [[1, 1, 1], [1, 0.82, 0.7], [1, 1.12, 0.85], [0.92, 0.9, 0.85]];
 const BULB_PALETTE = [[1.0, 0.5, 0.1], [0.62, 0.32, 1.0], [1.0, 0.5, 0.1], [0.62, 0.32, 1.0], [0.55, 0.95, 0.25]].map((c) => c.map((v) => v * 1.4));
 
 /* ------------------------------------------------------------------ city adaptor */
@@ -68,6 +71,32 @@ export function placeCity(ctx: EventContext): PlaceCity {
     doors, stairs: spec.stairs.map((s) => [toX(s[0]), toX(s[1])] as [number, number]),
     ledgeZ: spec.hasLow ? toZ(spec.rampY0) : 1e9, spawn: { x: toX(sx), z: toZ(sy) },
   };
+}
+
+/**
+ * Wall lanterns are planned against the walk solids, which often stand 0.3–1.7 m in front of the visible facade (porches,
+ * stalls, the camp's moved-back houses): their bracket then ended in thin air. Snap each one to the wall the bracket
+ * actually meets (a ray at bracket height towards the facade over the city's static meshes); drop it when there is
+ * none or when something sits where the lantern would hang. No static city (tests' fake roots): kept as planned.
+ */
+export function snapLanterns(list: WallLantern[], root: THREE.Object3D): void {
+  const statics = root.getObjectByName('world:static');
+  if (!statics || !statics.children.length) return;
+  const rc = new THREE.Raycaster(), o = new THREE.Vector3(), dir = new THREE.Vector3(0, 0, -1);
+  const targets = statics.children.filter((m) => (m as THREE.Mesh).isMesh && !/emit|glow|sign/.test(m.name));
+  const hitZ = (x: number, y: number, z0: number): number => {
+    rc.set(o.set(x, y, z0), dir); rc.far = 3;
+    const h = rc.intersectObjects(targets, false)[0];
+    return h ? z0 - h.distance : -Infinity;
+  };
+  for (let i = list.length - 1; i >= 0; i--) {
+    const w = list[i], z0 = Math.max(w.z, w.wallZ + 0.5);
+    const wall = hitZ(w.x, w.y + 0.5, z0);
+    if (wall === -Infinity || w.wallZ - wall > 2.4) { list.splice(i, 1); continue; }
+    const z = wall + 0.42;
+    if (hitZ(w.x, w.y, z0) > z - 0.2) { list.splice(i, 1); continue; }   // something (a sill, an awning post) where the lantern hangs
+    w.wallZ = wall + 0.01; w.z = z;
+  }
 }
 
 /* ------------------------------------------------------------------ world hooks (reversible) */
@@ -147,9 +176,12 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
   const npcs = hw && ctx.layout.id === 'fair' && halloweenOpts.npcs?.length ? halloweenOpts.npcs : null;
   if (npcs) {
     const free0 = city.free;
-    city.free = (X, Z) => free0(X, Z) && !npcs.some((n) => n.base.some(([cx, cz, rx, rz]) => ((X - cx) / (rx + 0.35)) ** 2 + ((Z - cz) / (rz + 0.35)) ** 2 <= 1));
+    const near = (X: number, Z: number) => npcs.some((n) => n.base.some(([cx, cz, rx, rz]) => ((X - cx) / (rx + 0.35)) ** 2 + ((Z - cz) / (rz + 0.35)) ** 2 <= 1));
+    city.free = (X, Z) => free0(X, Z) && !near(X, Z);
+    city.keepOut = near;   // also off the walk grid (edge clusters)
   }
   const plan = planHalloween(city);
+  snapLanterns(plan.lanterns, ctx.world.root);
   const L = ctx.layout;
   const upper = L.buildings.filter((b) => !b.soon && b.door.y < 1100 && b.hit[3] <= 1000 && b.id !== 'board' && b.id !== 'anvil');
   const gateB = L.buildings.find((b) => b.id === 'gate');
@@ -159,46 +191,85 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
   const disposables: { dispose(): void }[] = [];
   const own = <T extends { dispose(): void }>(o: T) => (disposables.push(o), o);
   const offs: (() => void)[] = [];
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const timeU = { value: 0 };
 
   /* ---- shared textures */
-  const faceTex = own(jackFaceTexture()), glowTex = own(glowTexture(64, 2)), fogTex = own(fogTexture(128)), webTex = own(webTexture(128));
+  const faceTex = own(jackFaceTexture()), glowTex = own(glowTexture(64, 2)), haloTex = own(haloTexture(64)), fwTex = own(fogWebAtlas(128));
 
-  /* ---- pumpkins + jack-o'-lanterns (2 draws) */
-  const pumpGeo = own(pumpkinGeometry());
-  const pumpMat = own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, emissive: new THREE.Color(1, 0.33, 0.05), emissiveIntensity: 0.85 }));
-  const jackMat = own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, emissive: new THREE.Color(1, 1, 1), emissiveMap: faceTex, emissiveIntensity: 2.0 }));
-  const MAXP = plan.clusters.reduce((a, c) => a + c.items.length, 0) + plan.clusters.length + HALLOWEEN_BUDGET[3].hang + plan.lanterns.length + 2;
-  const plain = new THREE.InstancedMesh(pumpGeo, pumpMat, Math.max(1, MAXP)); plain.name = 'halloween:pumpkins';
-  const jacks = new THREE.InstancedMesh(pumpGeo, jackMat, Math.max(1, MAXP)); jacks.name = 'halloween:jacks';
-  for (const m of [plain, jacks]) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; m.count = 0; group.add(m); }
-  plain.setColorAt(0, _c.setRGB(1, 1, 1)); jacks.setColorAt(0, _c.setRGB(1, 1, 1));
+  /* ---- pumpkins + jack-o'-lanterns: ONE material, two LOD meshes (near: full, far: low), CPU-culled every few frames.
+   *      Per instance: tint (instanceColor) and aJack (0 plain, 1 carved: lit from inside, flickering on its own phase). */
+  const pumpGeo = own(pumpkinGeometry(0)), pumpLoGeo = own(pumpkinGeometry(1));
+  const pumpMat = own(pumpkinMaterial(faceTex, timeU));
+  const nWallMax = plan.lanterns.length;
+  const MAXP = plan.clusters.reduce((a, c) => a + c.items.length, 0) + HALLOWEEN_BUDGET[3].hang + nWallMax + 2;
+  const mkPump = (geo: THREE.BufferGeometry, name: string) => {
+    geo.setAttribute('aJack', new THREE.InstancedBufferAttribute(new Float32Array(MAXP), 1));
+    const m = new THREE.InstancedMesh(geo, pumpMat, Math.max(1, MAXP)); m.name = name;
+    m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; m.count = 0; m.setColorAt(0, _c.setRGB(1, 1, 1));
+    group.add(m); return m;
+  };
+  const pumps = mkPump(pumpGeo, 'halloween:pumpkins'), pumpsLo = mkPump(pumpLoGeo, 'halloween:pumpkins-lo');
+  pumps.userData.viewCulled = pumpsLo.userData.viewCulled = true;   // hidden when nothing of them is in view (tests count them as drawn)
+  // the planned list (what the quality shows), culled into the two meshes by refreshPumps()
+  const pM = new Float32Array(MAXP * 16), pC = new Float32Array(MAXP * 3), pJ = new Float32Array(MAXP), pS = new Float32Array(MAXP * 4);
+  let pN = 0;
 
-  /* ---- light pools under jacks (1 draw) */
-  const poolGeo = own(groundQuad());
-  const poolMat = own(new THREE.MeshBasicMaterial({ map: glowTex, color: new THREE.Color(1, 0.55, 0.16), transparent: true, opacity: 0.55, depthWrite: false,
-    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
-  const pools = new THREE.InstancedMesh(poolGeo, poolMat, MAXP); pools.name = 'halloween:pools'; pools.count = 0; pools.renderOrder = 2; pools.frustumCulled = false;
-  group.add(pools);
+  /* ---- ground decals: warm light pools under the jacks + contact shadows under ground pumpkins (1 draw).
+   *      aA > 0: a shadow of that opacity (black); aA < 0: a pool of opacity −aA (warm, flickers) */
+  const decalGeo = own(groundQuad());
+  const MAXD = MAXP * 2;
+  decalGeo.setAttribute('aA', new THREE.InstancedBufferAttribute(new Float32Array(MAXD), 1));
+  // premultiplied output: shadows darken (alpha), pools ADD warm light (alpha 0) — both in one draw
+  const decalMat = own(new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));
+  const decalU = { uFlick: { value: 1 } };
+  decalMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uFlick = decalU.uFlick;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aA; varying float vA;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvA = aA;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vA; uniform float uFlick;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        float dA = vA < 0.0 ? -vA * uFlick : vA;
+        // shadows: dark right up to the pumpkin's rim, gone by the quad's edge; pools: a tight core with a long soft tail
+        float dR = length(vMapUv * 2.0 - 1.0);
+        diffuseColor.a = vA > 0.0 ? pow(1.0 - smoothstep(0.4, 1.0, dR), 1.1) * dA : pow(diffuseColor.a, 1.6) * dA;`)
+      .replace('#include <fog_fragment>', `vec3 preFog = gl_FragColor.rgb;
+        #include <fog_fragment>
+        if (vA < 0.0) {                       // a pool adds light (alpha 0), dimmed by the fog instead of tinted by it
+          gl_FragColor.rgb = preFog * gl_FragColor.a; gl_FragColor.a = 0.0;
+          #ifdef USE_FOG
+            gl_FragColor.rgb *= 1.0 - fogFactor;
+          #endif
+        } else gl_FragColor.rgb *= gl_FragColor.a;`);
+  };
+  decalMat.customProgramCacheKey = () => 'l3d-hw-decals';
+  const decals = new THREE.InstancedMesh(decalGeo, decalMat, MAXD); decals.name = 'halloween:decals'; decals.count = 0; decals.renderOrder = 1; decals.frustumCulled = false;
+  decals.setColorAt(0, _c.setRGB(0, 0, 0));
+  group.add(decals);
+  const decalA = decalGeo.getAttribute('aA') as THREE.InstancedBufferAttribute;
 
-  /* ---- contact shadows under ground pumpkins (1 draw; same recipe as the city's blobs) */
-  const blobMat = own(new THREE.MeshBasicMaterial({ map: glowTex, color: 0x000000, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
-  const blobs = new THREE.InstancedMesh(poolGeo, blobMat, MAXP); blobs.name = 'halloween:blobs'; blobs.count = 0; blobs.renderOrder = 1; blobs.frustumCulled = false;
-  group.add(blobs);
-
-  /* ---- bunting along the garland cables (1 draw) */
+  /* ---- bunting along the garland cables + the lanterns' cords and wall brackets (1 draw) */
   const cableLine = hooks.cable;
-  const buntGeo = own(buntingGeometry(cableLine ? (cableLine.geometry.getAttribute('position').array as ArrayLike<number>) : []));
+  const NCORD = HALLOWEEN_BUDGET[3].hang + nWallMax * 2;
+  const buntGeo = own(buntingGeometry(cableLine ? (cableLine.geometry.getAttribute('position').array as ArrayLike<number>) : [], 0.8, 260, NCORD));
   const buntMat = own(new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-  const buntU = { uTime: { value: 0 } };
+  const buntU = { uTime: timeU };
   buntMat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = buntU.uTime;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aHang;\nuniform float uTime;')
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aHang;\nuniform float uTime; varying float vVZ;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        transformed += aHang * 0.05 * vec3(sin(uTime * 1.9 + position.x * 2.3 + position.z), 0.0, cos(uTime * 1.5 + position.x + position.z * 2.1));`);
+        transformed += aHang * 0.05 * vec3(sin(uTime * 1.9 + position.x * 2.3 + position.z), 0.0, cos(uTime * 1.5 + position.x + position.z * 2.1));`)
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvVZ = -mvPosition.z;');
+    // a pennant right at the lens dissolves (screen-door dither 0.9–2 m) instead of filling the frame with a flat card
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vVZ;')
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        if (vVZ < 2.0) { float bd = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))); if (bd > smoothstep(0.9, 2.0, vVZ)) discard; }`);
   };
+  buntMat.customProgramCacheKey = () => 'l3d-hw-bunting';
   const bunting = new THREE.Mesh(buntGeo, buntMat); bunting.name = 'halloween:bunting'; bunting.frustumCulled = false; group.add(bunting);
 
-  /* ---- hanging lanterns on the garlands: jack instances + strings + halos */
+  /* ---- hanging lanterns on the garlands */
   const hangPts: THREE.Vector3[] = [];
   if (hooks.bulbs) {
     const pos = hooks.bulbs.geometry.getAttribute('position');
@@ -212,26 +283,22 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
       hangPts.push(_p.clone());
     }
   }
-  const NS = hangPts.length + plan.lanterns.length;
-  const stringGeo = own(new THREE.BufferGeometry());
-  stringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(Math.max(1, NS) * 12), 3));
-  const stringMat = own(new THREE.LineBasicMaterial({ color: '#241a3a' }));
-  const strings = new THREE.LineSegments(stringGeo, stringMat); strings.name = 'halloween:strings'; strings.frustumCulled = false; group.add(strings);
 
-  /* ---- halos (additive glow points; flicker per point in the world's glow shader). Capacity = every jack + lantern. */
+  /* ---- halos (additive glow points with a tight core and a long faint tail; fade out near the eye so a close lantern
+   *      never becomes a screen-filling blob). Capacity = every jack + lantern. */
   const passNpc = npcs?.find((n) => n.id === 'hwpass') ?? null;
   const lampPts = passNpc ? lanternPoints(passNpc, city.groundAt(passNpc.x, passNpc.z)) : [];
   const MAXH = plan.clusters.reduce((a, c) => a + c.items.filter((i) => i.kind).length, 0) + HALLOWEEN_BUDGET[3].hang + plan.lanterns.length + plan.ghosts.length + extraGlow.length / 7 + lampPts.length + 1;
-  const haloPts = glowPoints(new Array(Math.max(1, MAXH) * 7).fill(0).map((_, i) => (i % 7 === 3 ? 0.01 : 0)), 7, glowTex, { flicker: 0.16, intensity: 0.6 });
+  const haloPts = glowPoints(new Array(Math.max(1, MAXH) * 7).fill(0).map((_, i) => (i % 7 === 3 ? 0.01 : 0)), 7, haloTex, { flicker: 0.16, intensity: 0.55, near: 3.2 });
   haloPts.name = 'halloween:halos'; haloPts.frustumCulled = false; group.add(haloPts); own(haloPts.geometry); own(haloPts.material as THREE.Material);
   const hPos = haloPts.geometry.getAttribute('position') as THREE.BufferAttribute, hSize = haloPts.geometry.getAttribute('size') as THREE.BufferAttribute, hCol = haloPts.geometry.getAttribute('color') as THREE.BufferAttribute;
   let haloN = 0, haloFixed = 0;
-  const halo = (x: number, y: number, z: number, size: number, r = 1, g = 0.55, b = 0.16) => { hPos.setXYZ(haloN, x, y, z); hSize.setX(haloN, size); hCol.setXYZ(haloN, r, g, b); haloN++; };
+  const halo = (x: number, y: number, z: number, size: number, r = 1, g = 0.5, b = 0.14) => { hPos.setXYZ(haloN, x, y, z); hSize.setX(haloN, size); hCol.setXYZ(haloN, r, g, b); haloN++; };
 
   /* ---- bats (1 draw) */
   const batGeo = own(batGeometry());
   const batMat = own(new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-  const batU = { uTime: { value: 0 } };
+  const batU = { uTime: timeU };
   batMat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = batU.uTime;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
@@ -264,35 +331,42 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
     }
   }
 
-  /* ---- ghost cats (1 draw) */
+  /* ---- ghost cats (1 draw): soft translucent body, brighter and more see-through at the silhouette (no flat white) */
   const ghostGeo = own(ghostGeometry());
-  const ghostMat = own(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92 }));
-  ghostMat.color.setScalar(1.5);
-  const ghosts = new THREE.InstancedMesh(ghostGeo, ghostMat, Math.max(1, plan.ghosts.length)); ghosts.name = 'halloween:ghosts'; ghosts.frustumCulled = false; ghosts.renderOrder = 3; group.add(ghosts);
+  const ghostMat = own(ghostMaterial());
+  const ghosts = new THREE.InstancedMesh(ghostGeo, ghostMat, Math.max(1, plan.ghosts.length)); ghosts.name = 'halloween:ghosts'; ghosts.frustumCulled = false; ghosts.renderOrder = 3; ghosts.userData.viewCulled = true; group.add(ghosts);
 
-  /* ---- ground fog (1 draw): two planes per patch */
-  const fogGeo = own(groundQuad());
-  const fogMat = own(new THREE.MeshBasicMaterial({ map: fogTex, color: new THREE.Color('#b9a2ea'), transparent: true, opacity: 0.3, depthWrite: false }));
-  fogMat.onBeforeCompile = (sh) => {   // fade near the eye (never a hard cut at the camera) and far away
-    sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', `#include <fog_fragment>
-      gl_FragColor.a *= smoothstep(1.0, 3.5, vFogDepth) * (1.0 - smoothstep(34.0, 62.0, vFogDepth));`);
+  /* ---- ground fog (two soft planes per patch) + cobwebs in doorway corners: ONE draw (atlas: fog | web).
+   *      Instances [0, 2·fog) are fog, then the webs. aK: 0 fog, 1 web. */
+  const fwGeo = own(new THREE.PlaneGeometry(1, 1));
+  const MAXW = HALLOWEEN_BUDGET[3].webs + (extras ? HW_MORE.webs : 0), MAXF = Math.max(1, plan.fog.length * 2);
+  fwGeo.setAttribute('aK', new THREE.InstancedBufferAttribute(new Float32Array(MAXF + MAXW), 1));
+  const fwMat = own(new THREE.MeshBasicMaterial({ map: fwTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  const fwU = { uFog: { value: new THREE.Color('#b9a2ea') }, uFogA: { value: 0.24 } };
+  fwMat.onBeforeCompile = (sh) => {   // fog: fade near the eye (never a hard cut at the camera) and far away
+    Object.assign(sh.uniforms, fwU);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aK; varying float vK;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvK = aK;\n#ifdef USE_MAP\nvMapUv = vec2(uv.x * 0.5 + aK * 0.5, uv.y);\n#endif');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vK; uniform vec3 uFog; uniform float uFogA;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        if (vK < 0.5) { diffuseColor.rgb = uFog; diffuseColor.a *= uFogA; } else { diffuseColor.a *= 0.85; }`)
+      .replace('#include <fog_fragment>', `#include <fog_fragment>
+        if (vK < 0.5) gl_FragColor.a *= smoothstep(1.0, 3.5, vFogDepth) * (1.0 - smoothstep(34.0, 62.0, vFogDepth));`);
   };
-  const fogMesh = new THREE.InstancedMesh(fogGeo, fogMat, Math.max(2, plan.fog.length * 2)); fogMesh.name = 'halloween:fog'; fogMesh.frustumCulled = false; fogMesh.renderOrder = 4; group.add(fogMesh);
-
-  /* ---- cobwebs (1 draw) */
-  const webGeo = own(cornerQuad());
-  const webMat = own(new THREE.MeshBasicMaterial({ map: webTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.85,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
-  const MAXW = HALLOWEEN_BUDGET[3].webs + (extras ? HW_MORE.webs : 0);
-  const webs = new THREE.InstancedMesh(webGeo, webMat, MAXW); webs.name = 'halloween:webs'; webs.count = 0; webs.frustumCulled = false; webs.renderOrder = 3; group.add(webs);
+  fwMat.forceSinglePass = true;   // double-sided webs, but one draw (no back-then-front pass)
+  fwMat.customProgramCacheKey = () => 'l3d-hw-fogweb';
+  const fogWeb = new THREE.InstancedMesh(fwGeo, fwMat, MAXF + MAXW); fogWeb.name = 'halloween:fogweb'; fogWeb.count = 0; fogWeb.frustumCulled = false; fogWeb.renderOrder = 4; group.add(fogWeb);
+  const fwK = fwGeo.getAttribute('aK') as THREE.InstancedBufferAttribute;
+  const webM: THREE.Matrix4[] = [];
   const webQueue: { x: number; z: number; side: number; i: number; hs?: number[] }[] = city.doors.map((d, i) => ({ d, b: ctx.layout.buildings[i] })).filter(({ b }) => !b.soon && b.door.y < 1100 && b.id !== 'board' && b.id !== 'anvil' && !(hw && b.id === 'gate')).flatMap(({ d }, i) => [{ x: d.x - 0.95, z: d.z, side: 1, i }, { x: d.x + 0.95, z: d.z, side: -1, i }]);
   if (extras) extras.webs.forEach((w, i) => webQueue.push({ x: w.x, z: w.z, side: w.side, i, hs: [4.4, 3.8, 3.3] }));
-  let webN = 0, webCursor = 0;
+  let webCursor = 0;
   const ray = new THREE.Raycaster(), rayO = new THREE.Vector3(), rayD = new THREE.Vector3(0, 0, -1), up = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), tx = new THREE.Vector3(), ty = new THREE.Vector3();
   const statics = (ctx.world.root.getObjectByName('world:static')?.children ?? []) as THREE.Mesh[];
   const WEB_HEIGHTS = [3.2, 2.75, 2.3], NO_WEB = new Set(['city:sign', 'city:glass', 'city:emit', 'city:glow', 'city:water', 'city:dark']);
+  const _off = new THREE.Matrix4().makeTranslation(0.5, -0.5, 0);   // the unit quad's top-left corner at the origin (web hangs from it)
   const tryWeb = (w: { x: number; z: number; side: number; i: number; hs?: number[] }) => {
-    if (webN >= MAXW) return;
+    if (webM.length >= MAXW) return;
     const g = ctx.groundAt(w.x, w.z);
     for (const h of w.hs ?? WEB_HEIGHTS) {
       rayO.set(w.x, g + h + (w.i % 3) * 0.05, w.z + 1.8); ray.set(rayO, rayD); ray.far = 4.2;
@@ -302,16 +376,16 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
       if (nrm.z < 0.85) continue;
       tx.crossVectors(up, nrm).normalize(); ty.crossVectors(nrm, tx);
       const size = 0.55 + (w.i % 3) * 0.08;
-      _m.makeBasis(tx.multiplyScalar(size * w.side), ty.multiplyScalar(size), nrm);
-      _m.setPosition(hit.point.x + nrm.x * 0.012, hit.point.y + nrm.y * 0.012, hit.point.z + nrm.z * 0.012);
-      webs.setMatrixAt(webN++, _m); webs.instanceMatrix.needsUpdate = true;
+      const m = new THREE.Matrix4().makeBasis(tx.multiplyScalar(size * w.side), ty.multiplyScalar(size), nrm);
+      m.setPosition(hit.point.x + nrm.x * 0.012, hit.point.y + nrm.y * 0.012, hit.point.z + nrm.z * 0.012);
+      webM.push(m.multiply(_off));
       return;
     }
   };
 
   /* ---- «Ночь Тыквенной Луны» extras: cauldron, candles, the flying witch (1 draw) */
-  const flyU = { uTime: { value: 0 }, uFlyC: { value: new THREE.Vector3() }, uFlyR: { value: 6 }, uFlyW: { value: 0.32 }, uLv: { value: 0 }, uBob: { value: 1 } };
-  flyU.uBob.value = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1;
+  const flyU = { uTime: timeU, uFlyC: { value: new THREE.Vector3() }, uFlyR: { value: 6 }, uFlyW: { value: 0.32 }, uLv: { value: 0 }, uBob: { value: 1 } };
+  flyU.uBob.value = reduced ? 0 : 1;
   let extrasMesh: THREE.Mesh | null = null;
   if (extras) {
     let geo = extrasGeometry(extras);
@@ -357,91 +431,127 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
     for (let i = 0; i < lampPts.length; i++) hSize.setX(lampHalo0 + i, i < lv ? 0.75 : 0);
     hSize.needsUpdate = true;
   };
-  let q = ctx.quality(), batN = 0, ghostN = 0, fogN = 0, webLimit = 0, hangN = 0, clustersN = 0;
+  let q = ctx.quality(), batN = 0, ghostN = 0, fogN = 0, webLimit = 0, hangN = 0, nWall = 0, cordN = 0;
   const writeInstances = () => {
     const B = HALLOWEEN_BUDGET[q];
-    let np = 0, nj = 0, nl = 0, nb = 0;
+    let nd = 0;
+    pN = 0;
     const put = (it: PumpkinSpec) => {
       _e.set(0, it.yaw, 0); _q.setFromEuler(_e); _p.set(it.x, it.y, it.z); _s.setScalar(it.r);
-      _m.compose(_p, _q, _s);
+      _m.compose(_p, _q, _s); _m.toArray(pM, pN * 16);
       const t = TINTS[it.tint % TINTS.length];
-      if (it.kind) { jacks.setMatrixAt(nj, _m); jacks.setColorAt(nj, _c.setRGB(t[0], t[1], t[2])); nj++; }
-      else { plain.setMatrixAt(np, _m); plain.setColorAt(np, _c.setRGB(t[0], t[1], t[2])); np++; }
+      pC[pN * 3] = t[0]; pC[pN * 3 + 1] = t[1]; pC[pN * 3 + 2] = t[2];
+      pJ[pN] = it.kind ? 1 : 0;
+      pS[pN * 4] = it.x; pS[pN * 4 + 1] = it.y; pS[pN * 4 + 2] = it.z; pS[pN * 4 + 3] = it.r * 1.25;
+      pN++;
     };
-    const cl = plan.clusters.slice(0, B.clusters); clustersN = cl.length;
+    const decal = (x: number, y: number, z: number, R: number, a: number, r: number, g: number, b: number) => {
+      _p.set(x, y, z); _s.set(R, 1, R); _q.identity(); _m.compose(_p, _q, _s);
+      decals.setMatrixAt(nd, _m); decals.setColorAt(nd, _c.setRGB(r, g, b)); decalA.setX(nd, a); nd++;
+    };
+    const cl = plan.clusters.slice(0, B.clusters);
     haloN = 0;
     for (const c of cl) for (const it of c.items) {
       put(it);
-      if (!it.kind && it === c.items[0] && !c.items.some((o) => o.kind)) {   // a plain cluster still gets a faint warm patch
-        _p.set(it.x, city.groundAt(it.x, it.z) + 0.022, it.z); _s.set(0.85, 1, 0.85); _q.identity(); _m.compose(_p, _q, _s); pools.setMatrixAt(nl++, _m);
-      }
-      if (it.y < it.r * 2 + city.groundAt(it.x, it.z)) {   // on the ground (not the stacked ones)
-        const R = it.r * 1.6; _p.set(it.x, city.groundAt(it.x, it.z) + 0.012, it.z); _s.set(R, 1, R); _q.identity(); _m.compose(_p, _q, _s); blobs.setMatrixAt(nb++, _m);
-      }
+      const gy = city.groundAt(it.x, it.z);
+      if (!it.kind && it === c.items[0] && !c.items.some((o) => o.kind)) decal(it.x, gy + 0.022, it.z, 0.85, -0.3, 1, 0.55, 0.16);   // a plain cluster still gets a faint warm patch
+      if (it.y < it.r * 2 + gy) decal(it.x, gy + 0.012, it.z, it.r * 2.1, 1.0, 0, 0, 0);   // contact shadow (not under the stacked ones)
       if (it.kind) {
         const f = it.kind === 2 ? -1 : 1;
-        halo(it.x + Math.sin(it.yaw) * f * it.r * 0.5, it.y + it.r * 0.1, it.z + Math.cos(it.yaw) * f * it.r * 0.5, 1.3 + it.r * 3.2);
-        const gy = it.y - it.r * PUMPKIN_HALF, R = Math.min(1.35, 0.8 + it.r * 1.6);
-        _p.set(it.x, gy + 0.022, it.z); _s.set(R, 1, R); _q.identity(); _m.compose(_p, _q, _s); pools.setMatrixAt(nl++, _m);
+        // the halo sits just in front of the carved face, small: the face itself carries the glow
+        halo(it.x + Math.sin(it.yaw) * f * it.r * 0.9, it.y + it.r * 0.05, it.z + Math.cos(it.yaw) * f * it.r * 0.9, 0.55 + it.r * 1.5);
+        const R = Math.min(1.25, 0.7 + it.r * 1.5);
+        decal(it.x, it.y - it.r * PUMPKIN_HALF + 0.022, it.z, R, -0.55, 1, 0.5, 0.14);
       }
     }
-    hangN = Math.min(B.hang, hangPts.length);
+    hangN = Math.min(B.hang, hangPts.length); cordN = 0;
     for (let i = 0; i < hangN; i++) {
       const h = hangPts[i], r = 0.19;
       put({ x: h.x, y: h.y - 0.46, z: h.z, r, yaw: (i % 2 ? 1 : -1) * (0.6 + (i % 3) * 0.3) + Math.PI * (i % 2), kind: (i % 2 ? 1 : 2), tint: 0 });
-      const a = stringGeo.getAttribute('position') as THREE.BufferAttribute;
-      a.setXYZ(i * 2, h.x, h.y - 0.05, h.z); a.setXYZ(i * 2 + 1, h.x, h.y - 0.46 + r * 0.85, h.z); a.needsUpdate = true;
-      halo(h.x, h.y - 0.46, h.z, 1.0);
+      setCord(buntGeo, cordN++, h.x, h.y - 0.05, h.z, h.x, h.y - 0.46 + r * 0.85, h.z, 0.012);
+      halo(h.x, h.y - 0.46, h.z, 0.75);
     }
     // wall lanterns beside the doors: a bracket arm out of the facade, a short chain, the lantern
-    const nWall = Math.min(Math.round(plan.lanterns.length * (B.hang / HALLOWEEN_BUDGET[3].hang)), plan.lanterns.length);
-    { const a = stringGeo.getAttribute('position') as THREE.BufferAttribute; let sv = hangN * 2;
-      for (let i = 0; i < nWall; i++) {
-        const w = plan.lanterns[i], r = 0.17;
-        put({ x: w.x, y: w.y, z: w.z, r, yaw: w.yaw + (i % 2 ? 0 : Math.PI), kind: i % 2 ? 1 : 2, tint: 0 });
-        a.setXYZ(sv++, w.x, w.y + 0.5, w.wallZ); a.setXYZ(sv++, w.x, w.y + 0.5, w.z);
-        a.setXYZ(sv++, w.x, w.y + 0.5, w.z); a.setXYZ(sv++, w.x, w.y + r * 0.8, w.z);
-        halo(w.x, w.y, w.z, 1.1);
-      }
-      a.needsUpdate = true; strings.visible = sv > 0; stringGeo.setDrawRange(0, sv); }
-    plain.count = np; jacks.count = nj; pools.count = nl; blobs.count = nb; blobs.instanceMatrix.needsUpdate = true;
-    for (const m of [plain, jacks]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
-    pools.instanceMatrix.needsUpdate = true;
-    { const cum = buntGeo.userData.cum as number[]; const n = cum.length - 1; buntGeo.setDrawRange(0, cum[Math.floor(n * B.bunting)] ?? 0); bunting.visible = B.bunting > 0 && n > 0; }
+    nWall = Math.min(Math.round(plan.lanterns.length * (B.hang / HALLOWEEN_BUDGET[3].hang)), plan.lanterns.length);
+    for (let i = 0; i < nWall; i++) {
+      const w = plan.lanterns[i], r = 0.17;
+      put({ x: w.x, y: w.y, z: w.z, r, yaw: w.yaw + (i % 2 ? 0 : Math.PI), kind: i % 2 ? 1 : 2, tint: 0 });
+      setCord(buntGeo, cordN++, w.x, w.y + 0.5, w.wallZ, w.x, w.y + 0.5, w.z + 0.02, 0.035);   // the iron arm
+      setCord(buntGeo, cordN++, w.x, w.y + 0.5, w.z, w.x, w.y + r * 0.8, w.z, 0.014);          // the chain
+      halo(w.x, w.y, w.z, 0.8);
+    }
+    for (let i = cordN; i < NCORD; i++) setCord(buntGeo, i, 0, 0, 0, 0, 0, 0, 0);
+    buntGeo.getAttribute('position').needsUpdate = true;
+    decals.count = nd; decals.instanceMatrix.needsUpdate = true; decalA.needsUpdate = true; if (decals.instanceColor) decals.instanceColor.needsUpdate = true;
+    { const cum = buntGeo.userData.cum as number[]; const n = cum.length - 1; const end = B.bunting > 0 ? cum[Math.floor(n * B.bunting)] ?? cum[0] : cum[0];
+      buntGeo.setDrawRange(0, end); bunting.visible = end > 0; }
     batN = Math.min(B.bats + (extras ? HW_MORE.bats : 0), MAXB, batList.length); bats.count = batN; bats.visible = batN > 0;
-    ghostN = Math.min(B.ghosts, plan.ghosts.length); ghosts.count = ghostN; ghosts.visible = ghostN > 0;
-    fogN = Math.min(B.fog, plan.fog.length); fogMesh.count = fogN * 2; fogMesh.visible = fogN > 0;
-    webLimit = B.webs + (extras ? HW_MORE.webs : 0); webs.count = Math.min(webN, webLimit);
-    for (let i = 0; i + 6 < extraGlow.length; i += 7) halo(extraGlow[i], extraGlow[i + 1], extraGlow[i + 2], extraGlow[i + 3], extraGlow[i + 4], extraGlow[i + 5], extraGlow[i + 6]);
+    ghostN = Math.min(B.ghosts, plan.ghosts.length);
+    fogN = Math.min(B.fog, plan.fog.length);
+    webLimit = B.webs + (extras ? HW_MORE.webs : 0);
+    for (let i = 0; i + 6 < extraGlow.length; i += 7) halo(extraGlow[i], extraGlow[i + 1], extraGlow[i + 2], extraGlow[i + 3] * 0.6, extraGlow[i + 4], extraGlow[i + 5], extraGlow[i + 6]);
     lampHalo0 = haloN; lampLv = -1;
     for (const l of lampPts) halo(l.x, l.y, l.z + 0.03, 0, 1, 0.6, 0.2);   // sizes by the pass level (syncLamps)
-    if (passNpc) { const f = poleFlame(passNpc, city.groundAt(passNpc.x, passNpc.z)); halo(f.x, f.y, f.z, 0.9, 1, 0.62, 0.22); }
+    if (passNpc) { const f = poleFlame(passNpc, city.groundAt(passNpc.x, passNpc.z)); halo(f.x, f.y, f.z, 0.7, 1, 0.62, 0.22); }
     haloFixed = haloN;
-    for (let i = 0; i < Math.min(B.ghosts, plan.ghosts.length); i++) halo(plan.ghosts[i].x, plan.ghosts[i].y + 0.3, plan.ghosts[i].z, 2.0, 0.55, 0.45, 1.0);
+    for (let i = 0; i < ghostN; i++) halo(plan.ghosts[i].x, plan.ghosts[i].y + 0.3, plan.ghosts[i].z, 1.3, 0.42, 0.36, 0.85);
     haloPts.geometry.setDrawRange(0, haloN); hPos.needsUpdate = hSize.needsUpdate = hCol.needsUpdate = true;
     haloPts.geometry.computeBoundingSphere();
+    pumpSig = -1;
   };
+
+  /* ---- pumpkin culling + LOD: the in-frustum part of the planned list, near ones full, far ones low */
+  const frustum = new THREE.Frustum(), _pv = new THREE.Matrix4(), _sph = new THREE.Sphere();
+  const LOD_D = [5, 6, 6.5, 11] as const;
+  let pumpSig = -1;
+  const pJA = pumpGeo.getAttribute('aJack') as THREE.InstancedBufferAttribute, pJB = pumpLoGeo.getAttribute('aJack') as THREE.InstancedBufferAttribute;
+  const refreshPumps = () => {
+    const cam = ctx.camera;
+    cam.updateMatrixWorld();
+    _pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); frustum.setFromProjectionMatrix(_pv);
+    const cp = cam.position, ld2 = LOD_D[q] * LOD_D[q];
+    let nh = 0, nl = 0, sig = 0;
+    for (let i = 0; i < pN; i++) {
+      _sph.center.set(pS[i * 4], pS[i * 4 + 1], pS[i * 4 + 2]); _sph.radius = pS[i * 4 + 3];
+      if (!frustum.intersectsSphere(_sph)) continue;
+      const near = _sph.center.distanceToSquared(cp) < ld2;
+      const m = near ? pumps : pumpsLo, j = near ? nh++ : nl++;
+      (m.instanceMatrix.array as Float32Array).set(pM.subarray(i * 16, i * 16 + 16), j * 16);
+      (m.instanceColor!.array as Float32Array).set(pC.subarray(i * 3, i * 3 + 3), j * 3);
+      (near ? pJA : pJB).setX(j, pJ[i]);
+      sig = (sig * 31 + i * 2 + (near ? 1 : 0)) % 1000000007;
+    }
+    sig = (sig * 7 + nh * 131 + nl) % 1000000007;
+    pumps.count = nh; pumpsLo.count = nl; pumps.visible = nh > 0; pumpsLo.visible = nl > 0;
+    if (sig === pumpSig) return;
+    pumpSig = sig;
+    for (const m of [pumps, pumpsLo]) { m.instanceMatrix.needsUpdate = true; m.instanceColor!.needsUpdate = true; }
+    pJA.needsUpdate = pJB.needsUpdate = true;
+  };
+
   writeInstances();
   syncLamps();
-  offs.push(ctx.onQuality((nq) => { q = nq; writeInstances(); }));
+  refreshPumps();
+  offs.push(ctx.onQuality((nq) => { q = nq; writeInstances(); refreshPumps(); }));
 
   /* ---- per frame */
   const cam = ctx.camera.position;
-  let tAcc = 0;
   const hu = (haloPts.material as THREE.ShaderMaterial).uniforms;
+  let fr = 0;
+  const _lastCam = new THREE.Vector3(1e9, 0, 0), _lastDir = new THREE.Vector3(), _dir = new THREE.Vector3();
   offs.push(ctx.onFrame((dt, t) => {
     hooks.tick();
     // webs: a couple of rays per frame after setup, so the toggle never hitches
-    if (webCursor < webQueue.length) { tryWeb(webQueue[webCursor++]); webs.count = Math.min(webN, webLimit); }
-    tAcc += dt;
-    // flicker: candle-ish, shared
-    jackMat.emissiveIntensity = 1.95 + 0.34 * Math.sin(t * 9.1) * Math.sin(t * 2.7 + 1) + 0.1 * Math.sin(t * 23.0);
-    poolMat.opacity = 0.52 + 0.06 * Math.sin(t * 8.3) * Math.sin(t * 2.1);
-    fogMat.opacity = 0.27 + 0.04 * Math.sin(t * 0.3);
-    batU.uTime.value = t; buntU.uTime.value = t; flyU.uTime.value = t;
+    if (webCursor < webQueue.length) tryWeb(webQueue[webCursor++]);
+    timeU.value = t;
+    decalU.uFlick.value = 0.94 + 0.11 * Math.sin(t * 8.3) * Math.sin(t * 2.1);
+    fwU.uFogA.value = 0.22 + 0.035 * Math.sin(t * 0.3);
     if (lampPts.length && (halloweenOpts.npcLv | 0) !== lampLv) syncLamps();
     hu.uTime.value = t;
     if (ctx.renderer) { const h = ctx.renderer.domElement.height || 720; hu.uScale.value = h / (2 * Math.tan((ctx.camera.fov * Math.PI / 180) / 2)); }
+    // pumpkins: re-cull when the camera moved / turned, or every 12th frame
+    ctx.camera.getWorldDirection(_dir);
+    if (++fr % 12 === 0 || _lastCam.distanceToSquared(cam) > 0.09 || _lastDir.dot(_dir) < 0.995) { _lastCam.copy(cam); _lastDir.copy(_dir); refreshPumps(); }
     // bats
     for (let i = 0; i < batN; i++) {
       const b = batList[i], a = b.a0 + b.w * t, sa = Math.sin(a), ca = Math.cos(a);
@@ -451,36 +561,49 @@ function build(ctx: EventContext, hooks: Hooks): () => void {
       _p.set(x, y, z); _s.setScalar(b.s); _m.compose(_p, _q, _s); bats.setMatrixAt(i, _m);
     }
     if (batN) bats.instanceMatrix.needsUpdate = true;
-    // ghosts: drift in small loops and look at the player
+    // ghosts: drift in small loops and look at the player (only the ones in view are drawn)
+    let gn = 0;
     for (let i = 0; i < ghostN; i++) {
       const g = plan.ghosts[i], ph = g.phase;
       const x = g.x + Math.cos(t * 0.35 + ph) * g.r * 0.6, z = g.z + Math.sin(t * 0.27 + ph) * g.r * 0.35, y = g.y + 0.12 * Math.sin(t * 1.15 + ph) + 0.05 * Math.sin(t * 2.9 + ph);
-      const yaw = Math.atan2(cam.x - x, cam.z - z);
       hPos.setXYZ(haloFixed + i, x, y + 0.3, z);
+      _sph.center.set(x, y + 0.4, z); _sph.radius = 0.7;
+      if (!frustum.intersectsSphere(_sph)) continue;
+      const yaw = Math.atan2(cam.x - x, cam.z - z);
       _e.set(0.05 * Math.sin(t * 0.9 + ph), yaw, 0.06 * Math.sin(t * 0.7 + ph), 'YXZ'); _q.setFromEuler(_e);
-      _p.set(x, y, z); _s.setScalar(1.3); _m.compose(_p, _q, _s); ghosts.setMatrixAt(i, _m);
+      _p.set(x, y, z); _s.setScalar(1.3); _m.compose(_p, _q, _s); ghosts.setMatrixAt(gn++, _m);
     }
-    if (ghostN) { ghosts.instanceMatrix.needsUpdate = true; hPos.needsUpdate = true; }
-    // fog drifts: slow turning and breathing
+    ghosts.count = gn; ghosts.visible = gn > 0;
+    if (gn) ghosts.instanceMatrix.needsUpdate = true;
+    if (ghostN) hPos.needsUpdate = true;
+    // fog drifts (slow turning and breathing), then the webs found so far
+    let fw = 0;
     for (let i = 0; i < fogN; i++) {
       const f = plan.fog[i];
       for (let k = 0; k < 2; k++) {
         const rot = (k ? f.rot2 : f.rot) + t * (k ? -0.012 : 0.017), br = 1 + 0.06 * Math.sin(t * 0.21 + i * 1.3 + k);
-        _e.set(0, rot, 0); _q.setFromEuler(_e); _p.set(f.x, f.y + (k ? 0.36 : 0.14), f.z); _s.set(f.r * br * (k ? 0.8 : 1), 1, f.r * br * (k ? 1 : 0.85)); _m.compose(_p, _q, _s);
-        fogMesh.setMatrixAt(i * 2 + k, _m);
+        _e.set(-Math.PI / 2, rot, 0, 'YXZ'); _q.setFromEuler(_e); _p.set(f.x, f.y + (k ? 0.36 : 0.14), f.z); _s.set(2 * f.r * br * (k ? 0.8 : 1), 2 * f.r * br * (k ? 1 : 0.85), 1); _m.compose(_p, _q, _s);
+        fogWeb.setMatrixAt(fw, _m); fwK.setX(fw, 0); fw++;
       }
     }
-    if (fogN) fogMesh.instanceMatrix.needsUpdate = true;
-    void tAcc;
+    const nw = Math.min(webM.length, webLimit);
+    for (let i = 0; i < nw; i++) { fogWeb.setMatrixAt(fw, webM[i]); fwK.setX(fw, 1); fw++; }
+    fogWeb.count = fw; fogWeb.visible = fw > 0;
+    if (fw) { fogWeb.instanceMatrix.needsUpdate = true; fwK.needsUpdate = true; }
   }));
 
   ctx.group.add(group);
-  group.userData.halloween = { plan, draws: 0, extras, npcs: npcs?.map((n) => n.id) ?? [], lampLv: () => flyU.uLv.value } as unknown as HalloweenInfo;
+  group.userData.halloween = {
+    plan, draws: 0, extras, npcs: npcs?.map((n) => n.id) ?? [], lampLv: () => flyU.uLv.value,
+    /** What the current quality shows (before view culling): the tests and the debug overlay read it. */
+    counts: () => ({ pumpkins: pN, jacks: Array.from(pJ.subarray(0, pN)).filter((v) => v > 0).length, decals: decals.count, bats: batN, ghosts: ghostN, fog: fogN, webs: Math.min(webM.length, webLimit), cords: cordN, halos: haloN }),
+    refresh: refreshPumps,
+  } as unknown as HalloweenInfo;
 
   return () => {
     for (const u of offs.reverse()) u();
     group.removeFromParent();
-    plain.dispose(); jacks.dispose(); pools.dispose(); blobs.dispose(); bats.dispose(); ghosts.dispose(); fogMesh.dispose(); webs.dispose();
+    pumps.dispose(); pumpsLo.dispose(); decals.dispose(); bats.dispose(); ghosts.dispose(); fogWeb.dispose();
     for (const d of disposables) d.dispose();
     hooks.restore();
   };

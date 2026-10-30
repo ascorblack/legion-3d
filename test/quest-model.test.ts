@@ -171,3 +171,20 @@ describe('model helpers', () => {
     expect([v.at, v.now, v.b.until, v.late[0][0], v.b.round]).toEqual([101, 101, 105, 102, 1]);
   });
 });
+
+describe('mergeOwn: lair words that reached the stream (site 30.10 anti-bot, quest.js view())', () => {
+  const lair = (o: object) => ({ on: true, lair: { phase: 1, round: 2, ...o } }) as never;
+  it('takes the telegraph word / spell phrase from the freshest view of the same event, clears hid', () => {
+    const cur = lair({ tele: { id: 7, hid: 1, got: 1, need: 8 }, spell: { id: 3, hid: 1, until: 5 }, mass: { id: 9, hid: 1 } });
+    const fresh = lair({ tele: { id: 7, word: 'щит', ok: false }, spell: { id: 3, words: ['раз', 'два'], until: 5 }, mass: { id: 9, words: ['все'] } });
+    const v = mergeOwn(cur, fresh).lair!;
+    expect(v.tele).toMatchObject({ id: 7, word: 'щит', got: 1, hid: 0 });
+    expect(v.spell).toMatchObject({ words: ['раз', 'два'], until: 5, hid: 0 });
+    expect(v.mass).toMatchObject({ words: ['все'], hid: 0 });
+  });
+  it('another event (id differs) or a still hidden fresh view changes nothing', () => {
+    const cur = lair({ tele: { id: 7, hid: 1 } });
+    expect(mergeOwn(cur, lair({ tele: { id: 8, word: 'x' } })).lair!.tele).toEqual({ id: 7, hid: 1 });
+    expect(mergeOwn(cur, lair({ tele: { id: 7, hid: 1 } })).lair!.tele).toEqual({ id: 7, hid: 1 });
+  });
+});

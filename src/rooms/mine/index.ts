@@ -5,7 +5,8 @@
  *   registerMine(registries.rooms);              // registers 'mine3d'; buildings registry: mine → { room: 'mine3d' }
  *
  * create(ctx): closes the site's own mine if open (one presence per tab), POST /api/mine/enter, builds the cave,
- * registers interactables (front stones, lift, buyer, supplier, board, way down), mounts the HUD and returns the
+ * registers interactables (front stones, lift, buyer, supplier, board, way down; «Шахта 3.0»: drill rigs and the lift shaft —
+ * fund.ts / hud.ts cards, ride = /api/mineRide then leave + enter of the floor key «id.N», follow3), mounts the HUD and returns the
  * RoomScene (free/groundAt over the cleared cells + entrance area). Keys: E dig / use, Shift+E queue the stone after the
  * current one (only with the game's fx.q flag; same /api/mineDig {…, q} as the site's Shift+click), L journal,
  * Esc closes a card / the journal. AFK comfort (afk.ts): tab title / favicon / optional notification, a soft chime on
@@ -33,7 +34,8 @@ import { estimateStone, promptEcon } from './econ';
 import { mineSwitch, PREF_ECON } from './prefs';
 import { layerBanner } from './layers';
 import { walkPlan, AutoWalk, LeaveGuard, ConfirmTwice, type WalkCtl } from './walk';
-import { attachMineChat } from '../../ui/chat';
+import { liftPrompt, drillsOf, drillPrompt, followKey } from './fund';
+import { attachMineChat, chatOneOn } from '../../ui/chat';
 import type { Avatar } from '../../contracts/modules';
 import type { RoomCombat, RoomFighter } from '../../combat/room';
 
@@ -123,6 +125,11 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     stop: () => { void client.stop().then(() => hud.render()); },
     toBuyer: () => goBuyer(),
     exit: () => ctx.exit(),
+    ride: (f) => { void rideTo(f); },
+    toLift: () => goObj('lift'),
+    toSup: () => { goObj('lamp'); openNpc('lamp'); },
+    hideOthers: () => { /* read by update() every frame */ },
+    sfx: (id) => window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id } })),
     // every card / the journal / the chat field is a modal on the input's stack: gameplay off, no pointer grab,
     // no «click to return» hint, Esc closes it (src/core/modal.ts)
     modal: (on) => { modalOn = on; setModal(ctx.input, 'mine:card', on, () => hud.close()); },
@@ -143,8 +150,11 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
 
   /* ---------------------------------------------------------------- client events */
   // the mine chat is the «⛏ Шахта» tab of the bottom-left chat dock (removed again on dispose); it posts only when the player sends
+  // site 30.10 «chatone»: the page's single chat window gets the «Шахта» tab (its own feed: SSE / /api/chat/watch) — no mc= polling of ours
+  if (client.chat.on && chatOneOn()) client.chat.poll = false;
   const offChatTab = client.chat.on ? attachMineChat({
     lines: () => client.chat.lines,
+    c: () => client.chat.c,
     on: (fn) => client.on((e) => { if (e.type === 'chat') fn(e.lines); }),
     say: (t) => client.say(t),
     me: () => login,
@@ -156,8 +166,10 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   }) : () => { /* no mine chat */ };
   const offEv = client.on((e) => {
     if (e.type === 'state') {
+      // site follow3: the game says the hero is on another floor (he dug when a new floor opened) — open that floor
+      { const k = followKey(M.st, M.me, client.c, client.rideAt, Date.now()); if (k && !switching) { client.rideAt = Date.now(); void switchFloor(k); } }
       scene.setView(M, client.queue());
-      syncStones();
+      syncStones(); syncRigs(); syncShaft();
       if (e.newFloor) {
         fogDark = null; refreshBoxes();
         // a new floor of another size / kind: a hero standing in rock goes to the lift hall / the entrance (site pos3)
@@ -359,7 +371,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   };
   // the lift and the board stand right next to the spawn: aim only (E at the spawn must not leave the mine)
   // big floor: the lift is the floors' lift (site: «Лифт - этажи, сбор на следующий») — its card; the classic one goes to town
-  obj('lift', scene.objBoxes.lift, () => (G().v3 ? `Лифт — ${M.liftChip()}` : 'В город — подъёмник'), () => { if (G().v3) hud.open('lift'); else ctx.exit(); }, 3.2, false);
+  obj('lift', scene.objBoxes.lift, () => (G().v3 && M.st ? liftPrompt(M.st, M.stAt, Date.now()) : 'В город — подъёмник'), () => { if (G().v3) hud.open('lift'); else ctx.exit(); }, 3.2, false);
   obj('buyer', scene.objBoxes.buyer, () => `${TX.seller} — сдать руду`, () => openNpc('buy'));
   obj('npcBuy', scene.objBoxes.npcBuy, () => `${TX.seller} — сдать руду`, () => openNpc('buy'));
   const supLabel = () => (M.pickOn ? `${TX.sup} — кирки, рудная сумка, каска` : `${TX.lampNpc} — каска шахтёра`);
@@ -367,6 +379,69 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   obj('npcLamp', scene.objBoxes.npcLamp, supLabel, () => openNpc('lamp'));
   obj('board', scene.objBoxes.board, () => 'Поручения скупщика', () => hud.open('quests'), 3.2, false);
   obj('up', scene.objBoxes.up, () => M.upText() || 'Спуск', () => hud.tip(M.upText()), 4);
+
+  /* «Шахта 3.0»: drill rigs and the lift shaft are things you walk up to and press E (site: a click → their bubble) */
+  const cellBox = (i: number, h: number, out: THREE.Box3) => {
+    const p = cellXY(i), half = G().CW * G().K * 0.5;
+    out.min.set(mx(p.cx) - half, 0, mz(p.cy) - half); out.max.set(mx(p.cx) + half, h, mz(p.cy) + half); return out;
+  };
+  const rigIts = new Map<string, { off: Unsub; box: THREE.Box3; cell: number }>();
+  const syncRigs = () => {
+    const want = new Map(G().v3 && M.F && M.F.vis ? drillsOf(M.st).filter((d) => d.cell >= 0 && M.F!.vis![d.cell]).map((d) => [d.k, d] as const) : []);
+    for (const [k, r] of rigIts) if (!want.has(k) || want.get(k)!.cell !== r.cell) { r.off(); rigIts.delete(k); }
+    for (const [k, d] of want) {
+      if (rigIts.has(k)) continue;
+      const box = cellBox(d.cell, 3.2, new THREE.Box3());
+      const off = ctx.interact.add({ id: 'mine:drill:' + k, icon: '⚙', get label() { const x = drillsOf(M.st).find((q) => q.k === k); return x ? drillPrompt(x) : 'Буровая'; }, hit: box, reach: 3.6,
+        enabled: () => !modalOn && !M.dark, use: () => { if (M.myI >= 0) client.leaveRock(); hud.openDrill(k); } } as Interactable);
+      rigIts.set(k, { off, box, cell: d.cell });
+    }
+  };
+  // the lift shaft: one interactable while its cell is seen (re-added when it moves: the interact system caches a Box3's centre)
+  let shaftIt: { off: Unsub; cell: number } | null = null;
+  const shaftCell = () => (G().v3 && M.F && M.F.shaft != null && M.F.shaft >= 0 && M.F.vis && M.F.vis[M.F.shaft] ? M.F.shaft : -1);
+  const syncShaft = () => {
+    const i = shaftCell(); if (shaftIt && shaftIt.cell === i) return;
+    if (shaftIt) { shaftIt.off(); shaftIt = null; }
+    if (i < 0) return;
+    const off = ctx.interact.add({ id: 'mine:shaft', icon: '⇩', get label() { return M.st && M.st.n < (M.st.deep || M.st.n) ? 'Шахта лифта — вниз только лифтом' : 'Шахта лифта'; }, hit: cellBox(i, 2.6, new THREE.Box3()), reach: 3.6,
+      enabled: () => !modalOn, use: () => hud.open('shaft') } as Interactable);
+    shaftIt = { off, cell: i };
+  };
+  syncRigs(); syncShaft();
+  /** Walk to an object of the hall (lift / supplier) with the normal movement (as «К скупщику»). */
+  const goObj = (k: 'lift' | 'lamp') => {
+    const to = G().frontOfObj(k, login), f0 = feetPx(), plan = walkPlan(M.dug, f0, to, G());
+    if (M.myI >= 0 && k === 'lift') hud.tip('Герой копает — пока идёшь к лифту, работа стоит, если отойдёшь от камня');
+    if (plan && plan.length && Math.hypot(f0.x - to.x, f0.y - to.y) > 40 && ctlOf()) walk.startPx(plan, G());
+    else if (!plan) hud.tip('Не пройти — расчисти путь', true);
+  };
+  /* lift ride (site ride): POST /api/mineRide on the player's press, then the mine opens on that floor (leave + enter as the site's open()) */
+  let switching = false;
+  const switchFloor = async (key: string) => {
+    if (switching) return; switching = true;
+    try {
+      hud.close();
+      const sp = G().spawn(login);
+      const ok = await client.switchTo(key, sp);
+      if (!ok) { hud.tip('Этаж не открылся — попробуй лифт ещё раз', true); return; }
+      const s2 = G().spawn(login), ctl = core0.controller && core0.controller();
+      if (ctl && typeof ctl.teleport === 'function') ctl.teleport(mx(s2.x), mz(s2.y));
+      client.syncPos(s2); geomKey = geomKeyOf();
+      scene.setView(M, client.queue()); syncStones(); syncRigs(); syncShaft(); refreshBoxes();
+      window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id: 'door.open' } }));
+      hud.tip(`Этаж ${M.st ? M.st.n : ''}${M.st && M.st.deep && M.st.n < M.st.deep ? ` из ${M.st.deep}` : ''} — лифт приехал`);
+      hud.render();
+    } finally { switching = false; }
+  };
+  const rideTo = async (f: number) => {
+    const r = await client.ride(f);
+    if (!r) { hud.render(); return; }
+    window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id: 'door.close' } }));
+    hud.close();
+    window.setTimeout(() => { if (!disposed) void switchFloor(r.key); }, r.delay);
+  };
+  let disposed = false;
 
   /* ---------------------------------------------------------------- own pickaxe: FP view-model + TP in the paw */
   const pg = pickaxeGeo();
@@ -484,7 +559,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
         if (n) for (let i = 0; i < n.length; i++) { const f = miners.get(n[i]); if (f && f.home && Math.abs(x - f.home.x) < 0.7 && Math.abs(z - f.home.z) < 0.7) return true; }
         return false;
       },
-      groundAt: () => 0,
+      groundAt: (x, z) => scene.groundAt(x, z),
     },
   };
   let sweepT = 0;
@@ -499,7 +574,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       cell: G().cellAt(feetPx().x, feetPx().y), inHall: G().inZone(G().cellAt(feetPx().x, feetPx().y)), lift: M.liftChip(), others: M.others.size }),
     root: scene.root,
     free: (x, z) => scene.free(M.dug, x, z),
-    groundAt: () => 0,
+    groundAt: (x, z) => scene.groundAt(x, z),
     // look towards the hall portal (the cart would fill the first view straight ahead)
     spawn: { x: mx(spawn.x), z: mz(spawn.y), face: (() => {
       // classic: towards the hall portal; big floor: towards the lift cage (the site's view of the hall)
@@ -513,12 +588,13 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       if (fogDark !== M.dark) { fogDark = M.dark; applyFog(); }
       const tg = ctx.interact.target; let aim = -1;
       if (tg && tg.id.startsWith('mine:stone:')) aim = +tg.id.slice(11);
-      scene.update(dt, t, camera, M, Date.now(), aim, feet3);
+      scene.update(dt, t, camera, M, Date.now(), aim, feet3, { hideOthers: hud.hide });
       for (let i = 0; i < afterFns.length; i++) afterFns[i](dt, t);
       // forget miners that left (their avatars are disposed by the scene)
       if ((sweepT += dt) > 5) { sweepT = 0; for (const av of miners.keys()) if (!av.root.parent) miners.delete(av); }
     },
     dispose() {
+      disposed = true; for (const r of rigIts.values()) r.off(); rigIts.clear(); if (shaftIt) shaftIt.off();
       emitStatus(false); offAfk();
       afterFns.length = 0; miners.clear();
       offFrame(); offEv(); offChatTab(); offKey(); for (const u of unsubs) u(); for (const s of stoneIts.values()) s.off(); stoneIts.clear();

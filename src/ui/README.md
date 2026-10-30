@@ -108,6 +108,20 @@ commands /help /mods /mod /unmod /mute /ban /unban (never sent to the feed). One
   Shadow DOM host `#l3d-chatmod`: keyboard, Esc / click outside close, input modal `chat:mod` = pointer free, gameplay off).
 - Tests: `test/chat-mod.test.ts`; parity against the real site module: `.local/chatmod/parity.mjs` (needs a saved site copy).
 
+### Единый чат (site 30.10, флаг «chatone»: `window.LGChatOne`) — `chatone.ts`, `chat.ts`, `dm.ts`
+With the flag the hero has ONE chat window (tabs Город · Торговля · Достижения · Шахта · Личные) instead of the City's and the mine's.
+It is the same kind of box as the City chat, so the dock (`chat.ts`) takes it unchanged — Enter / T / Esc / pointer lock, idle fade, the
+site's own `⋯` moderation (our menu over the site's `[data-cact]` buttons), nick menu, DMs, friends. In the City the site docks it into
+its slot itself (`LGChatOne.dock('city', …)`). The site's mine is not running under our 3D mine, so `attachMineChat` docks `'mine'`
+itself (`OneMine`: a full-screen host `.l3d-co-host` — the site's resize limits are its rect, `data-chat-top` keeps the HUD corner free),
+passes the mine's enter chat (`enterFeed('mine', …)`), the window opens on «Шахта»; our own mine tab is NOT added, we do not send
+(the window posts `/api/chat/say {room:'mine'}`), the mine client stops `mc=` polling (`client.chat.poll = false`; feeds are the
+site's: `/api/chat/watch` once a minute while expanded, SSE «city» / «mine», `/api/chat/feed`). `withoutFocus`: the site focuses its
+field on a tab switch — taken back so gameplay is not switched off by docking. `DmBridge.adopt`: the window registers its «Личные»
+box with LGDm while detached and LGDm drops it — we register it again once it is on the page (else the DMs float over the chat).
+Size (site 30.10): height 280–340 px, a PC viewer drags the top / right edges (inline width / height by the site, stored per place);
+`SITE_CHAT_CSS` caps nothing, idle is compact (`height:auto !important`, handles hidden). Without the flag nothing changes (old path).
+
 ### Личные сообщения и друзья (site 29.10: `window.LGDm`, `window.LGFriends`) — `dm.ts`, `friends-chip.ts`, `features/friends.ts`
 The site draws the DMs itself (per-nick tabs, history `GET /api/dm?with=`, send `POST /api/dm/say`, SSE «dm») inside the
 «Личные» tab of the City chat (`.cy-chat-dmx`), so the docked chat shows them in the City and in the mine (the mine tab is ours

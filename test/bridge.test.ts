@@ -11,16 +11,18 @@ class FakeES {
 }
 const g = globalThis as any;
 let pageFetchCalls = 0;
+let pageFetch: unknown;
 beforeAll(async () => {
   g.window = g;
   g.EventSource = FakeES;
-  g.fetch = async (url: string) => {
+  g.fetch = pageFetch = async (url: string) => {
     pageFetchCalls++;
     const body = /\/api\/city\/enter/.test(url) ? { ok: true, a: [{ l: 'x' }] } : /\/api\/me/.test(url) ? { ok: true, hero: { login: 'me' } } : { ok: true, other: 1 };
     return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   await import('../src/bridge/bridge');
 });
+const tee = () => g.__L3D_BUS.fetchTee;
 const flush = () => new Promise((r) => setTimeout(r, 10));
 
 describe('bridge', () => {
@@ -49,7 +51,22 @@ describe('bridge', () => {
     expect(got.length).toBe(0);
   });
 
+  it('leaves window.fetch alone until the 3D game asks for the tee, and gives it back exactly', () => {
+    expect(g.fetch).toBe(pageFetch);
+    expect(tee().installed()).toBe(false);
+    expect(tee().on()).toBe(true);
+    expect(g.fetch).not.toBe(pageFetch);
+    expect(tee().installed()).toBe(true);
+    expect(tee().on()).toBe(true);                 // idempotent: no second wrapper
+    expect(tee().off()).toBe(true);
+    expect(g.fetch).toBe(pageFetch);
+    expect(tee().installed()).toBe(false);
+    expect(tee().off()).toBe(true);                // off while off is fine
+    expect(g.fetch).toBe(pageFetch);
+  });
+
   it('copies watched fetch JSON and leaves the response body to the page', async () => {
+    tee().on();
     const got: any[] = [];
     g.__L3D_BUS.on('city:enter', (d: any) => got.push(d));
     const r = await g.fetch('/c/ch/api/city/enter', { method: 'POST' });
@@ -64,6 +81,8 @@ describe('bridge', () => {
     await g.fetch('/c/ch/api/me');
     await flush();
     expect(g.__L3D_BUS.last['me']).toEqual({ ok: true, hero: { login: 'me' } });
+    tee().off();
+    expect(g.fetch).toBe(pageFetch);
   });
 
   it('a throwing bus listener does not reach the page', () => {

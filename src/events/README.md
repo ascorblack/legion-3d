@@ -52,11 +52,15 @@ The first time an event starts on a given day in `auto` mode a toast says so (`e
 |---|---|
 | `index.ts` | the event: world hooks (re-colour garland bulbs orange/purple/lime, violet sky, bigger warm moon — all reverted), meshes, per-frame animation, quality budget |
 | `placement.ts` | pure placement on a 0.125 m raster of the city: pumpkin clusters hug walls / door sides / stair ends / the ledge strip, ≥ 0.6 m from doors, flat open ground only; fog patches; ghost spots |
-| `geo.ts` | pumpkin (6 ribs, dimpled, stalk), bat (flap in the vertex shader), ghost cat, quads |
-| `tex.ts` | CPU-rasterised DataTextures: carved jack-o'-lantern faces (emission map), soft fog, cobweb, glow — no canvas, no assets |
+| `geo.ts` | pumpkin (6 creased lobes, dimpled top, flat base, curled ridged stalk, cat ears; `lod` 0 ≈ 290 / 1 ≈ 95 tris), bat (flap in the vertex shader), ghost cat, quads, bunting + lantern cords (`setCord`) |
+| `mats.ts` | pumpkin material (night self-light, moon rim; carved instances `aJack` glow from inside: cut walls → hot core, rind glow round the cuts, own flicker phase), ghost material (soft lilac rim, see-through at the silhouette) |
+| `tex.ts` | CPU-rasterised DataTextures: carved jack-o'-lantern faces (rgb = the cut, alpha = rind glow), soft fog + cobweb atlas, glow, halo (tight core, long tail) — no canvas, no assets |
 
-Draw calls at q2: pumpkins, jack-o'-lanterns, light pools, contact shadows, hanging strings, halos, bats, ghosts, fog,
-cobwebs = 10–11 (no real lights, no shadow casters). Counts per quality: `HALLOWEEN_BUDGET`.
+Draw calls at q2: pumpkins near (full mesh) and far (low mesh) — CPU-culled to the view, re-sorted when the camera moves —,
+ground decals (light pools ADD light, contact shadows darken: one premultiplied draw), bunting + lantern cords and wall
+brackets, halos (fade out near the eye), bats, ghosts (culled to the view), fog + cobwebs (one atlas) = 8, no real
+lights, no shadow casters. Counts per quality: `HALLOWEEN_BUDGET`; `userData.halloween.counts()` = what the quality shows.
+test/world-vgeo.test.ts checks the real fair at q2 with the event on (≤ 8 event draws, < 13k event tris in view).
 Dev page: `dist-dev/events.html?event=halloween&q=2` (buttons switch the event / quality while it runs); in the game
 `dist-dev/game.html?event=halloween` (`__l3dGame.seasonal.active()`).
 

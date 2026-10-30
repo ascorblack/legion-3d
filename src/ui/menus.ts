@@ -17,6 +17,7 @@ import { earnedMedals } from '../collect/medals';
 import { bossName } from '../quest/model';
 import { milestones } from '../collect/milestones';
 import type { GameContext } from '../contracts/ext';
+import { setHtml } from '../core/html';
 
 export const STANDALONE = ['pause', 'settings', 'help'];
 /** Contract/legacy aliases → our ids. */
@@ -188,7 +189,7 @@ export class Menus {
       default: html = this.pClassic(id);
     }
     const same = this.body.firstElementChild && (this.body.firstElementChild as HTMLElement).dataset.page === id;
-    this.body.innerHTML = html;
+    setHtml(this.body, html);
     if (same) { (this.body.firstElementChild as HTMLElement).style.animation = 'none'; this.body.querySelectorAll('.scroll').forEach((e, i) => { e.scrollTop = sc[i] || 0; }); }
     for (const r of this.body.querySelectorAll<HTMLInputElement>('input[type=range]')) this.paintRange(r);
     if (id === 'map') { const slot = this.body.querySelector<HTMLElement>('.mapslot'); if (slot) this.mapView.attach(slot); }
@@ -210,11 +211,11 @@ export class Menus {
     const cur = this.custom;
     if (cur && cur.id === tab.id && cur.def === tab.def && cur.el.isConnected) return;   // already mounted: features re-render themselves
     this.unmountCustom();
-    this.body.innerHTML = `<div class="page p-custom${tab.orbit ? ' p-side' : ''}" data-page="${esc(tab.id)}">${this.pan('', esc(tab.name), '<div class="scroll cbody"></div>')}</div>`;
+    setHtml(this.body, `<div class="page p-custom${tab.orbit ? ' p-side' : ''}" data-page="${esc(tab.id)}">${this.pan('', esc(tab.name), '<div class="scroll cbody"></div>')}</div>`);
     const el = this.body.querySelector<HTMLElement>('.cbody')!;
     let off: (() => void) | null = null;
     try { const r = tab.def!.render(el, this.gameCtx()); if (typeof r === 'function') off = r; }
-    catch (e) { console.warn('[legion-3d] menu tab render failed', tab.id, e); el.innerHTML = '<div class="empty-card"><span><span class="big">🐾</span>Эта вкладка сейчас не открывается.</span></div>'; }
+    catch (e) { console.warn('[legion-3d] menu tab render failed', tab.id, e); setHtml(el, '<div class="empty-card"><span><span class="big">🐾</span>Эта вкладка сейчас не открывается.</span></div>'); }
     this.custom = { id: tab.id, def: tab.def, el, off };
   }
   private unmountCustom() {
@@ -234,7 +235,7 @@ export class Menus {
   private renderHead(id: string) {
     const tabs = this.tabs();
     const g = (grp: string, label: string) => `<div class="grp"><span class="gl">${label}</span>${tabs.filter((t) => t.group === grp).map((t) => `<button type="button" class="tab${t.id === id ? ' on' : ''}" data-act="tab" data-m="${esc(t.id)}">${esc(t.name)}${t.key ? `<span class="hk">${esc(t.key)}</span>` : ''}</button>`).join('')}</div>`;
-    this.head.innerHTML = `<div class="ribbon"><i class="kc sm qe">Q</i>${g('char', 'Герой')}<span class="sep"></span>${g('world', 'Мир')}<i class="kc sm qe">E</i></div>`;
+    setHtml(this.head, `<div class="ribbon"><i class="kc sm qe">Q</i>${g('char', 'Герой')}<span class="sep"></span>${g('world', 'Мир')}<i class="kc sm qe">E</i></div>`);
   }
 
   private renderFoot(id: string) {
@@ -242,7 +243,7 @@ export class Menus {
     const st = H && id !== 'stats' ? ['hp', 'atk', 'mag', 'def'].map((k) => `<span class="st" title="${esc(stLabel(k))}">${statIcon(k)}<b>${k === 'hp' ? `${hpInfo(H).now}/${H.stats.hp}` : H.stats[k]}</b></span>`).join('') : '';
     const money = H ? `<span class="mline">${coinsHtml(H.money)}</span>` : '';
     const extra = id === 'bag' || id === 'gear' ? `<span><i class="kc sm dk">⇧</i>сравнить</span>` : '';
-    this.foot.innerHTML = `${st}<span class="dv"></span>${money}<span class="dv"></span>${extra}<span><i class="kc sm dk">Q</i><i class="kc sm dk">E</i>вкладки</span><span><i class="kc sm dk">Esc</i>закрыть</span>`;
+    setHtml(this.foot, `${st}<span class="dv"></span>${money}<span class="dv"></span>${extra}<span><i class="kc sm dk">Q</i><i class="kc sm dk">E</i>вкладки</span><span><i class="kc sm dk">Esc</i>закрыть</span>`);
     for (const s of this.foot.querySelectorAll<SVGElement>('.si')) { s.style.width = '18px'; s.style.height = '18px'; }
   }
 
@@ -607,7 +608,7 @@ export class Menus {
     const uid = el.dataset.uid!; const it = H.items.find((x) => x.uid === uid); if (!it) return;
     this.hoverUid = uid; this.hoverEl = el;
     const n = bagCells(H).find((c) => c.uids.includes(uid))?.n || 1;
-    this.tip.innerHTML = cardHtml(it, H, { n, forceCompare: this.shift });
+    setHtml(this.tip, cardHtml(it, H, { n, forceCompare: this.shift }));
     this.tip.style.setProperty('--rc', rarOf(it.rarity).color);
     const k = this.c.scale || 1, r0 = el.getBoundingClientRect(), R0 = this.c.ui.getBoundingClientRect();
     const r = { left: (r0.left - R0.left) / k, right: (r0.right - R0.left) / k, top: (r0.top - R0.top) / k }, W = R0.width / k, Hh = R0.height / k;

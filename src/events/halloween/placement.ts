@@ -24,6 +24,8 @@ export interface PlaceCity {
   stairs: [number, number][];
   ledgeZ: number;
   spawn: { x: number; z: number };
+  /** Spots no pumpkin may stand on even off the walk grid (the hw NPCs' bases): edge clusters use non-walkable cells. */
+  keepOut?(X: number, Z: number): boolean;
 }
 
 export interface PumpkinSpec {
@@ -154,6 +156,7 @@ export function planHalloween(c: PlaceCity, seed = 31): Plan {
     const X = g.x0 + (i + 0.5) * CELL, Z = g.z0 + (j + 0.5) * CELL;
     if (!g.flat(X, Z, 0.34)) continue;
     if (!clearOfDoors(c, X, Z, 0.36)) continue;
+    if (c.keepOut?.(X, Z)) continue;
     let near = 99, tag: Cluster['tag'] = 'wall', score = rnd() * 1.2 + (d - 0.36) * 4;   // roomier spots first: bigger pumpkins fit
     for (const dd of c.doors) { const dx = Math.abs(X - dd.x), dz = Math.abs(Z - dd.z); if (dz < 1.7) near = Math.min(near, dx); }
     if (near < 3.6) { tag = 'door'; score += 5 - near * 0.3; }
@@ -188,7 +191,7 @@ export function planHalloween(c: PlaceCity, seed = 31): Plan {
     const jackMain = cd.tag === 'door' || cd.tag === 'stair' ? rnd() < 0.95 : rnd() < 0.7;
     const add = (x: number, z: number, r: number, kind: 0 | 1 | 2, stackedOn?: PumpkinSpec) => {
       if (!stackedOn) {
-        if (!g.flat(x, z, r + 0.03) || g.distAt(x, z) < r + 0.02 || !clearOfDoors(c, x, z, r)) return false;
+        if (!g.flat(x, z, r + 0.03) || g.distAt(x, z) < r + 0.02 || !clearOfDoors(c, x, z, r) || c.keepOut?.(x, z)) return false;
       }
       const gy = c.groundAt(x, z);
       const y = stackedOn ? stackedOn.y + stackedOn.r * (PUMPKIN_HALF - 0.04) + r * (PUMPKIN_HALF - 0.04) : gy + r * PUMPKIN_HALF;

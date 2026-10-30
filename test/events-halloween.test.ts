@@ -107,9 +107,10 @@ describe('halloween geometry + textures (built on the CPU)', () => {
   });
 });
 
+const info = (g: THREE.Object3D): any => { let r: any = null; g.traverse((o) => { if (o.userData.halloween) r = o.userData.halloween; }); return r; };
 const drawables = (root: THREE.Object3D) => {
   const out: THREE.Object3D[] = [];
-  root.traverse((o) => { const m = o as THREE.Mesh; if ((m.isMesh || (o as THREE.Points).isPoints || (o as THREE.LineSegments).isLine) && o.visible && ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count > 0 : true)) out.push(o); });
+  root.traverse((o) => { const m = o as THREE.Mesh; if ((m.isMesh || (o as THREE.Points).isPoints || (o as THREE.LineSegments).isLine) && (o.userData.viewCulled || (o.visible && ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count > 0 : true)))) out.push(o); });   // view-culled meshes count as drawn (upper bound)
   return out;
 };
 const tris = (os: THREE.Object3D[]) => os.reduce((a, o) => {
@@ -137,7 +138,8 @@ describe('halloween event lifecycle', () => {
     const counts = ([0, 1, 2, 3] as const).map((q) => {
       const h = eventHarness(q); const dispose = halloween.setup(h.ctx); h.frame(5);
       const get = (n: string) => (h.ctx.group.getObjectByName(n) as THREE.InstancedMesh);
-      const r = { calls: drawables(h.ctx.group).length, bats: get('halloween:bats').count, fog: get('halloween:fog').count / 2, ghosts: get('halloween:ghosts').count, pumpkins: get('halloween:pumpkins').count + get('halloween:jacks').count };
+      const c = info(h.ctx.group).counts();
+      const r = { calls: drawables(h.ctx.group).length, bats: get('halloween:bats').count, fog: c.fog, ghosts: c.ghosts, pumpkins: c.pumpkins };
       dispose(); return r;
     });
     for (let i = 1; i < 4; i++) for (const k of ['bats', 'fog', 'ghosts', 'pumpkins'] as const) expect(counts[i][k], `${k} q${i}`).toBeGreaterThanOrEqual(counts[i - 1][k]);
@@ -153,21 +155,35 @@ describe('halloween event lifecycle', () => {
   });
   it('decals: light pools ≥ 6 mm and fog ≥ 10 cm above the ground, webs 12 mm off their wall; the two fog layers never share a height', () => {
     const h = eventHarness(2); const dispose = halloween.setup(h.ctx); h.frame(60);
-    const pools = h.ctx.group.getObjectByName('halloween:pools') as THREE.InstancedMesh, m = new THREE.Matrix4(), p = new THREE.Vector3();
-    expect(pools.count).toBeGreaterThan(10);
-    for (let i = 0; i < pools.count; i++) { pools.getMatrixAt(i, m); p.setFromMatrixPosition(m); expect(p.y - city.place.groundAt(p.x, p.z), 'pool').toBeGreaterThanOrEqual(0.006); }
-    const blobs = h.ctx.group.getObjectByName('halloween:blobs') as THREE.InstancedMesh;
-    expect(blobs.count).toBeGreaterThan(40);
-    for (let i = 0; i < blobs.count; i++) { blobs.getMatrixAt(i, m); p.setFromMatrixPosition(m); expect(p.y - city.place.groundAt(p.x, p.z), 'blob').toBeGreaterThanOrEqual(0.006); }
-    const fog = h.ctx.group.getObjectByName('halloween:fog') as THREE.InstancedMesh;
-    for (let i = 0; i < fog.count; i += 2) {
-      fog.getMatrixAt(i, m); p.setFromMatrixPosition(m); const g = city.place.groundAt(p.x, p.z);
-      const y0 = p.y - g; fog.getMatrixAt(i + 1, m); p.setFromMatrixPosition(m); const y1 = p.y - g;
-      expect(y0).toBeGreaterThan(0.1); expect(Math.abs(y1 - y0)).toBeGreaterThan(0.1);
+    const dec = h.ctx.group.getObjectByName('halloween:decals') as THREE.InstancedMesh, m = new THREE.Matrix4(), p = new THREE.Vector3();
+    const aA = dec.geometry.getAttribute('aA');
+    let pools = 0, blobs = 0;
+    for (let i = 0; i < dec.count; i++) {
+      dec.getMatrixAt(i, m); p.setFromMatrixPosition(m);
+      if (aA.getX(i) < 0) pools++; else blobs++;
+      expect(p.y - city.place.groundAt(p.x, p.z), aA.getX(i) < 0 ? 'pool' : 'blob').toBeGreaterThanOrEqual(0.006);
     }
-    const webs = h.ctx.group.getObjectByName('halloween:webs') as THREE.InstancedMesh;
-    expect(webs.count).toBeGreaterThan(0);                       // the fake wall at z = 0 is found by the rays
-    for (let i = 0; i < webs.count; i++) { webs.getMatrixAt(i, m); p.setFromMatrixPosition(m); expect(p.z).toBeCloseTo(0.012, 3); }
+    expect(pools).toBeGreaterThan(10);
+    expect(blobs).toBeGreaterThan(40);
+    const fw = h.ctx.group.getObjectByName('halloween:fogweb') as THREE.InstancedMesh, aK = fw.geometry.getAttribute('aK');
+    const c = info(h.ctx.group).counts();
+    expect(fw.count).toBe(c.fog * 2 + c.webs);
+    for (let i = 0; i < c.fog * 2; i += 2) {
+      expect(aK.getX(i)).toBe(0);
+      fw.getMatrixAt(i, m); p.setFromMatrixPosition(m); const g = city.place.groundAt(p.x, p.z);
+      const y0 = p.y - g; fw.getMatrixAt(i + 1, m); p.setFromMatrixPosition(m); const y1 = p.y - g;
+      expect(y0).toBeGreaterThan(0.1); expect(Math.abs(y1 - y0)).toBeGreaterThan(0.1);
+      // lies flat: the quad's normal (local +Z) points up
+      const n = new THREE.Vector3(0, 0, 1).transformDirection(m); expect(Math.abs(n.y)).toBeGreaterThan(0.99);
+    }
+    expect(c.webs).toBeGreaterThan(0);                       // the fake wall at z = 0 is found by the rays
+    const corner = new THREE.Vector3();
+    for (let i = c.fog * 2; i < fw.count; i++) {
+      expect(aK.getX(i)).toBe(1);
+      fw.getMatrixAt(i, m);
+      corner.set(-0.5, 0.5, 0).applyMatrix4(m);              // the web hangs from its top-left corner, on the wall
+      expect(corner.z).toBeCloseTo(0.012, 3);
+    }
     dispose();
   });
   it('toggle off restores everything: scene, group, hooks, garland bulbs, sky, moon, fog colour, geometries', () => {
@@ -220,7 +236,7 @@ describe('halloween against the real paving mesh', () => {
       rc.set(new THREE.Vector3(it.x, 3, it.z), new THREE.Vector3(0, -1, 0)); rc.far = 6;
       const hit = rc.intersectObjects(meshes, false).find((h) => h.object.name !== 'city:back');
       expect(hit, `paving under ${it.x.toFixed(2)},${it.z.toFixed(2)}`).toBeTruthy();
-      expect(Math.abs(hit!.point.y - (it.y - it.r * PUMPKIN_HALF)), 'base on the paving').toBeLessThan(0.012);
+      expect(Math.abs(hit!.point.y - (it.y - it.r * PUMPKIN_HALF)), `base on the paving at ${it.x.toFixed(2)},${it.z.toFixed(2)} r ${it.r.toFixed(2)} hit ${hit!.object.name} y ${hit!.point.y.toFixed(3)}`).toBeLessThan(0.012);
       n++;
     }
     expect(n).toBeGreaterThan(80);

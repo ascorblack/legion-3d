@@ -19,7 +19,7 @@ function hdr(g: THREE.BufferGeometry, r: number, gg: number, b: number): THREE.B
 }
 
 export function registerProtoProps(inst: Instancer, P: Pal): void {
-  const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 10), cone4 = new THREE.ConeGeometry(0.5, 1, 4);
+  const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 8), cone4 = new THREE.ConeGeometry(0.5, 1, 4);
   const sph = new THREE.SphereGeometry(0.5, 8, 6), sphS = new THREE.SphereGeometry(0.5, 5, 3);
   // street lamp: stepped base, slim post with a ring, lantern (4 corner rods + emissive core), cap + finial
   const H = LAMP_HEAD_Y, rods: THREE.BufferGeometry[] = [];
@@ -52,7 +52,7 @@ export function registerProtoProps(inst: Instancer, P: Pal): void {
     part(box, P.woodD, 0.28, 0.27, 0, 0.02, 0.08, 0.6), part(box, P.woodD, -0.28, 0.27, 0, 0.02, 0.08, 0.6),
   ]) }]);
   // barrel
-  const bar = new THREE.CylinderGeometry(0.28, 0.24, 0.75, 12);
+  const bar = new THREE.CylinderGeometry(0.28, 0.24, 0.75, 10);
   inst.registerKind('barrel', [{ mat: 'wood', castShadow: true, geo: merge([
     part(bar, P.wood, 0, 0.375, 0), part(cyl, P.metal, 0, 0.18, 0, 0.53, 0.05, 0.53), part(cyl, P.metal, 0, 0.6, 0, 0.55, 0.05, 0.55),
     part(cyl, P.woodD, 0, 0.752, 0, 0.5, 0.01, 0.5),
@@ -70,11 +70,29 @@ export function registerProtoProps(inst: Instancer, P: Pal): void {
     { mat: 'flat', geo: merge(flowers) },
   ]);
   // potted tree / topiary
+  // layered canopy: faceted leaf clumps in three tones — dark underside, mid body, sun-lit tops (instance tints vary it more)
+  const ico = new THREE.IcosahedronGeometry(0.5, 0), ico1 = new THREE.IcosahedronGeometry(0.5, 1);
+  const leafL = new THREE.Color(P.leaf).lerp(new THREE.Color('#d8e870'), 0.22).getStyle(), leafDD = new THREE.Color(P.leafD).multiplyScalar(0.72).getStyle();
+  const crown: THREE.BufferGeometry[] = [
+    part(ico1, P.leaf, 0, 1.8, 0, 0.98, 0.86, 0.98, 0.2, 0.4, 0),
+    part(ico, leafDD, 0.05, 1.5, 0.02, 0.92, 0.42, 0.9, 0, 1.1, 0),
+    part(ico, P.leafD, -0.34, 1.68, 0.18, 0.58, 0.5, 0.56, 0.5, 0.2, 0.3),
+    part(ico, P.leafD, 0.32, 1.66, -0.2, 0.6, 0.52, 0.58, 0.1, 0.9, 0.2),
+    part(ico, P.leaf, 0.22, 1.98, 0.26, 0.52, 0.46, 0.5, 0.3, 0.3, 0.1),
+    part(ico, leafL, -0.12, 2.18, -0.06, 0.56, 0.42, 0.54, 0.7, 0.5, 0.2),
+    part(ico, leafL, 0.3, 2.08, -0.18, 0.36, 0.3, 0.36, 0.2, 1.3, 0.4),
+  ];
   inst.registerKind('tree', [
-    { mat: 'wood', geo: merge([part(cyl, '#a9503c', 0, 0.22, 0, 0.5, 0.44, 0.5), part(cyl, P.woodD, 0, 0.8, 0, 0.1, 1.2, 0.1)]) },
-    { mat: 'leaf', castShadow: true, geo: merge([part(sph, P.leaf, 0, 1.55, 0, 1.0, 0.95, 1.0), part(sph, P.leafD, 0.2, 1.35, 0.15, 0.6, 0.55, 0.6)]) },
+    // the crown starts above a chibi's head (≈ 1.3 m): the pot + trunk are the walk solid (test/world-collide.test.ts)
+    { mat: 'wood', geo: merge([part(cyl, '#a9503c', 0, 0.22, 0, 0.5, 0.44, 0.5), part(cyl, '#8a3e2e', 0, 0.455, 0, 0.54, 0.03, 0.54),
+      part(cyl, P.woodD, 0, 0.92, 0, 0.1, 1.44, 0.1), part(box, P.woodD, 0.1, 1.32, 0, 0.05, 0.36, 0.05, 0, 0, -0.7)]) },
+    { mat: 'leaf', castShadow: true, geo: merge(crown) },
   ]);
-  inst.registerKind('bush', [{ mat: 'leaf', geo: merge([part(sph, P.leaf, 0, 0.3, 0, 0.9, 0.7, 0.8), part(sph, P.leafD, 0.35, 0.25, 0.1, 0.6, 0.5, 0.6)]) }]);
+  inst.registerKind('bush', [{ mat: 'leaf', geo: merge([
+    part(ico, leafDD, 0, 0.16, 0, 0.92, 0.34, 0.84, 0, 0.4, 0), part(ico, P.leaf, -0.08, 0.32, 0, 0.78, 0.6, 0.72, 0.2, 0.3, 0),
+    part(ico, P.leafD, 0.24, 0.27, 0.1, 0.52, 0.44, 0.5, 0.4, 1.1, 0.2), part(ico, leafL, 0.02, 0.48, -0.06, 0.42, 0.32, 0.4, 0.6, 0.2, 0.1),
+  ]) }]);
+  ico.dispose(); ico1.dispose();
   // railing segment (2 m along X): posts + balusters + rails
   const rail: THREE.BufferGeometry[] = [part(box, P.metal, 0, 0.88, 0, 2.02, 0.06, 0.08), part(box, P.metal, 0, 0.12, 0, 2.0, 0.04, 0.04)];
   for (const x of [-1, 1]) { rail.push(part(box, P.metal, x, 0.45, 0, 0.08, 0.9, 0.08)); rail.push(part(sphS, '#ffcf4a', x, 0.96, 0, 0.11, 0.11, 0.11)); }

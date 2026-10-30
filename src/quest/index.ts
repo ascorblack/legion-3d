@@ -10,6 +10,7 @@ import type { Store, Actions, QuestView } from '../contracts';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
 import { bossName, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
 import { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, type SiteControls, type SiteBtn } from './siteui';
+import { setHtml } from '../core/html';
 export { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, findSite, qaSig, siteScope } from './siteui';
 export type { SiteControls, SiteBtn, SiteGroup, SiteLine, SiteHist, SiteSay } from './siteui';
 
@@ -103,7 +104,10 @@ export function cardOf(v: QuestView | null, me: { login: string; role: string },
   }
   if (q.lair) {
     const L = q.lair, words = L.spell?.words || L.mass?.words;
-    const urge: Card['urge'] = L.tele ? { kind: L.tele.ok ? 'ok' : 'word', text: L.tele.ok ? 'слово принято' : L.tele.word }
+    // site 30.10 (anti-bot): a word that has not reached the stream yet is not sent (hid) — the card points at the stream instead
+    const hidden = !L.tele?.ok && !!(L.tele?.hid || (!words?.length && (L.spell?.hid || L.mass?.hid)));
+    const urge: Card['urge'] = hidden ? { kind: 'info', text: 'слово — на экране стрима' }
+      : L.tele ? { kind: L.tele.ok ? 'ok' : 'word', text: L.tele.ok ? 'слово принято' : String(L.tele.word ?? '') }
       : words?.length ? { kind: 'word', text: words.join(' ') } : L.st === 'party' && L.hp > 0 ? { kind: L.acted ? 'ok' : 'say', text: L.acted ? 'ход принят' : baseCmd(me.role) || 'удар' } : { kind: 'info', text: L.st === 'end' ? 'бой окончен' : 'наблюдай за боем' };
     return { icon: '👹', title: `Логово ${BN.g}`, right: 'фаза ' + (L.phase || 1) + ' · раунд ' + (L.round || 0), until: L.spell?.until, hp: L.hp, urge, inParty };
   }
@@ -253,7 +257,7 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
   const box = document.createElement('div'); box.className = 'l3d-quest'; box.style.cssText = 'position:fixed;inset:0;z-index:140;pointer-events:none;';
   root.appendChild(box);
   const sh = box.attachShadow({ mode: 'open' });
-  sh.innerHTML = `<style>${CSS}</style><div class="q hide" role="status" aria-live="polite"><div class="h"><i></i><b></b><span></span></div><div class="b"></div><div class="sy" hidden></div></div><div class="lock" hidden>Вы в походе — следите за ним здесь</div>`;
+  setHtml(sh, `<style>${CSS}</style><div class="q hide" role="status" aria-live="polite"><div class="h"><i></i><b></b><span></span></div><div class="b"></div><div class="sy" hidden></div></div><div class="lock" hidden>Вы в походе — следите за ним здесь</div>`);
   const el = sh.querySelector('.q') as HTMLElement, H = sh.querySelector('.h') as HTMLElement, B = sh.querySelector('.b') as HTMLElement, lock = sh.querySelector('.lock') as HTMLElement;
   const SY = sh.querySelector('.sy') as HTMLElement;
   // 3D expedition view (src/features/expedition.ts): «Смотреть в 3D [Q]» while the expedition runs
@@ -289,8 +293,8 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     catch { host.toast(`Напиши в чат стрима: ${t}`); }
   };
   // the command line: built once (typing and focus survive the card's repaints); fed into the site's own line
-  SY.innerHTML = `<div class="syt">Команда в поход</div><p class="syw" role="alert" hidden></p><ol class="syh" aria-live="polite" aria-label="Твои последние строки и нажатия"></ol>`
-    + `<form class="syf" autocomplete="off"><label class="syl" for="l3dQSay">Команда в поход</label><input id="l3dQSay" type="text" maxlength="100" enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Команда в поход"><button type="submit" aria-label="Отправить">➤</button></form><p class="syn"></p>`;
+  setHtml(SY, `<div class="syt">Команда в поход</div><p class="syw" role="alert" hidden></p><ol class="syh" aria-live="polite" aria-label="Твои последние строки и нажатия"></ol>`
+    + `<form class="syf" autocomplete="off"><label class="syl" for="l3dQSay">Команда в поход</label><input id="l3dQSay" type="text" maxlength="100" enterkeyhint="send" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Команда в поход"><button type="submit" aria-label="Отправить">➤</button></form><p class="syn"></p>`);
   const sIn = SY.querySelector('input') as HTMLInputElement, sForm = SY.querySelector('form') as HTMLFormElement, sBtn = SY.querySelector('button') as HTMLButtonElement;
   const recall: string[] = []; let ri = -1, keyS = '';
   // the site's rule (streamer's decision): words are typed by hand — no paste, no drop
@@ -326,7 +330,7 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     (SY.querySelector('.syn') as HTMLElement).textContent = S?.hint || 'Как сообщение в чат Twitch, только видит его одна игра. Enter — отправить, ↑ — прошлое.';
     const w = SY.querySelector('.syw') as HTMLElement; w.hidden = !S?.warn; w.textContent = S?.warn || '';
     sBtn.classList.toggle('busy', !!S?.busy);
-    (SY.querySelector('.syh') as HTMLElement).innerHTML = site.hist.map((x) => x.st === 'note' ? `<li class="note">${esc(x.msg)}</li>` : `<li class="${x.st}"><b>${x.btn ? '▸ ' : ''}${esc(x.line)}</b><span>${esc(x.st === 'wait' ? 'в пути…' : x.msg)}</span></li>`).join('');
+    setHtml(SY.querySelector('.syh') as HTMLElement, site.hist.map((x) => x.st === 'note' ? `<li class="note">${esc(x.msg)}</li>` : `<li class="${x.st}"><b>${x.btn ? '▸ ' : ''}${esc(x.line)}</b><span>${esc(x.st === 'wait' ? 'в пути…' : x.msg)}</span></li>`).join(''));
   };
   const btnHtml = (b: SiteBtn) => {
     const n = hot.indexOf(b);
@@ -433,7 +437,7 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     if (c.note) h += `<div class="note">${esc(c.note)}</div>`;
     h += squadHtml(c.squad || null);
     h += `<div class="f"><span>как на стриме · <b class="dl"></b> с <button data-adj="-1">−</button> <button data-adj="1">+</button></span><button data-full>Поход полностью ↗</button></div>`;
-    B.innerHTML = h;
+    setHtml(B, h);
     if (c.urge?.kind === 'word') B.querySelector('.u .say')!.appendChild(wordCanvas(c.urge.text));
     // the path vote: the site's own option button ([data-qv] → its X.vote, the same as the number in chat)
     B.querySelectorAll<HTMLButtonElement>('.opt').forEach((b) => b.onclick = () => {

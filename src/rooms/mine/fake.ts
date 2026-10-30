@@ -51,7 +51,9 @@ export interface FakeOpts {
 }
 /** econ: the stones keep a measured dig rate and diggers (the captured `bl` re-based to now, synthesized for front stones without one), so the estimate sign has real numbers;
  *  (new front stones get one too when a stone breaks); news: «Пока тебя не было» summary; qc: shared weekly quest (prog / ready = done for me and not taken / nomin = done but own share too small / cl = taken); limit: daily cap (low = 40 min left, full = used up). */
-export interface FakeDemo { /** ?chatmod=own|mod: I moderate the mine chat (mchat.mod; /api/mine/chat/mod answers). */ chatmod?: 'own' | 'mod'; econ?: boolean; news?: boolean; qc?: 'prog' | 'ready' | 'nomin' | 'cl'; limit?: 'low' | 'full'; /** me.fx.q: the stone queue (site testers' flag). */ fxq?: boolean; /** a made-up last week in st.hist («Итоги шахты»). */ hist?: boolean }
+export interface FakeDemo { /** ?chatmod=own|mod: I moderate the mine chat (mchat.mod; /api/mine/chat/mod answers). */ chatmod?: 'own' | 'mod'; econ?: boolean; news?: boolean; qc?: 'prog' | 'ready' | 'nomin' | 'cl'; limit?: 'low' | 'full'; /** me.fx.q: the stone queue (site testers' flag). */ fxq?: boolean; /** a made-up last week in st.hist («Итоги шахты»). */ hist?: boolean;
+  /** «Шахта 3.0»: lift stage (fund = the shaft is found, coins are collected; up = upgrade timer), open floors, a drill rig next to the hall. */
+  lift?: 'fund' | 'up'; deep?: number; drill?: 'site' | 'build' | 'work' }
 /** ?econ=1 &news=1 &qc=prog|ready|nomin|cl &limit=low|full of the dev page (dev/mine.ts). */
 export function demoFromQuery(search: string): FakeDemo {
   const q = new URLSearchParams(search), d: FakeDemo = {};
@@ -62,6 +64,9 @@ export function demoFromQuery(search: string): FakeDemo {
   const cm = q.get('chatmod'); if (cm === 'own' || cm === 'mod') d.chatmod = cm;
   const qc = q.get('qc'); if (qc === 'prog' || qc === 'ready' || qc === 'nomin' || qc === 'cl') d.qc = qc;
   const lim = q.get('limit'); if (lim === 'low' || lim === 'full') d.limit = lim;
+  const lf = q.get('lift'); if (lf === 'fund' || lf === 'up') d.lift = lf;
+  const dp = +(q.get('deep') || 0); if (dp >= 1 && dp <= 99) d.deep = Math.floor(dp);
+  const dr = q.get('drill'); if (dr === 'site' || dr === 'build' || dr === 'work') d.drill = dr;
   return d;
 }
 /** Applies a demo to a «me» record (pure; used by FakeMine and tests). */
@@ -76,6 +81,31 @@ export function applyDemo(me: MineMe, d: FakeDemo, now = Date.now()): void {
     for (const x of [...me.q.d, ...me.q.w]) { x.done = 1; x.cl = 1; }
   }
   if (d.limit && me.cap > 0) me.day = d.limit === 'full' ? me.cap : Math.max(0, me.cap - 40);
+}
+
+/** «Шахта 3.0» demo (pure; FakeMine and tests): lift stage, open floors, a drill rig on the first dug cell next to the hall. */
+export function applyMine3Demo(st: MineView, d: FakeDemo, now = Date.now()): void {
+  if (!st.fl || !st.fl.v3) return;
+  if (d.deep) { st.deep = Math.max(st.n, d.deep); }
+  const deep = st.deep || st.n;
+  if (d.lift === 'fund') st.lift = { st: 'fund', n: deep, c: 2350, need: 6000, at: 0, ms: 1199880, left: 0, by: [['miner7', 1500], ['miner12', 600], ['miner3', 250]] };
+  if (d.lift === 'up') st.lift = { st: 'up', n: deep, c: 6000, need: 6000, at: now + 14 * 60000, ms: 20 * 60000, left: 14 * 60000, by: [['miner7', 4000], ['miner12', 2000]] };
+  // the found lift shaft (fund / up): the farthest dug cell from the hall (fake only; the server knows the real one)
+  if ((d.lift || d.deep) && st.fl.shaft == null) {
+    const fl = st.fl, w = fl.w || 1, hb = fl.hallBox || [0, 0, 0, 0]; let best = -1, bd = -1;
+    for (let i = 0; i < st.dug.length; i++) { if (st.dug[i] !== '1') continue; const dx = i % w - hb[0], dy = Math.floor(i / w) - hb[1], dd = dx * dx + dy * dy; if (dd > bd) { bd = dd; best = i; } }
+    if (best >= 0) fl.shaft = best;
+  }
+  if (d.drill) {
+    // the first dug cell outside the hall that the hero can see (fake only: the real server places rigs on veins)
+    const fl = st.fl, w = fl.w || 1, hb = fl.hallBox || [0, 0, 0, 0];
+    let cell = -1;
+    for (let i = 0; i < st.dug.length && cell < 0; i++) { if (st.dug[i] !== '1') continue; const x = i % w, y = Math.floor(i / w); if (x >= hb[0] - 1 && x <= hb[0] + hb[2] && y >= hb[1] - 1 && y <= hb[1] + hb[3]) continue; cell = i; }
+    if (cell >= 0) {
+      const lv = d.drill === 'work' ? 1 : 0;
+      st.drills = [['d1', 0, cell, d.drill, lv, d.drill === 'build' ? 3000 : 800, 3000, d.drill === 'build' ? 25 * 60000 : 0, d.drill === 'work' ? 4.5 : 0, d.drill === 'work' ? 60 : 0, d.drill === 'work' ? 2.4 : 0, 'iron', [['miner7', 500], ['miner3', 300]]] as any];
+    }
+  }
 }
 
 /**
@@ -101,9 +131,13 @@ export class FakeMine {
   st: MineView; me: MineMe; calls: { p: string; b: unknown }[] = [];
   /** Mine chat moderation (demo chatmod): my role, moderators, mutes / bans. */
   chatMod: { role: 'own' | 'mod' | null; mods: string[]; bans: { l: string; until: number; by: string }[] } = { role: null, mods: [], bans: [] };
+  /** The deepest floor's view («home»); an upper floor «home.N» is the same layout with its own n / seed (fake only). */
+  private deepSt: MineView;
+  /** Mine key of the open floor (enter ?c=). */
+  key = 'home';
   private econ = false; private o: FakeOpts; private timers: any[] = []; private resN = 0; private bots: { l: string; x: number; y: number; tx: number; ty: number }[] = [];
   constructor(o: FakeOpts) {
-    this.o = o;
+    this.o = o; this.key = String(o.enter.c || 'home');
     this.st = JSON.parse(JSON.stringify(o.enter.st));
     this.me = JSON.parse(JSON.stringify(o.enter.me));
     this.me.fx = { m2: 1, b: 1, pk: 1, sh: 1, ...(this.me.fx || {}) };
@@ -114,6 +148,8 @@ export class FakeMine {
     // the classic floor: the site's front rule; a big floor keeps the captured server front (it knows the fog)
     if (!this.st.fl!.v3) this.st.front = geomOf(this.st).frontOf(this.dugA(), typesOf(this.st));
     if (demo.econ) { this.econ = true; applyEconDemo(this.st); }
+    applyMine3Demo(this.st, demo);
+    this.deepSt = JSON.parse(JSON.stringify(this.st));
     if (demo.chatmod) this.chatMod = { role: demo.chatmod, mods: ['miner_mod'], bans: [{ l: 'miner_spam', until: Date.now() + 25 * 60000, by: o.login }] };
     if (demo.hist && !(this.st.hist && this.st.hist.length)) this.st.hist = [{ floor: 31, players: 520, top: (this.st.top || []).slice(0, 5).map(([l, u]) => ({ l, u: Math.round(u * 1.2) })) }];
     if (o.bots !== false) this.startBots();
@@ -129,7 +165,7 @@ export class FakeMine {
   private push(): void {
     this.rebase(); this.st.v++;
     const n = this.st.fl ? this.st.fl.c.length : 0, withFl = !!(this.st.fl && this.st.fl.v3 && n !== this.flN); this.flN = n;
-    this.o.bus.emit('sse:mine', { c: this.o.enter.c || 'home', st: this.view(withFl) });
+    this.o.bus.emit('sse:mine', { c: this.key, st: this.view(withFl) });
   }
   private heroSnap(results?: any[]): void { this.o.bus.emit('sse:me', { hero: this.o.hero, results: results || [] }); }
 
@@ -139,6 +175,8 @@ export class FakeMine {
     const path = p.replace(/\?.*$/, ''), L = this.o.login;
     switch (path) {
       case '/api/mine/enter': {
+        const key = decodeURIComponent((/[?&]c=([^&]+)/.exec(p) || [])[1] || 'home');
+        if (key !== this.key) this.openKey(key);
         const r: any = { ...this.o.enter, ok: true, sid: 'fake-sid', me: this.me, st: this.view(true), a: this.presenceA() };
         if (this.chatMod.role && r.mchat) {   // demo: I moderate this chat; one line of a moderator
           const chat = (r.mchat.chat || []).map((x: any, k: number) => (k === 1 ? { ...x, r: 'mod' } : x));
@@ -162,7 +200,7 @@ export class FakeMine {
       }
       case '/api/mine/state': {
         const v = /[?&]v=(\d+)/.exec(p);
-        const r: MinePayload = { ok: true, n: this.bots.length, c: this.o.enter.c, here: 40 + this.bots.length, hw: Object.keys(this.st.dg || {}).length * 2, hm: 30, me: this.me };
+        const r: MinePayload = { ok: true, n: this.bots.length, c: this.key, here: 40 + this.bots.length, hw: Object.keys(this.st.dg || {}).length * 2, hm: 30, me: this.me };
         if (!v || +v[1] !== this.st.v) r.st = this.view(!/[?&]f=/.test(p));
         const lk = /[?&]lk=([^&]+)/.exec(p);
         if (lk) r.lk = Object.fromEntries(decodeURIComponent(lk[1]).split(',').map((l, k) => [l, { n: l, lv: 3 + (k % 5), lk: { color: ['#f2c14e', '#b9a2ff', '#7fd35f', '#ff8fa3', '#8ac8e8'][k % 5] }, g: { h: 'miner' } }]));
@@ -199,6 +237,28 @@ export class FakeMine {
         return { ok: true, id };
       }
       case '/api/mineSell': this.me.bag = { c: 0, r: {}, p: {} }; return { ok: true };
+      case '/api/mineRide': {   // site ride: the hero gets off his stone and is on floor n (me.at)
+        const deep = this.deepSt.deep || this.deepSt.n, n = Math.floor(+b.n);
+        if (!(n >= 1 && n <= deep)) return { ok: false, error: 'Этаж ещё не открыт' };
+        this.unDig(L); this.me.i = -1; this.me.at = n; return { ok: true };
+      }
+      case '/api/mineLift': {   // coins / ore into the lift's collection (only while it collects)
+        const S = this.st.lift || {}; if (S.st !== 'fund') return { ok: false, error: 'Сбор на лифт сейчас не идёт' };
+        const got = this.payIn(b); if (got < 0) return { ok: false, error: 'Не хватает монет' };
+        S.c = Math.min(S.need || 0, (S.c || 0) + got);
+        const by = (S.by = (S.by || []) as [string, number][]), me = by.find((x) => x[0] === L); if (me) me[1] += got; else by.unshift([L, got]);
+        if ((S.c || 0) >= (S.need || 0)) { S.st = 'up'; S.at = Date.now() + (S.ms || 60000); S.left = S.ms || 60000; }
+        this.push(); return { ok: true };
+      }
+      case '/api/mineDrill': {
+        const d = (this.st.drills || []).find((x) => x[0] === b.k) as any[] | undefined; if (!d) return { ok: false, error: 'Буровой нет' };
+        if (!(d[3] === 'site' || d[3] === 'work') || d[4] >= 3) return { ok: false, error: 'Сбор на буровую сейчас не идёт' };
+        const got = this.payIn(b); if (got < 0) return { ok: false, error: 'Не хватает монет' };
+        d[5] = Math.min(d[6], d[5] + got);
+        const by = (d[12] = d[12] || []) as [string, number][], me = by.find((x) => x[0] === L); if (me) me[1] += got; else by.unshift([L, got]);
+        if (d[5] >= d[6]) { d[3] = 'build'; d[7] = 30 * 60000; d[5] = 0; }
+        this.push(); return { ok: true };
+      }
       case '/api/mineLamp': this.timers.push(setTimeout(() => { this.o.hero.items.push({ uid: 'ihelm' + this.resN++, id: 'miner_helmet', name: 'Каска шахтёра', slot: 'helmet', on: false, wearable: true }); this.heroSnap(); }, 600)); return { ok: true };
       case '/api/mineClaim': { for (const x of [...(this.me.q?.d || []), ...(this.me.q?.w || [])]) if (x.done) x.cl = 1; const qc = this.me.q?.c; if (qc && qc.done && qc.ok) qc.cl = 1; return { ok: true }; }
       case '/api/minePick': { const id = 'r' + ++this.resN; this.timers.push(setTimeout(() => { if (this.me.pkx) this.me.pkx.lv = b.to; this.heroSnap([{ id, ok: true, x: { op: 'minePick', to: b.to } }]); }, 700)); return { ok: true, id }; }
@@ -207,6 +267,27 @@ export class FakeMine {
       case '/api/equip': { const it = this.o.hero.items.find((x) => x.uid === b.uid); if (it) { for (const o of this.o.hero.items) if (o.slot === it.slot) o.on = false; it.on = true; } this.heroSnap(); return { ok: true }; }
     }
     return { ok: false, error: 'fake: ' + path };
+  }
+  /** Coins + ore lines of a collection, in coins (ore at the buyer's price); −1 = not enough coins. Takes them from the hero. */
+  private payIn(b: any): number {
+    const coins = Math.max(0, Math.floor(+b.coins || 0)), H = this.o.hero, P = this.st.bp || {};
+    if (coins > (+H.money || 0)) return -1;
+    H.money = (+H.money || 0) - coins; let got = coins;
+    for (const [uid, q] of (Array.isArray(b.lines) ? b.lines : []) as [string, number][]) {
+      const it = H.items.find((x) => x.uid === uid); if (!it) continue;
+      const n = Math.min(+it.q || 0, +q || 0); got += Math.floor(n * (+P[it.res] || 0) / 100);
+      it.q -= n; if (it.q <= 0) H.items.splice(H.items.indexOf(it), 1);
+    }
+    this.timers.push(setTimeout(() => this.heroSnap(), 400));
+    return got;
+  }
+  /** Open another floor key (fake): «home» = the deepest floor; «home.N» = floor N (same layout, own n / seed). */
+  private openKey(key: string): void {
+    this.key = key;
+    const m = /\.(\d+)$/.exec(key), deep = this.deepSt.deep || this.deepSt.n, n = m ? Math.min(deep, +m[1]) : deep;
+    if (n === deep) { this.st = JSON.parse(JSON.stringify(this.deepSt)); }
+    else { this.st = JSON.parse(JSON.stringify(this.deepSt)); this.st.n = n; this.st.seed = this.deepSt.seed + n; this.st.v = 1; this.st.bl = {}; this.st.dg = {}; this.st.drills = []; }
+    this.me.at = n; this.flN = -1;
   }
   private nextQueued = false;
   private takeQueued(): void {
@@ -270,7 +351,7 @@ export class FakeMine {
       else if (G.v3) { const [hx, hy, hw, hh] = G.hall; t = G.free(hx + Math.random() * hw, hy + Math.random() * hh); }
       else t = G.free(100 + Math.random() * 820, 2000 + Math.random() * 400);
       const p = { x: b.tx, y: b.ty }; b.x = p.x; b.y = p.y; b.tx = t.x; b.ty = t.y;
-      this.o.bus.emit('sse:mine', { c: this.o.enter.c || 'home', m: [[b.l, b.x, b.y, b.tx, b.ty, 0]], n: this.bots.length });
+      this.o.bus.emit('sse:mine', { c: this.key, m: [[b.l, b.x, b.y, b.tx, b.ty, 0]], n: this.bots.length });
     }, 1500));
     // bots talk in the mine chat now and then (made-up lines)
     const LINES = ['кто копает у входа?', 'го на нижний ряд', 'ура, железо!', 'тут жила, помогите', 'скупщик сегодня щедрый', 'у кого каска лишняя?', 'ещё пару камней и спуск', 'мяу, кирка тупая'];

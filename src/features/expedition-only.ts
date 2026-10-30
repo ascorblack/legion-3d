@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { cityTab, type CityTab } from '../net/city-tab';
 import { registerPauseItem } from '../ui/settings-ext';
 import { coreFeature } from './types';
+import { setHtml } from '../core/html';
 
 /** Features that run in the expedition-only game (the rest need the city world, the site's City client or walkers). */
 export const EXP_ONLY_FEATURES: ReadonlySet<string> = new Set([
@@ -81,7 +82,7 @@ export default coreFeature({
 
     const st = document.createElement('style'); st.id = 'l3d-expcard-css'; st.textContent = CSS; document.head.appendChild(st);
     const card = document.createElement('div'); card.id = 'l3d-expcard'; card.setAttribute('role', 'dialog'); card.setAttribute('aria-live', 'polite');
-    card.innerHTML = '<h2></h2><p></p><div class="bar" aria-hidden="true"><i></i></div><div class="r"><button type="button" data-a="city">Вернуться в город</button><button type="button" class="g" data-a="classic">Классический сайт (F8)</button></div>';
+    setHtml(card, '<h2></h2><p></p><div class="bar" aria-hidden="true"><i></i></div><div class="r"><button type="button" data-a="city">Вернуться в город</button><button type="button" class="g" data-a="classic">Классический сайт (F8)</button></div>');
     card.hidden = true;
     ctx.uiRoot.append(card);
     const h2 = card.querySelector('h2')!, p = card.querySelector('p')!;
@@ -114,9 +115,9 @@ export default coreFeature({
     const offMap = ctx.uiApi.addTab('map', {
       title: 'Карта', group: 'world', hotkey: 'KeyM', order: 130,
       render(el) {
-        el.innerHTML = '<div style="padding:28px 8px;text-align:center;font:600 16px/1.5 \'Golos Text\',sans-serif;color:#e8e0ff">'
+        setHtml(el, '<div style="padding:28px 8px;text-align:center;font:600 16px/1.5 \'Golos Text\',sans-serif;color:#e8e0ff">'
           + '<div style="font-size:40px">🗺</div><b style="color:#ffe9a8">Карта города откроется после похода</b><br>'
-          + 'Пока ты в отряде, сайт закрывает «Город». Поход смотри здесь, в 3D.</div>';
+          + 'Пока ты в отряде, сайт закрывает «Город». Поход смотри здесь, в 3D.</div>');
       },
     });
     const offPause = registerPauseItem({ id: 'return-city', label: 'Вернуться в город', order: 4, enabled: () => cityTab() === 'open', run: goCity });

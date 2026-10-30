@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three';
 import { fromX, fromZ, toX, toZ } from '../world/coords';
+import { setHtml } from '../core/html';
 
 /* ================================================================== perf HUD */
 export interface PerfSource {
@@ -53,7 +54,7 @@ export class PerfHud {
       `q${this.src.quality()}${d.setting != null ? ` (${String(d.setting)})` : ''}${s.scale != null ? ` · масштаб ${s.scale}` : ''}${d.pixelRatio != null ? ` · DPR ${d.pixelRatio}` : ''}${d.shadows != null ? ` · тени ${d.shadows ? 'да' : 'нет'}` : ''}${d.post != null ? ` · пост ${d.post ? 'да' : 'нет'}` : ''}`,
       `${inf ? `геом. ${inf.geometries} · текстур ${inf.textures}` : ''}${mem ? ` · JS ${(mem.usedJSHeapSize / 1048576).toFixed(0)} МБ` : ''} · худший ${this.worst.toFixed(0)} мс`,
     ];
-    this.text.innerHTML = lines.join('<br>');
+    setHtml(this.text, lines.join('<br>'));
     this.worst *= 0.9;
     const g = this.g; if (!g) return;
     const W = this.canvas.width, H = this.canvas.height;

@@ -14,6 +14,20 @@ import { dayLimit } from './state';
 import { MineModel, TX, blockTitle, mmss, type MinePayload, type MineMe, type Burst, type ChatLine, type LookRec } from './state';
 import { REACH, type Pt } from './geo';
 import { GEO1, type MineGeom } from './geo3';
+import { baseOf, mineKey, deepOf, keyOf, rideFloor, rideDelay, OreGone } from './fund';
+
+/**
+ * Layout key of a floor for the poll (`&f=`), site mine.js floorKey (30.10): `seed.n`; a big v3 floor also carries the number of dug
+ * cells (its fog changes with every dig) — the server resends the floor layout when the key differs.
+ */
+export function mineFloorKey(st: { seed: number | string; n: number | string; dug?: string | number[]; fl?: { v3?: unknown } | null }): string {
+  const base = st.seed + '.' + st.n;
+  if (!st.fl || !st.fl.v3) return base;
+  const d = typeof st.dug === 'string' ? st.dug : Array.isArray(st.dug) ? st.dug.join('') : '';
+  let n = 0;
+  for (let i = d.indexOf('1'); i >= 0; i = d.indexOf('1', i + 1)) n++;
+  return base + '.' + n;
+}
 
 export type MineApi = (path: string, body?: unknown) => Promise<any>;
 export interface MineBus { on(type: string, fn: (d: any) => void): () => void }
@@ -48,6 +62,14 @@ export type MineEvent =
   | { type: 'busy' }
   | { type: 'error'; text: string };
 
+/**
+ * Mark of this page (site mine.js 29.10 TAB, one per page): the server tells «the same tab» after a return from the
+ * background by it (enter body `tab`). 16 hex chars from crypto, else a time + random fallback (as the site).
+ */
+export const MINE_TAB: string = (() => {
+  try { const a = new Uint8Array(8); crypto.getRandomValues(a); return [...a].map((b) => b.toString(16).padStart(2, '0')).join(''); }
+  catch { return (Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).replace(/[^a-z0-9]/g, '').slice(0, 24); }
+})();
 /** Throttle of own position updates while walking (ms). The site sends one go per click-walk; we walk with WASD. */
 export const GO_MS = 800;
 /** Minimal move (px) that is worth a go. */
@@ -60,7 +82,8 @@ const realTimers: Timers = {
 
 export class MineClient {
   readonly model: MineModel;
-  readonly c: string;
+  /** Mine key: 'home' / a district id, or «id.floor» for an upper floor of «Шахта 3.0» (site C). */
+  c: string;
   sid = '';
   /** Our position (mine px) as last sent to the game. */
   sent: Pt | null = null;
@@ -80,7 +103,7 @@ export class MineClient {
   qq: number[] = [];
   busyOp = false;
   /** Mine chat: lines, counter and the chat state of enter (`mchat.mod` / `mchat.muted` — site chatEnter). */
-  chat: { on: boolean; c: number; lines: ChatLine[]; st: { mod?: unknown; muted?: unknown } | null } = { on: false, c: 0, lines: [], st: null };
+  chat: { on: boolean; c: number; lines: ChatLine[]; st: { mod?: unknown; muted?: unknown } | null; poll: boolean } = { on: false, c: 0, lines: [], st: null, poll: true };
   private o: MineClientOpts;
   private T: Timers;
   private now: () => number;
@@ -93,7 +116,7 @@ export class MineClient {
 
   constructor(o: MineClientOpts) {
     this.o = o; this.T = o.timers || realTimers; this.now = o.now || (() => Date.now());
-    this.c = /^[a-z0-9_-]{1,24}$/.test(String(o.c || '')) ? String(o.c) : 'home';
+    this.c = mineKey(o.c);
     this.model = new MineModel(o.login);
     this.model.heroItems = () => { try { const h = o.hero && o.hero(); return (h && h.items) || []; } catch { return []; } };
     if (o.bus) {
@@ -101,6 +124,8 @@ export class MineClient {
       this.unsubs.push(o.bus.on('sse:me', (d) => this.onMe(d)));
     }
   }
+  /** Mine id without the floor (site CB()): lift / drill collections and the chat are shared by all floors. */
+  get cb(): string { return baseOf(this.c); }
   /** Our login (lower case). */
   get login(): string { return String(this.o.login || '').toLowerCase(); }
   private q(): string { return `?c=${encodeURIComponent(this.c)}`; }
@@ -110,13 +135,13 @@ export class MineClient {
   /** A live channel is up when a 'mine' event arrived recently (the server sends views every few seconds). */
   live(): boolean { return this.now() - this.lastSse < 20000; }
   private hidden(): boolean { try { return !!(this.o.hidden && this.o.hidden()); } catch { return false; } }
-  private heroMe(): MineMe | null { try { const h = this.o.hero && this.o.hero(); return (h && h.mn && h.mn[this.c]) || null; } catch { return null; } }
+  private heroMe(): MineMe | null { try { const h = this.o.hero && this.o.hero(); return (h && h.mn && (h.mn[this.c] || h.mn[this.cb])) || null; } catch { return null; } }
 
   /* ---------------------------------------------------------------- presence */
-  /** POST /api/mine/enter?c= {x, y}: first entry (spawn point) or re-entry from the current position. */
+  /** POST /api/mine/enter?c= {x, y, tab}: first entry (spawn point) or re-entry from the current position. */
   async enter(start: Pt, again = false): Promise<boolean> {
     if (this.closed) return false;
-    const r: MinePayload = await this.o.api('/api/mine/enter' + this.q(), { x: Math.round(start.x), y: Math.round(start.y) });
+    const r: MinePayload = await this.o.api('/api/mine/enter' + this.q(), { x: Math.round(start.x), y: Math.round(start.y), tab: MINE_TAB });
     if (this.closed) return false;
     if (!r || !r.ok) { this.emit({ type: 'error', text: (r && r.error) || 'Шахта не открылась — попробуй ещё раз.' }); return false; }
     this.sid = r.sid || '';
@@ -137,9 +162,9 @@ export class MineClient {
     const M = this.model;
     this.pollN++;
     if (!full && this.live() && this.pollN % 10 && !M.lkWant.size) return;
-    const st0 = M.st, have = !full && st0 ? `&v=${encodeURIComponent(st0.v)}&f=${encodeURIComponent(st0.seed + '.' + st0.n)}` : '';
+    const st0 = M.st, have = !full && st0 ? `&v=${encodeURIComponent(st0.v)}&f=${encodeURIComponent(mineFloorKey(st0))}` : '';
     const lk = [...M.lkWant].slice(0, 60); M.lkWant.clear(); if (lk.length) this.lkAt = this.now();
-    const mc = this.chat.on && !this.live() ? `&mc=${this.chat.c || 0}` : '';
+    const mc = this.chat.on && this.chat.poll && !this.live() ? `&mc=${this.chat.c || 0}` : '';
     const r: MinePayload = await this.o.api('/api/mine/state' + this.q() + have + (this.sid ? `&sid=${this.sid}` : '') + (lk.length ? `&lk=${encodeURIComponent(lk.join(','))}` : '') + mc);
     if (this.closed || !r || !r.ok) return;
     if (r.mchat && this.chat.on) this.chatIn(r.mchat);
@@ -196,10 +221,10 @@ export class MineClient {
     this.chat.lines = [...this.chat.lines, ...fresh].slice(-60);
     this.emit({ type: 'chat', lines: fresh });
   }
-  /** '?c=<mine id>' — the query every /api/mine/chat… request carries (site chatX). */
-  get chatQ(): string { return this.q(); }
-  /** POST /api/mine/chat/say?c= {text} (site chat module, room 'mine'). */
-  async say(text: string): Promise<any> { const t = String(text || '').trim(); if (!t) return null; return this.o.api('/api/mine/chat/say' + this.q(), { text: t }); }
+  /** '?c=<mine id without the floor>' — the query every /api/mine/chat… request carries (site chatX: CB()). */
+  get chatQ(): string { return `?c=${encodeURIComponent(this.cb)}`; }
+  /** POST /api/mine/chat/say?c=<CB> {text} (site chat module, room 'mine'). */
+  async say(text: string): Promise<any> { const t = String(text || '').trim(); if (!t) return null; return this.o.api('/api/mine/chat/say' + this.chatQ, { text: t }); }
   /** Results of mine actions come with the hero snapshot (results[].x.op = mine…). */
   private onMe(d: any): void {
     const list = (d && d.results) || []; if (!Array.isArray(list)) return;
@@ -270,7 +295,7 @@ export class MineClient {
   /** Distance (px) from p to the centre of stone i on the current floor (classic or big). */
   dist(i: number, p: Pt): number { return MineClient.distTo(i, p, this.model.G); }
   /**
-   * POST /api/mineDig {i, c, sid, x, y, k: 1, vh, pt} — our feet must be within REACH of the stone (the game checks it).
+   * POST /api/mineDig {i, c, sid, x, y, n?, pt} — our feet must be within REACH of the stone (the game checks it).
    * pt = the aimed point on the stone (site: click point). Flushes our position first.
    */
   async dig(i: number, at: Pt, pt?: Pt): Promise<boolean> {
@@ -281,7 +306,7 @@ export class MineClient {
     M.want = { i, at: this.now() }; M.left = null; this.clearQueue();   // site clickRock: a plain dig starts over (S.qq = [])
     this.pos = { x: at.x, y: at.y }; this.flushGo();
     // site 29.10: on a big floor the dig names the floor the player sees (n)
-    const r = await this.o.api('/api/mineDig', { i, c: this.c, sid: this.sid, x: Math.round(at.x), y: Math.round(at.y), ...(M.F && M.F.v3 && M.st ? { n: M.st.n } : {}), k: 1, vh: this.hidden() ? 1 : 0, ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
+    const r = await this.o.api('/api/mineDig', { i, c: this.c, sid: this.sid, x: Math.round(at.x), y: Math.round(at.y), ...(M.F && M.F.v3 && M.st ? { n: M.st.n } : {}), ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
     if (this.closed) return false;
     if (!r || !r.ok) {
       if (M.want && M.want.i === i) M.want = null;
@@ -304,7 +329,7 @@ export class MineClient {
   clearQueue(): void { this.qq = []; const me = this.model.me; if (me && me.qq && me.qq.length) this.model.me = { ...me, qq: [] }; }
   /**
    * Site queueRock (Shift+click, testers): while digging, put stone i after the current one (at most 2). Same request as
-   * mine.js: POST /api/mineDig {i: <current stone>, c, sid, x, y, q: [...queue, i].slice(-2), k: 1, vh, pt} — x, y = where
+   * mine.js: POST /api/mineDig {i: <current stone>, c, sid, x, y, q: [...queue, i].slice(-2), pt} — x, y = where
    * the hero stands (site: the centre of the dig spot), pt = the aimed point on stone i. Only on the player's key press.
    * Returns false when the queue does not apply (feature off / not digging) — the caller digs as usual then.
    */
@@ -314,7 +339,7 @@ export class MineClient {
     const why = this.digBlock(i); if (why) { this.tip(why, true); return true; }
     if (i === M.myI) return true;
     const cur = this.rawQueue().filter((x) => x !== i), qq = [...cur, i].slice(-2);
-    const r = await this.o.api('/api/mineDig', { i: M.myI, c: this.c, sid: this.sid, x: Math.round(at.x), y: Math.round(at.y), q: qq, k: 1, vh: this.hidden() ? 1 : 0, ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
+    const r = await this.o.api('/api/mineDig', { i: M.myI, c: this.c, sid: this.sid, x: Math.round(at.x), y: Math.round(at.y), q: qq, ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
     if (this.closed) return true;
     if (!r || !r.ok) { if (r && r.other) this.setOther(true); this.tip((r && r.error) || 'Не получилось', true); return true; }
     this.qq = qq; if (M.me) M.me = { ...M.me, qq };
@@ -411,6 +436,69 @@ export class MineClient {
     if (!this.o.equip) return false;
     const r = await this.o.equip(uid); if (!r || !r.ok) { this.tip((r && r.error) || 'Не получилось', true); return false; }
     this.tip('Надето'); this.emit({ type: 'state', newFloor: false }); return true;
+  }
+  /* ---------------------------------------------------------------- «Шахта 3.0»: lift and drill rigs (site 29.10–30.10) */
+  /** Heaps of ore given into a collection (hidden for a minute, site oreGone). */
+  readonly oreGone = new OreGone();
+  /** When we last rode the lift (site S.rideAt): follow3 waits a minute after it. */
+  rideAt = 0;
+  /**
+   * «Этажи» → floor f: POST /api/mineRide {c: CB, n: f} (site ride). On success returns the key of the mine to open and
+   * the delay (the site re-opens the mine there: the deepest floor is CB, an upper one CB.f), else null.
+   */
+  async ride(f: number): Promise<{ key: string; delay: number; f: number } | null> {
+    const st = this.model.st, deep = deepOf(st); f = rideFloor(f, deep);
+    if (this.busyOp) return null; this.busyOp = true; this.emit({ type: 'busy' });
+    const r = await this.o.api('/api/mineRide', { c: this.cb, n: f });
+    this.busyOp = false; this.emit({ type: 'busy' });
+    if (this.closed) return null;
+    if (!r || !r.ok) { this.tip((r && r.error) || 'Лифт не поехал', true); return null; }
+    this.rideAt = this.now(); this.tip(`Лифт едет на этаж ${f}…`);
+    return { key: keyOf(f, deep, this.c), delay: rideDelay(f, deep), f };
+  }
+  /** Coins and / or ore heaps (lines [[uid, shards]]) into the lift's collection: POST /api/mineLift {c: CB, coins, lines?}. */
+  async liftFund(coins: number, lines?: [string, number][]): Promise<boolean> {
+    if (this.busyOp) return false; this.busyOp = true; this.emit({ type: 'busy' });
+    const r = await this.o.api('/api/mineLift', { c: this.cb, coins, ...(lines ? { lines } : {}) });
+    this.busyOp = false;
+    if (!r || !r.ok) { this.tip((r && r.error) || 'Вклад не принят', true); this.emit({ type: 'busy' }); return false; }
+    const gave = this.oreGave(lines);
+    this.tip(gave ? `Вклад принят — из сумки ушло: ${gave}. Полоса сбора обновится через пару секунд` : 'Вклад принят — спасибо! Полоса сбора обновится через пару секунд');
+    this.emit({ type: 'busy' }); return true;
+  }
+  /** Coins and / or ore into drill rig k: POST /api/mineDrill {c: CB, k, coins, lines?}. */
+  async drillFund(k: string, coins: number, lines?: [string, number][]): Promise<boolean> {
+    if (this.busyOp) return false; this.busyOp = true; this.emit({ type: 'busy' });
+    const r = await this.o.api('/api/mineDrill', { c: this.cb, k, coins, ...(lines ? { lines } : {}) });
+    this.busyOp = false;
+    if (!r || !r.ok) { this.tip((r && r.error) || 'Вклад не принят', true); this.emit({ type: 'busy' }); return false; }
+    const gave = this.oreGave(lines);
+    this.tip(gave ? `Вклад в буровую принят — из сумки ушло: ${gave}` : 'Вклад в буровую принят — спасибо!');
+    this.emit({ type: 'busy' }); return true;
+  }
+  private oreGave(lines?: [string, number][]): string {
+    if (!lines || !lines.length) return '';
+    const its = this.oreItems(), out: string[] = [];
+    for (const [uid, q] of lines) { const it = its.find((x) => x.uid === uid); this.oreGone.add(uid, this.now()); if (it) out.push(`${it.name || it.res} ${(Math.floor(q) / 100).toString().replace('.', ',')} шт.`); }
+    return out.join(', ');
+  }
+  /** Ore heaps that can go into a collection (priced by the buyer, not just given away). */
+  fundOre(max = 8): any[] {
+    const P = (this.model.st && this.model.st.bp) || {}, now = this.now();
+    return this.oreItems().filter((it) => +P[it.res] > 0 && !this.oreGone.has(it.uid, now)).slice(0, max);
+  }
+  /**
+   * Open another floor key (site open(x, k) after a ride / follow3): leave this one, forget its floor, enter the other
+   * from `start` (the hero is put into the lift hall by the game). Same requests as the site: leave, then enter.
+   */
+  async switchTo(key: string, start: Pt): Promise<boolean> {
+    if (this.closed) return false;
+    key = mineKey(key); if (key === this.c && this.entered) return true;
+    if (this.goT) { this.T.clearTimeout(this.goT); this.goT = 0; }
+    this.T.clearInterval(this.pollT); this.T.clearInterval(this.pingT); this.T.clearInterval(this.goneT);
+    if (this.entered) { try { void this.o.api('/api/mine/leave' + this.q(), {}); } catch { /* */ } }
+    this.entered = false; this.c = key; this.qq = []; this.sid = ''; this.model.reset();
+    return this.enter(start);
   }
   /** «Пока тебя не было» read: POST /api/mineSeen {c}. */
   seen(): void { void this.o.api('/api/mineSeen', { c: this.c }); }

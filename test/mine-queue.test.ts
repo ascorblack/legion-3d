@@ -8,15 +8,16 @@ const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 const LOGIN = 'player1';
 
 /**
- * The site's request, copied from mine.js (site build 28.10 14:50, queueRock + bwOf) — the reference our body must equal:
- *   const bwOf = (pt) => ({ k: 1, vh: document.hidden ? 1 : 0, ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
+ * The site's request, copied from mine.js (site build 30.10 16:07, queueRock + bwOf) — the reference our body must equal:
+ *   const bwOf = (pt, tr) => ({ ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}), tl: tele(tr === false) });
+ *   (29.10: k and vh are not sent any more — the server does not trust them; tl is the site's own bot telemetry, not sent by us)
  *   const cur = ((S.me && S.me.qq) || S.qq || []).filter((x) => x !== i);
  *   const qq = [...cur, i].slice(-2);
  *   const sp = centerOf(digSpot(S.myI) ?? cellOfPt(S.pos.x, S.pos.y));
  *   X.api('/api/mineDig', { i: S.myI, c: C, sid: S.sid, x: sp.x, y: sp.y, q: qq, ...bwOf(pt) })
  */
 function siteQueueBody(S: { myI: number; me: { qq?: number[] } | null; qq: number[]; sid: string; dug: number[]; hidden: boolean }, C: string, i: number, pt: Pt | null) {
-  const bwOf = (p: Pt | null) => ({ k: 1, vh: S.hidden ? 1 : 0, ...(p ? { pt: [Math.round(p.x), Math.round(p.y)] } : {}) });
+  const bwOf = (p: Pt | null) => ({ ...(p ? { pt: [Math.round(p.x), Math.round(p.y)] } : {}) }); void S.hidden;
   const cur = ((S.me && S.me.qq) || S.qq || []).filter((x) => x !== i);
   const qq = [...cur, i].slice(-2);
   const sp = centerOf(digSpot(S.dug, S.myI)!);
@@ -94,7 +95,7 @@ describe('stone queue (site fx.q, Shift+E)', () => {
     const a = front[0], spot = centerOf(digSpot(M.dug, a)!), pt = { x: cellXY(a).cx, y: cellXY(a).cy };
     await c.dig(a, spot, pt);
     // site clickRock → walkTo(sp) → { i, c: C, sid: S.sid, x: at.x, y: at.y, ...bwOf(pt) } with at = centerOf(sp)
-    expect(JSON.stringify(digs(calls).at(-1)!.b)).toBe(JSON.stringify({ i: a, c: 'home', sid: c.sid, x: spot.x, y: spot.y, k: 1, vh: 0, pt: [pt.x, pt.y] }));
+    expect(JSON.stringify(digs(calls).at(-1)!.b)).toBe(JSON.stringify({ i: a, c: 'home', sid: c.sid, x: spot.x, y: spot.y, pt: [pt.x, pt.y] }));
   });
 
   it('without fx.q or while not digging: no queue request (the caller digs as usual)', async () => {

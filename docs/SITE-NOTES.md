@@ -6,6 +6,17 @@ so the extension must treat every internal API as unstable and degrade gracefull
 ## Page
 - Per-channel SPA: `https://play.multidonate.ru/c/<channel>/`. `window.LG_BASE = "/c/<channel>"`.
   The page wraps `window.fetch` so that `fetch('/api/…')` is prefixed with `LG_BASE`.
+- **Anti-bot telemetry (mine.js `tele()` → `tlPi()`, sent with every «Копать»; 30.10).** Bit 1 of `pi`: `window.fetch` is neither native
+  (`Function.prototype.toString` ends with `[native code]`) nor the site's own wrapper — the `<head>` script publishes
+  `window.LG_FETCH = {w: wrapper, n: was the function under it native}` and the check is `window.fetch === LG_FETCH.w && LG_FETCH.n`.
+  Bit 2: `requestAnimationFrame` not native. Bit 4: `LGMine.open/onEvent`, `LGMineBiome.own()` replaced. The site says it only adds to the
+  streamer's bot score (no penalty), but an honest player must not look like a bot, so: **the extension never sits on `window.fetch`
+  in the classic site.** The fetch tee (bridge.ts `fetchTee`) is put on by main.ts when 3D boots, and taken out again — restoring
+  exactly the site's wrapper — on F8 / classic, on a failed boot, and while the site's own mine screen (`.mn`) is open. It is never
+  installed at document_start: the site's wrapper would capture it as «the function under it» and `LG_FETCH.n` would stay false for the
+  whole page load. The 3D mine uses our own client and never runs `tele()`. We do not touch `requestAnimationFrame` or `LGMine`.
+  `EventSource` is replaced by the bridge (the live feed has no other source without a second connection); the telemetry does not look at it.
+  Test: `test/fetch-telemetry.test.ts`, `e2e/fetch-tee.mjs`; refresh `test/fixtures/site-telemetry.js` when `tlPi` changes.
 - Strict CSP (`script-src 'self' 'nonce-…'`, `connect-src 'self'`). Extension content scripts are not
   subject to it; a MAIN-world content script declared in the manifest runs regardless.
 - Tabs (`<nav class="tabs">`, `button[data-tab]`): `quest` (Поход), `hero` (Персонаж), `city` (Город),

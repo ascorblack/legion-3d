@@ -10,6 +10,7 @@
  */
 import * as THREE from 'three';
 import type { Building } from '../contracts';
+import { signF } from './buildings';
 import { toX, toZ } from './coords';
 import { GEO, M } from './batch';
 import { type Ctx, box, rbox, cone, ball, signZ, shade, windowZ, gableRoof } from './kit';
@@ -324,7 +325,7 @@ export function mine(k: Ctx, b: Building, x0: number, x1: number): void {
   rbox(k, 'wood', P.woodL, cx - hw - 0.42, base + 0.42, zP + 0.32, 0.05, 0.88, 0.05, 0, 0.0, 0.24, 0.5);
   rbox(k, 'metal', '#9a9aa6', cx - hw - 0.32, base + 0.85, zP + 0.345, 0.46, 0.06, 0.08, 0, 0, 0.24 + 0.25, 0.5);
   // «ШАХТА» on the cap beam
-  signZ(k, b.title, cx, base + th + 0.005, zP + 0.1 + 0.13, 1.25);
+  signF(k, b.title, cx, base + th + 0.005, zP + 0.1 + 0.13, 1.25);
   // solids: the whole outcrop is a wall for jumping; the cart can be stood on
   (k.solids ||= []).push(cx - 0.44, cx + 0.44, cz - 0.55, cz + 0.55, cy + 0.56);
   (k.solids ||= []).push(x0 - 0.22, x1 + 0.6, zw, zP - 0.6, Infinity);
@@ -356,7 +357,7 @@ export function mineboard(k: Ctx, b: Building, x0: number, x1: number): void {
   k.b.add('metal', GEO.cyl12, M(cx, base + 0.98, z + 0.16, 0.08, 0.02, 0.08, Math.PI / 2, 0, 0), '#ffcf4a', 1);
   // little shingle roof and the title plaque under it
   gableRoof(k, P.roof, 'wood', P.wood, cx - w / 2 - 0.08, cx + w / 2 + 0.08, z - 0.16, z + 0.2, base + top + 0.42, 0.26, 0.08, true);
-  signZ(k, b.title, cx, base + top + 0.08, z + 0.098, Math.min(1.0, w + 0.1));
+  signF(k, b.title, cx, base + top + 0.08, z + 0.098, Math.min(1.0, w + 0.1));
   (k.solids ||= []).push(cx - w / 2, cx + w / 2, z - 0.1, z + 0.15, Infinity);
 }
 
@@ -398,7 +399,7 @@ export function storage(k: Ctx, b: Building, x0: number, x1: number): void {
   box(k, 'stone', shade(P.stone, 0.1), gx - gw / 2 - 0.2, gx + gw / 2 + 0.2, base, base + 0.06, zFront - 0.02, zFront + 0.42, 0.6);
   // windows with shutters either side, sign over the gate, lantern
   spans.forEach(([a, c], i) => (b.soon && i === 0) || windowZ(k, (a + c) / 2, base + 1.05, zFront, 0.5, 0.58, i === 0, { shutters: c - a >= 1.3 ? P.sign : undefined }));
-  signZ(k, b.title, gx, base + gh + 0.2, zFront + 0.012, 1.3);
+  signF(k, b.title, gx, base + gh + 0.2, zFront + 0.012, 1.3);
   const lx = gx + gw / 2 + 0.38, ly = base + 2.0, lz = zFront;
   box(k, 'metal', P.metal, lx - 0.02, lx + 0.02, ly + 0.08, ly + 0.12, lz, lz + 0.26);
   box(k, 'emit', '#d8964a', lx - 0.05, lx + 0.05, ly - 0.12, ly + 0.06, lz + 0.17, lz + 0.27);
@@ -418,7 +419,7 @@ export function storage(k: Ctx, b: Building, x0: number, x1: number): void {
     // the closed gate leaves (above the latch) — nothing stands in front of the gate, from any side
     scaffoldLow(k, hx0 + 0.2, Math.max(hx0 + 0.75, gx - gw / 2 - 0.32), zFront, base, 2.3);
     const bw = Math.min(1.0, gw - 0.3);
-    signZ(k, 'СКОРО', gx, base + 1.16, zFront + 0.03, bw, { bg: '#d9a066', fg: '#6a2a5a' });
+    signF(k, 'СКОРО', gx, base + 1.16, zFront + 0.03, bw, { bg: '#d9a066', fg: '#6a2a5a' });
     for (const s2 of [-1, 1]) box(k, 'metal', P.metal, gx + s2 * (bw / 2 - 0.06) - 0.018, gx + s2 * (bw / 2 - 0.06) + 0.018, base + 1.3, base + 1.336, zFront + 0.13, zFront + 0.145);
   }
   (k.solids ||= []).push(hx0 - 0.1, hx1 + 0.1, zw, zFront + 0.1, Infinity);
