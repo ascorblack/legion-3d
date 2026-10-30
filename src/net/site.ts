@@ -567,7 +567,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
 /* ------------------------------------------------------------------ overlay detection */
 /** Site dialogs that may cover the game. Our own UI (#l3d-*) and the town picker inside the hidden 2D view are excluded below. */
 const DIALOGS = '.su-layer, dialog[open], [role="dialog"], [aria-modal="true"]';
-const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view';
+const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view, .fr-back';   // .fr-back: the site's friends window (29.10) over the live 3D
 /** Really on screen: connected, not [hidden], rendered, not visibility:hidden (incl. inherited — e.g. our HIDE_CSS), has a box. */
 export function shown(e: Element | null): boolean {
   if (!e || !e.isConnected || (e as HTMLElement).hidden) return false;

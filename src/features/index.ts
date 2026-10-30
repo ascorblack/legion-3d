@@ -52,6 +52,7 @@ import mineStatus from './mine-status';
 import travel from './travel';
 import expeditionOnly from './expedition-only';
 import restyle from './restyle';
+import friends from './friends';
 
 export const FEATURES: (Feature | CoreFeature)[] = [
   settings, itemModels, menus, camera, crowd, labels, doors, controls, rooms, contentRooms, overlay, classic, quest, photo, debug, whatsnew, seasonal, sound,
@@ -74,6 +75,7 @@ export const FEATURES: (Feature | CoreFeature)[] = [
   expeditionOnly,
   restyle,
   startMode,
+  friends,
 ];
 
 /** Run every feature's setup in order. A failing feature is logged and skipped (the game still starts). */

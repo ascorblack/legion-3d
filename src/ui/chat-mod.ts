@@ -314,9 +314,10 @@ export class ModUi {
   dispose() { this.close(); this.host?.remove(); this.host = null; this.root = null; }
 
   /** «⋯» menu: a header (the nick), the items; a `confirm` item needs a second press (ban). */
-  menu(from: HTMLElement, title: string, items: UiItem[]) {
+  /** `kind` names the menu for screen readers: «Модерация» (the «⋯» of a line) or «Ник» (the nick menu of the mine tab). */
+  menu(from: HTMLElement, title: string, items: UiItem[], kind = 'Модерация') {
     if (this.justClosed(from)) return;
-    const pop = document.createElement('div'); pop.className = 'pop'; pop.setAttribute('role', 'menu'); pop.setAttribute('aria-label', `Модерация: ${title}`);
+    const pop = document.createElement('div'); pop.className = 'pop'; pop.setAttribute('role', 'menu'); pop.setAttribute('aria-label', `${kind}: ${title}`);
     pop.innerHTML = `<div class="hd">${esc(title)}</div>`;
     let mt: HTMLElement | null = null;
     for (const it of items) {

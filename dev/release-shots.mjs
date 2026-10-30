@@ -10,7 +10,10 @@ const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) =>
 const out = args.find((a) => !a.startsWith('--')) || '.local/relshots'; mkdirSync(out, { recursive: true });
 const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const SHOTS = opt.set === '052' ? [
+const SHOTS = opt.set === '053' ? [
+  ['mine', 'f=v3&dig=20&bots=0', 'mine3-tunnel', 10000, 'clean'],
+  ['mine', 'f=v3&bots=0&tp=1', 'mine3-hall', 10000, 'clean'],
+] : opt.set === '052' ? [
   ['game', 'town=village&bots=6', 'village', 12000, 'F2'],
   ['game', 'style=cherts&bots=6', 'cherts-quarter', 12000, 'F2'],
   ['game', 'town=village&style=cherts&bots=6', 'cherts-village', 12000, 'F2'],
@@ -33,7 +36,11 @@ for (const [page, q, name, ms, key] of SHOTS) {
   try {
     await p.goto('file://' + resolve(`dist-dev/${page}.html`) + `?${q}&nodbg=1&q=${Q}`);
     await p.waitForTimeout(ms);
-    if (key) { await p.keyboard.press(key); await p.waitForTimeout(600); }
+    if (key === 'clean') {   // close one-time cards, hide the dev overlay + the «Что нового» note
+      await p.keyboard.press('Escape'); await p.waitForTimeout(300); await p.keyboard.press('Escape');
+      await p.evaluate(() => { const d = document.getElementById('dbg'); if (d) d.style.display = 'none'; for (const b of document.querySelectorAll('button')) if (/Понятно/.test(b.textContent || '')) b.click(); });
+      await p.waitForTimeout(800);
+    } else if (key) { await p.keyboard.press(key); await p.waitForTimeout(600); }
     const f = join(out, name + '.png'); await p.screenshot({ path: f, timeout: 60000 });
     try { execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', f, '-q:v', '2', f.replace(/\.png$/, '.jpg')]); } catch { /* no ffmpeg */ }
     console.log(f);

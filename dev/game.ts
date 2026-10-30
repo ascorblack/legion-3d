@@ -13,7 +13,10 @@ import me from '../test/fixtures/me.json';
 import session from '../test/fixtures/city-session.json';
 import stock from '../test/fixtures/stock.json';
 import { FakeMine, makeBus } from '../src/rooms/mine/fake';
-import mineEnter from '../test/fixtures/mine-enter.json';
+import mineEnterV1 from '../test/fixtures/mine-enter.json';
+import mine3Enter from '../test/fixtures/mine3-enter.json';
+/** ?mine=v3: the mine is a big «Шахта 3.0» floor (sanitized live view). */
+const mineEnter = new URLSearchParams(location.search).get('mine') === 'v3' ? mine3Enter : mineEnterV1;
 import { FakeQuest } from '../src/quest/fake';
 import { npcPlaces, npcBlocks } from '../src/events/halloween/hwnpc';
 import { MineClient } from '../src/rooms/mine/net';

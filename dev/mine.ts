@@ -1,6 +1,7 @@
 /**
  * Mine dev page: the 3D mine room against an OFFLINE fake game (src/rooms/mine/fake.ts) started from a captured,
- * sanitized mine state (test/fixtures/mine-enter.json, ?f=fresh → mine-fresh.json: a new floor).
+ * sanitized mine state (test/fixtures/mine-enter.json, ?f=fresh → mine-fresh.json: a new floor, ?f=v3 → mine3-enter.json:
+ * a big «Шахта 3.0» floor with fog, the lift hall and the mini-map).
  * Digging, selling, the supplier and the helmet work against the fake only.
  *   ?cam=tp|fp  ?at=X,Z (room metres)  ?yaw=rad  ?pitch=rad  ?dark=1 (floor without helmet)  ?card=buy|lamp|quests
  *   ?q=0..3 quality  ?bots=0
@@ -16,11 +17,12 @@ import { createAvatarKit, appearanceFrom, RECOMMENDED_NEAR } from '../src/avatar
 import { EYE } from '../src/world/coords';
 import { createMineRoom } from '../src/rooms/mine';
 import { MineClient } from '../src/rooms/mine/net';
-import { digSpot, centerOf, cellXY, mx, mz } from '../src/rooms/mine/geo';
+
 import { FakeMine, makeBus, type FakeHero } from '../src/rooms/mine/fake';
 import meFx from '../test/fixtures/me.json';
 import enterFx from '../test/fixtures/mine-enter.json';
 import freshFx from '../test/fixtures/mine-fresh.json';
+import mine3Fx from '../test/fixtures/mine3-enter.json';
 
 const Q = new URLSearchParams(location.search);
 const host = document.getElementById('app') as HTMLElement;
@@ -38,7 +40,7 @@ const LOGIN = String(hero.login);
 hero.items = (hero.items || []).filter((it: any) => Q.get('dark') !== '1' || it.id !== 'miner_helmet');
 hero.items.push({ uid: 'ore_iron', id: 'ore_iron', name: 'Железная руда', slot: 'material', mat: 'ore', qty: true, q: 340, res: 'iron' },
   { uid: 'ore_coal', id: 'ore_coal', name: 'Уголь', slot: 'material', mat: 'ore', qty: true, q: 215, res: 'coal' });
-const enter = structuredClone((Q.get('f') === 'fresh' ? freshFx : enterFx) as any);
+const enter = structuredClone((Q.get('f') === 'fresh' ? freshFx : Q.get('f') === 'v3' ? mine3Fx : enterFx) as any);
 if (Q.get('dark') === '1') { enter.st.darkFrom = 1; enter.me.lamp = 0; }
 const bus = makeBus();
 const fake = new FakeMine({ login: LOGIN, enter, hero, bus, digSec: +(Q.get('dig') || 8), bots: Q.get('bots') !== '0' });
@@ -132,9 +134,9 @@ let freeCam: number[] | null = null;
   card(k: string) { const h = document.querySelector(`[data-a="${k}"]`) as HTMLElement | null; h?.click(); },
   /** Stand back from the k-th diggable stone (2 m behind its dig spot) and look at it — the «front» view. */
   goNear(k = 0, back = 2) {
-    const M = client.model, fr = (M.st?.front || []).filter((i) => digSpot(M.dug, i) != null);
+    const M = client.model, G = M.G, mx = G.mx, mz = G.mz, fr = (M.st?.front || []).filter((i) => G.digSpot(M.dug, i) != null);
     const i = fr[Math.min(k, fr.length - 1)]; if (i == null) return null;
-    const sp = centerOf(digSpot(M.dug, i)!), c = cellXY(i), sx = mx(c.cx), sz = mz(c.cy);
+    const sp = G.centerOf(G.digSpot(M.dug, i)!), c = G.cellXY(i), sx = mx(c.cx), sz = mz(c.cy);
     let x = mx(sp.x), z = mz(sp.y); const dx = x - sx, dz = z - sz, L = Math.hypot(dx, dz) || 1;
     if (room!.free(x + dx / L * back, z + dz / L * back)) { x += dx / L * back; z += dz / L * back; }
     player.teleport(x, z);
@@ -143,9 +145,9 @@ let freeCam: number[] | null = null;
   },
   /** Walk-free test: stand at the dig spot of the k-th diggable stone, face it and start digging. */
   digNear(k = 0, fp = false) {
-    const M = client.model, fr = (M.st?.front || []).filter((i) => digSpot(M.dug, i) != null);
+    const M = client.model, G = M.G, mx = G.mx, mz = G.mz, fr = (M.st?.front || []).filter((i) => G.digSpot(M.dug, i) != null);
     const i = fr[Math.min(k, fr.length - 1)]; if (i == null) return null;
-    const sp = centerOf(digSpot(M.dug, i)!), c = cellXY(i), x = mx(sp.x), z = mz(sp.y);
+    const sp = G.centerOf(G.digSpot(M.dug, i)!), c = G.cellXY(i), x = mx(sp.x), z = mz(sp.y);
     player.teleport(x, z);
     const yaw = Math.atan2(-(mx(c.cx) - x), -(mz(c.cy) - z));
     rig.yaw = yaw; rig.pitch = fp ? -0.35 : -0.3;

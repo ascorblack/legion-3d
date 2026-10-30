@@ -176,6 +176,39 @@ The site's mine must not run at the same time (one presence per tab): the room c
 - Every settings row is checked at registration (`rowProblem` in `src/ui/settings-ext.ts`: a seg default must be one of
   its options) — a wrong default logs `[l3d] setting row …`.
 
+### 7.2 «Шахта 3.0» — the big floor (site 29.10, flag `mine3`)
+The site marks a big non-linear floor with `st.fl.v3 = 1`: `w × h` cells of 128 px (32 × 18 on the home mine), a PAD of
+2 cells of solid rock round it, the **lift hall** `hallBox = [gx, gy, w, h]` (cells; dug from the start, type `lift`)
+with the lift cage, the supplier, the buyer and the board, `lift` (the cage cell), `sx/sy` (entry), `fog` (radius of
+sight), `shaft` (the lift shaft to the next floor, −1 until found), `veins` (`[id, res, cell, cells behind the fog]`),
+`halls` (`[id, 'lake'|'grotto'|'adit', cell]`). `fl.c` lists **only the cells the hero may see**:
+`[index, type, level, res, a, vein?, hall?]`; every other cell is fog. New view fields: `st.lift` (`dig` → `fund` →
+`up`), `st.deep` (deepest open floor), `st.drills` (drill rigs `[key, ?, cell, stage, level, …, res]`), `me.at` / `me.f`
+(the floor the hero is on / digs on). The site draws it with `/site/mine3.js` (`LGMine3`); geometry is
+`LGWorldLib.mine3(F)` in `/lib/world.js` (same code as the server).
+
+Ours:
+- `geo3.ts` — `MineGeom`: one interface for both floors; `GEO1` wraps `geo.ts`, `mine3Geo()` is a 1:1 port of
+  `LGWorldLib.mine3` (cellXY / cellAt / walkable = dug cells only / pathTo / digSpot / walkPt / FOOT / ZONE / spawn).
+  Room metres: `X = (x − hall centre) · K`, `Z = (y − hall centre) · K`. `standable` keeps the body 16 px off rock.
+  `test/mine3.test.ts` checks parity with a local copy of the site's `world.js` (skipped without it) and that our front
+  rule gives exactly the server's `st.front` of the captured view.
+- `state.ts` — `floorOf3` (= site `floorOf`: fog cells `t: 'fog'`, `vis[]`), `MineModel.G` (geometry of the view),
+  `cellLevel` (econ for both layouts), `liftChip` / `upText` for the lift, `me.f` rule of the own stone.
+- `cave3.ts` + `scene.ts` — rock of every cell next to a passage: front stones = the usual boulders (ore, gems, badges,
+  halo, econ sign), deeper visible rock = a pillar to the ceiling with ore streaks, fog = the same dark rock for every
+  hidden cell (no type, no ore — nothing the site hides is revealed). Static batch per floor (floor, ceiling, PAD ring,
+  stalactites, lift hall frame / planks / lanterns, hall objects through `buildEntrance` with the big floor's FOOT);
+  a second batch rebuilt with the layout (tunnel lanterns, lake / grotto / adit halls, drill rigs, the lift shaft, vein
+  sparks on the fog edge). Badges: the 16 front stones nearest to the player; bars (instanced, 2 calls) within 14 m;
+  other miners: the 12 nearest within 24 m (q2). Palettes: the 12 depth layers (`layers.ts`) as before.
+- `index.ts` — spawn in the lift hall (site `pos3`; `client.syncPos`: no go is sent for that), interactables only for
+  the front stones (re-synced with every view), `E` on the lift opens the lift card (stage, floors; riding and funding
+  stay on the site), buyer walk through the tunnels into the hall (`walk.ts walkPlan3`), the mini-map (HUD, bottom
+  right: dug / seen / fog, lift, you, veins, halls, drills, shaft — site `minimap`). `mineDig` carries `n` (site).
+- Dev page: `dist-dev/mine.html?f=v3` (fixture `test/fixtures/mine3-enter.json`, sanitized); `dist-dev/game.html?mine=v3`.
+  The offline fake lifts the fog round a dug stone with made-up rock (the real server decides).
+
 ## 8. Capturing a live state (read-only)
 ```bash
 L3D_COOKIES=cookies.txt CHROMIUM=/usr/bin/google-chrome node e2e/live.mjs --allow-mine --steps=.local/mine-capture.json

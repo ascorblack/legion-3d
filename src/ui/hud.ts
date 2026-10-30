@@ -21,7 +21,7 @@ export class Hud {
   private c: Ctx;
   private vit!: HTMLElement; private hpBar!: HTMLElement; private hpFill!: HTMLElement; private hpGhost!: HTMLElement; private hpT!: HTMLElement;
   private xpFill!: HTMLElement; private xpT!: HTMLElement; private lv!: HTMLElement; private nm!: HTMLElement; private cls!: HTMLElement;
-  private money!: HTMLElement; private soc!: HTMLElement; private online!: HTMLElement; private onlineN!: HTMLElement;
+  private money!: HTMLElement; private candy!: HTMLElement; private soc!: HTMLElement; private online!: HTMLElement; private onlineN!: HTMLElement;
   private comp!: HTMLElement; private strip!: HTMLElement; private marks: Mark[] = [];
   private cross!: HTMLElement; private prompt!: HTMLElement; private ghost!: HTMLElement; private perf!: HTMLElement; private hints!: HTMLElement; private clickp!: HTMLElement;
   private lastTarget = '\u0000'; private lastMoney: number | null = null; private lastLevel: number | null = null; private lastHp = -1;
@@ -63,12 +63,12 @@ export class Hud {
       <div class="vbox"><div class="vname"><b></b><span></span></div>
         <div class="bar hp"><i class="ghost"></i><i class="fill"></i><span class="t"></span></div>
         <div class="bar xp"><i class="fill"></i><span class="t"></span></div>
-        <div class="chips"><span class="chip money" title="Монеты"></span><span class="chip soc click" data-act="open" data-m="legion" title="Соц. рейтинг"></span></div></div>`);
+        <div class="chips"><span class="chip money" title="Монеты"></span><span class="chip candy" hidden title="Конфеты Хэллоуина — не занимают место в сумке; меняют у «Ступы сладостей»"></span><span class="chip soc click" data-act="open" data-m="legion" title="Соц. рейтинг"></span></div></div>`);
     e.appendChild(this.vit);
     const q = (s: string) => this.vit.querySelector(s) as HTMLElement;
     this.lv = q('.lv'); this.nm = q('.vname b'); this.cls = q('.vname span');
     this.hpBar = q('.bar.hp'); this.hpFill = q('.bar.hp .fill'); this.hpGhost = q('.bar.hp .ghost'); this.hpT = q('.bar.hp .t');
-    this.xpFill = q('.bar.xp .fill'); this.xpT = q('.bar.xp .t'); this.money = q('.chip.money'); this.soc = q('.chip.soc');
+    this.xpFill = q('.bar.xp .fill'); this.xpT = q('.bar.xp .t'); this.money = q('.chip.money'); this.candy = q('.chip.candy'); this.soc = q('.chip.soc');
 
     this.comp = h('div', 'compass', `<div class="rail"></div><div class="strip"></div><div class="needle"></div>`);
     this.strip = this.comp.querySelector('.strip') as HTMLElement;
@@ -127,6 +127,8 @@ export class Hud {
     this.xpT.textContent = xp.xneed == null ? 'максимум' : `${xp.xin} / ${xp.xneed}`;
     // money
     this.money.innerHTML = coinsHtml(H.money);
+    // 29.10: Halloween candies (site hero card «🍬 Конфеты», hero.hw.c) — shown only while the site sends them
+    { const hw = (H as { hw?: { c?: unknown } | null }).hw; const on = !!hw; this.candy.hidden = !on; if (on) this.candy.textContent = `🍬 ${Math.max(0, Math.floor(+(hw!.c as number) || 0))}`; }
     if (this.lastMoney != null && H.money !== this.lastMoney) this.floatMoney(H.money - this.lastMoney);
     this.lastMoney = H.money;
     // social

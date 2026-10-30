@@ -4,8 +4,33 @@
  * ore items, the buyer (mineBuy → result through the 'me' channel), helmet / pickaxe / ore bag purchases, quests,
  * bots walking and digging. NEVER used against the live site.
  */
-import type { MinePayload, MineView, MineMe, Bl } from './state';
-import { GW, N_CELLS, frontOf, SPEED, free, spawnPt } from './geo';
+import type { MinePayload, MineView, MineMe, Bl, CellTuple, CellTuple3 } from './state';
+import { N_CELLS, SPEED } from './geo';
+import { geomOf } from './geo3';
+
+/** [type, level, resource, a] of cell i in both layouts (classic: by position; «Шахта 3.0»: the listed index); null = fog. */
+export function cellTuple(st: MineView, i: number): CellTuple | null {
+  const fl = st.fl; if (!fl) return null;
+  if (fl.v3) { const c = (fl.c as CellTuple3[]).find((x) => x[0] === i); return c ? [c[1], c[2], c[3], c[4]] : null; }
+  return (fl.c as CellTuple[])[i] || null;
+}
+/** Cell types by index (fog for the cells a big floor does not list). */
+function typesOf(st: MineView): string[] {
+  const G = geomOf(st), out: string[] = new Array(G.N).fill('fog');
+  for (let i = 0; i < G.N; i++) { const c = cellTuple(st, i); if (c) out[i] = c[0]; }
+  return out;
+}
+/** Big floor (fake only): the fog lifts round a dug cell — made-up rock for the newly seen cells (the real server decides). */
+function reveal3(st: MineView, i: number): void {
+  const fl = st.fl!, G = geomOf(st), R = fl.fog || 2, seen = new Set((fl.c as CellTuple3[]).map((c) => c[0])), gx = i % G.w, gy = Math.floor(i / G.w);
+  for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+    const X = gx + dx, Y = gy + dy; if (X < 0 || Y < 0 || X >= G.w || Y >= G.h) continue;
+    const j = Y * G.w + X; if (seen.has(j)) continue;
+    const h = (j * 2654435761 + st.seed) >>> 0, k = h % 100, lv = st.n + (h >>> 8) % 3;
+    const t: CellTuple3 = k < 8 ? [j, 'wall', 0, '', 0] : k < 22 ? [j, 'ore', lv, ['coal', 'iron', 'silver'][(h >>> 4) % 3], 2] : k < 30 ? [j, 'hard', lv + 1, 'limestone', 2] : [j, 'rock', lv, 'limestone', 1];
+    (fl.c as CellTuple3[]).push(t);
+  }
+}
 
 export interface FakeBus { on(type: string, fn: (d: any) => void): () => void; emit(type: string, d: any): void }
 export function makeBus(): FakeBus {
@@ -62,7 +87,7 @@ export function applyEconDemo(st: MineView, now = Date.now(), initial = true): v
   st.at = now;
   const bl = (st.bl = st.bl || {}), dg = (st.dg = st.dg || {});
   for (const i of st.front || []) {
-    const c = st.fl?.c[i]; if (!c || !(c[1] > 0)) continue;
+    const c = cellTuple(st, i); if (!c || !(c[1] > 0)) continue;
     const b = bl[i];
     if (b) { if (initial) b[0] = Math.max(b[0], b[1] * 0.35); continue; }
     const h = (i * 2654435761) >>> 0, n = 3 + (h % 13), min = 15 + ((h >>> 8) % 41), w = 0.3 * c[1] * c[1];
@@ -86,7 +111,8 @@ export class FakeMine {
     const demo = o.demo ?? (typeof location !== 'undefined' ? demoFromQuery(location.search) : {});
     applyDemo(this.me, demo);
     o.hero.mn = { ...(o.hero.mn || {}), [o.enter.c || 'home']: this.me };
-    this.st.front = frontOf(this.dugA(), this.st.fl!.c.map((c) => c[0]));
+    // the classic floor: the site's front rule; a big floor keeps the captured server front (it knows the fog)
+    if (!this.st.fl!.v3) this.st.front = geomOf(this.st).frontOf(this.dugA(), typesOf(this.st));
     if (demo.econ) { this.econ = true; applyEconDemo(this.st); }
     if (demo.chatmod) this.chatMod = { role: demo.chatmod, mods: ['miner_mod'], bans: [{ l: 'miner_spam', until: Date.now() + 25 * 60000, by: o.login }] };
     if (demo.hist && !(this.st.hist && this.st.hist.length)) this.st.hist = [{ floor: 31, players: 520, top: (this.st.top || []).slice(0, 5).map(([l, u]) => ({ l, u: Math.round(u * 1.2) })) }];
@@ -98,7 +124,13 @@ export class FakeMine {
   private dugA(): number[] { return this.st.dug.split('').map((c) => (c === '1' ? 1 : 0)); }
   private view(withFl = false): MineView { const v = { ...this.st }; if (!withFl) delete v.fl; return JSON.parse(JSON.stringify(v)); }
   private rebase(): void { const now = Date.now(); for (const x of Object.values(this.st.bl || {})) x[0] = Math.max(0, x[0] - x[2] * (now - this.st.at) / 60000); this.st.at = now; }
-  private push(): void { this.rebase(); this.st.v++; this.o.bus.emit('sse:mine', { c: this.o.enter.c || 'home', st: this.view(false) }); }
+  /** Big floor: the layout grows when the fog lifts — a view carries it then (the client keeps the last one otherwise). */
+  private flN = -1;
+  private push(): void {
+    this.rebase(); this.st.v++;
+    const n = this.st.fl ? this.st.fl.c.length : 0, withFl = !!(this.st.fl && this.st.fl.v3 && n !== this.flN); this.flN = n;
+    this.o.bus.emit('sse:mine', { c: this.o.enter.c || 'home', st: this.view(withFl) });
+  }
   private heroSnap(results?: any[]): void { this.o.bus.emit('sse:me', { hero: this.o.hero, results: results || [] }); }
 
   async api(p: string, b?: any): Promise<any> {
@@ -152,7 +184,8 @@ export class FakeMine {
         // work w is done in digSec by one digger: rate (per minute) = w / (digSec / 60); others add to the rate
         const sec = this.o.digSec ?? 8, w = sec * 10, old = bl[i];
         const leftNow = old ? Math.max(1, old[0]) : w;
-        bl[i] = (old ? [leftNow, old[1], old[2] * (1 + 1 / Math.max(1, old[3])), old[3] + 1] : [w, w, w / (sec / 60), 1]) as Bl;
+        // a captured stone nobody digs has rate 0 (big floor views): it starts over at the demo pace
+        bl[i] = (old && old[2] > 0 ? [leftNow, old[1], old[2] * (1 + 1 / Math.max(1, old[3])), old[3] + 1] : [w, w, w / (sec / 60), (old ? old[3] : 0) + 1]) as Bl;
         this.me.i = i; this.push(); return { ok: true };
       }
       case '/api/mineStop': this.unDig(L); this.me.i = -1; this.me.qq = []; this.push(); return { ok: true };
@@ -200,8 +233,9 @@ export class FakeMine {
     for (const [k, b] of Object.entries(this.st.bl || {})) {
       const left = b[0] - b[2] * (now - this.st.at) / 60000;
       if (left > 0) continue;
-      const i = +k, cell = this.st.fl!.c[i], ls = (this.st.dg || {})[k] || [];
+      const i = +k, cell = cellTuple(this.st, i) || ['rock', 1, 'stone', 1], ls = (this.st.dg || {})[k] || [];
       const d = this.st.dug.split(''); d[i] = '1'; this.st.dug = d.join('');
+      if (this.st.fl!.v3) reveal3(this.st, i);
       delete this.st.bl![k]; delete this.st.dg![k];
       const r = cell[2] || 'stone', got: Record<string, number> = {};
       for (const l of ls) got[l] = cell[0] === 'ore' || cell[0] === 'rare' ? 120 + Math.floor(Math.random() * 150) : 30 + Math.floor(Math.random() * 40);
@@ -218,7 +252,7 @@ export class FakeMine {
       ch = true;
     }
     if (ch) {
-      this.st.front = frontOf(this.dugA(), this.st.fl!.c.map((c) => c[0])); if (this.econ) { this.rebase(); applyEconDemo(this.st, this.st.at, false); }
+      this.st.front = geomOf(this.st).frontOf(this.dugA(), typesOf(this.st)); if (this.econ) { this.rebase(); applyEconDemo(this.st, this.st.at, false); }
       // the game takes the next queued stone by itself (site: «герой возьмёт их сам»)
       if (this.nextQueued) { this.nextQueued = false; this.takeQueued(); }
       this.push();
@@ -226,13 +260,15 @@ export class FakeMine {
   }
   private presenceA() { return this.bots.map((b) => ({ l: b.l, n: b.l, lv: 4, lk: { color: '#b9a2ff' }, g: { h: 'miner' }, x: b.x, y: b.y, tx: b.tx, ty: b.ty, dt: 0 })); }
   private startBots(): void {
-    for (let k = 0; k < 5; k++) { const p = spawnPt('bot' + k); this.bots.push({ l: 'bot' + (k + 1), x: p.x, y: p.y, tx: p.x, ty: p.y }); }
+    const G = geomOf(this.st);
+    for (let k = 0; k < 5; k++) { const p = G.spawn('bot' + k); this.bots.push({ l: 'bot' + (k + 1), x: p.x, y: p.y, tx: p.x, ty: p.y }); }
     this.timers.push(setInterval(() => {
       const b = this.bots[Math.floor(Math.random() * this.bots.length)];
       const dug = this.dugA(); const cells = dug.map((d, i) => (d ? i : -1)).filter((i) => i >= 0);
       let t = { x: 0, y: 0 };
-      if (Math.random() < 0.5 && cells.length) { const i = cells[Math.floor(Math.random() * cells.length)]; t = { x: 64 + (i % GW) * 128 + 64, y: 420 + Math.floor(i / GW) * 128 + 98 }; }
-      else t = free(100 + Math.random() * 820, 2000 + Math.random() * 400);
+      if (Math.random() < 0.5 && cells.length) { const i = cells[Math.floor(Math.random() * cells.length)], c = G.cellXY(i); t = { x: c.cx, y: c.cy + 34 }; }
+      else if (G.v3) { const [hx, hy, hw, hh] = G.hall; t = G.free(hx + Math.random() * hw, hy + Math.random() * hh); }
+      else t = G.free(100 + Math.random() * 820, 2000 + Math.random() * 400);
       const p = { x: b.tx, y: b.ty }; b.x = p.x; b.y = p.y; b.tx = t.x; b.ty = t.y;
       this.o.bus.emit('sse:mine', { c: this.o.enter.c || 'home', m: [[b.l, b.x, b.y, b.tx, b.ty, 0]], n: this.bots.length });
     }, 1500));

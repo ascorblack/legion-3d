@@ -623,4 +623,27 @@ html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-sh:hover, html.l3d-on.l3d-chat-dock
 html.l3d-on .cy-chat .l3d-mine-sh[hidden], html.l3d-on .cy-chat:not(.l3d-mine-on) .l3d-mine-sh { display: none !important; }
 html.l3d-on.l3d-chat-dock .cy-chat.l3d-mine-on .cy-chat-h .cy-chat-sh { display: none !important; }
 html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-f input:disabled, html.l3d-on.l3d-chat-dock .cy-chat .l3d-mine-f button:disabled { opacity: .5; cursor: not-allowed; }
+/* «Личные» (site 29.10, window.LGDm): the site draws its .dm inside .cy-chat-dmx; here only our palette. The mine tab (ours) hides it. */
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-mine-on .cy-chat-dmx { display: none !important; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm { font: 600 13.5px/1.34 'Nunito', var(--tx, sans-serif); color: #f7eadf; text-shadow: 0 1px 2px #000a; gap: 5px; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-tab { background: rgba(29,22,32,.8); box-shadow: 0 0 0 1px #ffcf6a47; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-tab.on { background: #ffcf6a26; box-shadow: inset 0 0 0 1.5px #ffcf6a; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-tab button { min-height: 26px; font: 800 11.5px/1 'Nunito', var(--tx, sans-serif); }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-un, html.l3d-on.l3d-chat-dock .cy-chat .dm-fn { background: #ffcf6a; color: #2a1d18; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-who { color: #f7eadf; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-acts button, html.l3d-on.l3d-chat-dock .cy-chat .dm-rep button { border-color: #ffcf6a47; color: #bfaab7; font-weight: 700; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-acts button:hover, html.l3d-on.l3d-chat-dock .cy-chat .dm-rep button:hover { background: #ffcf6a22; color: #f7eadf; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-l { max-height: min(200px, 28vh); }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-l li { padding: 2px 0; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-l .dm-0 { color: #bfaab7; font-style: italic; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-old button { color: #ffcf6a; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-f input, html.l3d-on.l3d-chat-dock .cy-chat .dm-rep input { min-height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: rgba(29,22,32,.94); box-shadow: 0 0 0 1px #ffcf6a47; color: #f7eadf; font: 600 13px/1 'Nunito', var(--tx, sans-serif); }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-f input:focus, html.l3d-on.l3d-chat-dock .cy-chat .dm-rep input:focus { outline: 0; box-shadow: 0 0 0 2px #ffcf6a; }
+html.l3d-on.l3d-chat-dock .cy-chat .dm-f button { width: 34px; height: 34px; border-radius: 999px; background: #ffcf6a; color: #2a1d18; }
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .dm-h, html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .dm-f { display: none; }
+html.l3d-on.l3d-chat-dock .cy-chat.l3d-idle:not(:hover):not(:focus-within) .dm-l { max-height: 112px; overflow: hidden; -webkit-mask: linear-gradient(transparent, #000 22px); mask: linear-gradient(transparent, #000 22px); }
+/* the site's small DM window (bottom-left, when LGDm has no chat to live in): above our canvas and UI layer, hidden with the HUD / over menus */
+html.l3d-on .dm-float { z-index: 165; font-family: 'Nunito', var(--tx, sans-serif); box-shadow: 0 0 0 1.5px #ffcf6a47, 0 12px 30px #0008; }
+html.l3d-on .dm-float .dm-f input { background: rgba(29,22,32,.94); }
+html.l3d-on.l3d-dm-off .dm-float, html.l3d-on:has(#l3d-ui[hidden]) .dm-float { display: none !important; }
 `;

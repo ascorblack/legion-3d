@@ -3,7 +3,7 @@
   "name": "Legion 3D — город от первого лица",
   "short_name": "Legion 3D",
   "homepage_url": "https://github.com/ascorblack/legion-3d",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Неофициальное расширение: превращает сайт игры «Легион» (play.multidonate.ru) в 3D-игру от первого и третьего лица.",
   "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
   "permissions": ["storage"],

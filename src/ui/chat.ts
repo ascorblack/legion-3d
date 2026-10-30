@@ -18,6 +18,7 @@ import { esc } from './data';
 import { SITE_CHAT_CSS } from './styles';
 import { ModUi, Moderator, canMod, menuItems, roleIco, type ModApi, type ModLine, type UiItem, type ModOp } from './chat-mod';
 import type { ModalInput } from '../core/modal';
+import { DmBridge, dmApi, friendsApi, nickMenuItems } from './dm';
 
 /* ================================================================ pure logic (site-chat.js parity, tested) */
 
@@ -283,6 +284,8 @@ export class Chat {
   private dGear: HTMLButtonElement | null = null;          // dock: our ⚙ for the mine chat (the site's ⚙ is the City's)
   // moderation (src/ui/chat-mod.ts): one popup (menu / window); the City chat's role, mute and local changes (fallback panel)
   private modUi: ModUi;
+  private dm: DmBridge;                                   // site DMs (LGDm): toast, small window, «Написать»
+  private dmOff = false;
   private city: Moderator;
   private cityGone = new Set<string>();
   private cityRole = new Map<string, string | undefined>();
@@ -351,6 +354,12 @@ export class Chat {
     this.input.addEventListener('keypress', (e) => e.stopPropagation());
     // moderation: the popup (menu / ⚙ window) and the City chat's moderator (fallback panel; docked, the site's own chat moderates)
     this.modUi = new ModUi(() => this.c.host.input as unknown as ModalInput);
+    this.dm = new DmBridge({
+      toast: (t) => this.c.toast(t),
+      floatFocus: (on) => this.gameplayFor(on),
+      show: () => { if (this.mine?.selected) { this.mine.deselect(); this.dockMineView(); } },   // «Написать» in the mine tab → «Личные» is seen
+      me: () => this.me(),
+    });
     this.modUi.onChange = (open) => {
       if (open || !this.focused) return;
       setTimeout(() => { const a = this.c.shadow.activeElement; if (this.focused && !this.modUi.open && !(a && this.el.contains(a))) this.onFocus(false); }, 0);
@@ -460,16 +469,19 @@ export class Chat {
   dispose() {
     for (const f of this.offs.splice(0)) f();
     this.modUi.dispose();
+    this.dm.dispose();
+    DOC?.documentElement.classList.remove('l3d-dm-off');
     this.undock();
   }
 
   /** The site's chat is docked over the game (instead of our panel). */
   get docked() { return !!this.box; }
-  get typing() { return (this.box ? this.dockFocus : this.focused) || this.modUi.open; }
+  get typing() { return (this.box ? this.dockFocus : this.focused) || this.dm.floatFocused || this.modUi.open; }
 
   focus(prefill?: string) {
     try { document.exitPointerLock?.(); } catch { /* ignore */ }
     if (this.box) { this.dockFocusIn(prefill); return; }
+    if (!this.flags().on && this.dm.focusFloat()) return;   // no chat: the small DM window of the site
     if (this.tab === 'ev' && !this.mineSel) this.setTab('g');
     if (prefill != null && !this.input.value) this.input.value = prefill;
     if (this.input.disabled) this.tabsEl.querySelector<HTMLElement>(`[data-t="${this.tab}"]`)?.focus();
@@ -702,7 +714,7 @@ export class Chat {
         (document.activeElement as HTMLElement | null)?.blur?.();
         return;
       }
-      if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing && t.matches?.('.cy-chat-f input')) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing && t.matches?.('.cy-chat-f input, .cy-chat-dmx .dm-f input')) {
         const inp = t as HTMLInputElement;
         if (!inp.value.trim()) { e.preventDefault(); e.stopPropagation(); inp.blur(); return; }
         this.watchSend(inp);   // the site sends; leave the field once it is cleared (sent / command done)
@@ -778,8 +790,10 @@ export class Chat {
     const b = this.box!;
     if (!b.classList.contains('open')) b.querySelector<HTMLButtonElement>('.cy-chat-t')?.click();   // the site opens and focuses its field
     const mineSel = !!this.mine && this.mine.selected && !!this.dForm && this.dForm.isConnected;
-    const inp = mineSel ? this.dInput : b.querySelector<HTMLInputElement>('.cy-chat-f:not(.l3d-mine-f) input');
-    const form = mineSel ? this.dForm : b.querySelector<HTMLElement>('.cy-chat-f:not(.l3d-mine-f)');
+    // «Личные» of the site (LGDm): its own field in .cy-chat-dmx (the site's city field is hidden there)
+    const dmf = !mineSel ? b.querySelector<HTMLElement>('.cy-chat-dmx:not([hidden]) .dm-f') : null;
+    const inp = mineSel ? this.dInput : dmf ? dmf.querySelector<HTMLInputElement>('input') : b.querySelector<HTMLInputElement>('.cy-chat-f:not(.l3d-mine-f) input');
+    const form = mineSel ? this.dForm : dmf || b.querySelector<HTMLElement>('.cy-chat-f:not(.l3d-mine-f)');
     if (inp && !inp.disabled && form && !form.hidden) {
       if (prefill != null && !inp.value) inp.value = prefill;
       try { inp.focus({ preventScroll: true }); } catch { inp.focus(); }
@@ -924,6 +938,29 @@ export class Chat {
           try { inp.focus({ preventScroll: true }); inp.setSelectionRange(inp.value.length, inp.value.length); } catch { /* */ }
         }
       });
+      // site 24.10 / 29.10: right button (menu key, long press) on a nick = the nick menu: Ответить · Написать · Пожаловаться · friends
+      const nickMenu = (t: HTMLElement, x: number, y: number): boolean => {
+        const n = t.closest<HTMLElement>('b[data-nick]'); if (!n) return false;
+        const nk = n.dataset.nick || '', name = (n.textContent || '').trim();
+        const items = nickMenuItems(nk, name, {
+          me: this.mine?.src.me() || this.me(), dm: this.flags().dm, dmApi: dmApi(), friends: friendsApi(),
+          reply: (k) => { if (inp.disabled) return; inp.value = `@${k} ${inp.value.replace(/^@[\w]+\s*/, '')}`; try { inp.focus({ preventScroll: true }); inp.setSelectionRange(inp.value.length, inp.value.length); } catch { /* */ } },
+          ask: (q, d) => window.prompt(q, d),
+        });
+        if (!items.length) return false;
+        this.modUi.menu(n, name || nk, items, 'Ник');
+        void x; void y;
+        return true;
+      };
+      ol.addEventListener('contextmenu', (e) => { if (nickMenu(e.target as HTMLElement, e.clientX, e.clientY)) e.preventDefault(); });
+      let lp = 0;
+      ol.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch') return;
+        const t = e.target as HTMLElement; clearTimeout(lp);
+        lp = window.setTimeout(() => { lp = -1; nickMenu(t, e.clientX, e.clientY); }, 500);
+      });
+      for (const ev of ['pointerup', 'pointercancel', 'pointermove'] as const) ol.addEventListener(ev, () => { if (lp > 0) clearTimeout(lp); });
+      ol.addEventListener('click', (e) => { if (lp === -1) { lp = 0; e.stopPropagation(); e.preventDefault(); } }, true);
       const gear = h('button', 'l3d-mine-sh', '⚙︎'); gear.type = 'button'; gear.hidden = true;
       gear.setAttribute('aria-label', 'Модерация чата шахты'); gear.title = 'Модерация чата шахты';
       gear.addEventListener('click', (e) => { e.stopPropagation(); if (this.box) this.openPanel(gear, this.box.querySelector<HTMLElement>('.cy-chat-b') || this.box, true); });
@@ -988,16 +1025,24 @@ export class Chat {
 
   update(dt: number) {
     // hide the docked chat over our menus and with the HUD off (cheap: two flags per frame)
+    const hidden = !!this.c.opened() || this.c.ui.classList.contains('nohud');
     if (this.box) {
-      const off = !!this.c.opened() || this.c.ui.classList.contains('nohud');
+      const off = hidden;
       if (off !== this.off) {
         this.off = off; DOC!.documentElement.classList.toggle('l3d-chat-off', off);
         if (off && this.dockFocus) (document.activeElement as HTMLElement | null)?.blur?.();
       }
     }
+    // the small DM window of the site (outside the chat) hides with them too; coming back, LGDm may dock into the chat again
+    if (hidden !== this.dmOff) {
+      this.dmOff = hidden; DOC?.documentElement.classList.toggle('l3d-dm-off', hidden);
+      if (hidden && this.dm.floatFocused) (document.activeElement as HTMLElement | null)?.blur?.();
+      if (!hidden) this.dm.place();
+    }
     this.scanT += dt;
     if (this.scanT > 0.5) {
       this.scanT = 0;
+      this.dm.scan();
       // the site rebuilds its City (re-enter, town change) → a new chat element; classic mode → back to our panel
       if (this.box && (!this.box.isConnected || this.box.hidden || !DOC!.documentElement.classList.contains('l3d-on'))) this.undock();
       if (!this.box) { const b = this.findBox(); if (b) this.dock(b); }

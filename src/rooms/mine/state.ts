@@ -3,13 +3,29 @@
  * (mine.js take0 / presence / gotOf), as a pure class without timers, network or DOM. `now` is always a parameter
  * so tests are deterministic. The network client (net.ts) owns one MineModel.
  */
-import { GW, GH, N_CELLS, SPEED, digSpot, centerOf, cellXY, walkPt, type Pt } from './geo';
+import { GH, N_CELLS, SPEED, type Pt } from './geo';
+import { GEO1, OPEN3, geomOf, type MineGeom } from './geo3';
 
 /* ============================================================ payload types (see docs/MINE.md) */
 
 /** Cell tuple of the floor layout: [type, level, resource, a]. */
 export type CellTuple = [string, number, string, number];
-export interface FloorLayout { exit: number; entry: number; special: string | null; c: CellTuple[] }
+/** «Шахта 3.0» (st.fl.v3): only the cells the hero may see, [index, type, level, resource, a, vein?, hall?]. */
+export type CellTuple3 = [number, string, number, string, number, number?, number?];
+/** Vein of a big floor: [id, resource, cell (−1 not seen yet), cells behind the fog edge (sparks)]. */
+export type Vein3 = [number, string, number, number[]?];
+/** Special hall of a big floor: [id, kind 'lake' | 'grotto' | 'adit', cell]. */
+export type Hall3 = [number, string, number, ...unknown[]];
+export interface FloorLayout {
+  exit?: number; entry?: number; special?: string | null; c: CellTuple[] | CellTuple3[];
+  /** 29.10 «Шахта 3.0»: a big non-linear floor of w × h cells (site mine3.js / LGWorldLib.mine3). */
+  v3?: number; w?: number; h?: number; sx?: number; sy?: number; lift?: number; hallBox?: number[]; fog?: number; shaft?: number;
+  veins?: Vein3[]; halls?: Hall3[];
+}
+/** Lift of a big floor (st.lift): stage dig (find the lift shaft) → fund (collect coins) → up (upgrade timer). */
+export interface Lift3 { st?: string; n?: number; c?: number; need?: number; at?: number; ms?: number; left?: number; by?: unknown[] }
+/** Drill rig of a big floor (st.drills): [key, ?, cell, stage 'site' | 'build' | 'work' | 'dry', level, …, resource (11)]. */
+export type Drill3 = [string, unknown, number, string, number, ...unknown[]];
 /** [left work, total work, rate per minute, diggers] of a stone being dug. */
 export type Bl = [number, number, number, number];
 /** Loot of a dug stone: [cell, floor, resource, pieces by login, shards by login, loot by login]. */
@@ -21,6 +37,8 @@ export interface MineView {
   log?: { t: string; at: number }[]; top?: [string, number][]; fl?: FloorLayout;
   lampFrom?: number; darkFrom?: number; lampPrice?: number; bp?: Record<string, number>; hist?: unknown[];
   working?: number; dl?: Dl[]; town?: string;
+  /** «Шахта 3.0»: lift stage, the deepest open floor, drill rigs. */
+  lift?: Lift3; deep?: number; drills?: Drill3[];
 }
 export interface Quest { id: string; t: string; p: number; g: number; c: number; done?: number; cl?: number; h?: string }
 /** Shared weekly mine quest (site 28.10, me.q.c): common progress p / g, own contribution me vs threshold min (ok = enough), n participants. */
@@ -37,6 +55,8 @@ export interface MineMe {
   fx?: Record<string, number>; qq?: number[];
   pkx?: { lv: number; ob: { cap: number; used: number } | 0; obP: number; obL: number; obC: number; t: PickStep[] };
   news?: MineNews | null;
+  /** «Шахта 3.0»: the floor the hero is on (at) / digs on (f). */
+  at?: number; f?: number;
 }
 export interface LookRec { n?: string; lv?: number; lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number; pk?: number }
 export interface PresenceA { l: string; n?: string; lv?: number; lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number; x: number; y: number; tx: number; ty: number; dt?: number }
@@ -54,13 +74,45 @@ export interface ChatLine { id: string; s?: number; l: string; n: string; t: str
 
 /* ============================================================ derived floor */
 
-export interface Cell { i: number; t: string; lv: number; r: string | null; a: number; k: 0 | 1 }
-export interface Floor { n: number; biome: string; danger: number; gem: string | null; special: string | null; exit: number; entry: number; cells: Cell[] }
+/** vein / hall: «Шахта 3.0» ids of the vein and the special hall the cell belongs to. */
+export interface Cell { i: number; t: string; lv: number; r: string | null; a: number; k: 0 | 1; vein?: number; hall?: number }
+export interface Floor {
+  n: number; biome: string; danger: number; gem: string | null; special: string | null; exit: number; entry: number; cells: Cell[];
+  /** «Шахта 3.0»: the big floor. vis[i] = 1 — the site shows cell i; every other cell is fog (t 'fog', nothing known). */
+  v3?: 1; w?: number; h?: number; vis?: Uint8Array; lift?: number; hallBox?: number[]; fog?: number; shaft?: number;
+  veins?: Vein3[]; halls?: Hall3[];
+  /** cell → drill rig { key, stage, level, resource }. */
+  drills?: Map<number, { k: string; st: string; lv: number; r: string }>;
+}
+
+/** A big floor (site mine3.js floorOf): cells only where the view lists them (the site's own visibility), the rest fog. */
+function floorOf3(st: MineView): Floor {
+  const fl = st.fl!, w = Math.max(1, +fl.w! || 1), h = Math.max(1, +fl.h! || 1), N = w * h, cells: Cell[] = new Array(N), vis = new Uint8Array(N);
+  for (let i = 0; i < N; i++) cells[i] = { i, t: 'fog', lv: 0, r: null, a: 0, k: 0 };
+  for (const c of fl.c as CellTuple3[]) {
+    const [i, t, lv, r, a, vein, hall] = c; if (!(i >= 0 && i < N)) continue;
+    cells[i] = { i, t, lv, r: r || null, a, k: OPEN3.has(t) || t === 'wall' ? 0 : 1, ...(vein != null && vein >= 0 ? { vein } : {}), ...(hall != null && hall >= 0 ? { hall } : {}) };
+    vis[i] = 1;
+  }
+  const drills = new Map<number, { k: string; st: string; lv: number; r: string }>();
+  for (const d of st.drills || []) if (Array.isArray(d)) drills.set(+d[2], { k: String(d[0]), st: String(d[3] || ''), lv: +d[4] || 0, r: String(d[11] || '') });
+  return {
+    n: st.n, biome: st.biome || 'mount', danger: st.danger || 1, gem: st.gem || null, special: null, exit: -1, entry: fl.lift ?? -1, cells,
+    v3: 1, w, h, vis, lift: fl.lift, hallBox: fl.hallBox, fog: fl.fog || 2, shaft: fl.shaft != null ? fl.shaft : -1, veins: fl.veins || [], halls: fl.halls || [], drills,
+  };
+}
 
 export function floorOf(st: MineView): Floor | null {
   if (!st || !st.fl) return null;
-  const cells = st.fl.c.map(([t, lv, r, a], i): Cell => ({ i, t, lv, r: r || null, a, k: t === 'entry' || t === 'wall' || t === 'void' ? 0 : 1 }));
-  return { n: st.n, biome: st.biome || 'mount', danger: st.danger || 1, gem: st.gem || null, special: st.fl.special, exit: st.fl.exit, entry: st.fl.entry, cells };
+  if (st.fl.v3) return floorOf3(st);
+  const cells = (st.fl.c as CellTuple[]).map(([t, lv, r, a], i): Cell => ({ i, t, lv, r: r || null, a, k: t === 'entry' || t === 'wall' || t === 'void' ? 0 : 1 }));
+  return { n: st.n, biome: st.biome || 'mount', danger: st.danger || 1, gem: st.gem || null, special: st.fl.special ?? null, exit: st.fl.exit ?? -1, entry: st.fl.entry ?? -1, cells };
+}
+/** Level of cell i in a view (both layouts: the classic one by position, the big floor by the listed index); 0 unknown. */
+export function cellLevel(st: MineView, i: number): number {
+  const fl = st.fl; if (!fl) return 0;
+  if (fl.v3) { for (const c of fl.c as CellTuple3[]) if (c[0] === i) return +c[2] || 0; return 0; }
+  const c = (fl.c as CellTuple[])[i]; return c ? +c[1] || 0 : 0;
 }
 export const dugArr = (st: MineView | null): number[] => (st && st.dug ? st.dug.split('').map((c) => (c === '1' ? 1 : 0)) : []);
 
@@ -217,6 +269,8 @@ export interface TakeResult { changed: boolean; newFloor: boolean; bursts: Burst
 export class MineModel {
   st: MineView | null = null;
   F: Floor | null = null;
+  /** Geometry of the current floor: the classic 7 × 12 one or a big «Шахта 3.0» floor (geo3.ts). */
+  G: MineGeom = GEO1;
   dug: number[] = [];
   me: MineMe | null = null;
   myI = -1;
@@ -248,7 +302,7 @@ export class MineModel {
     }
     const newFloor = !this.st || this.st.n !== st.n || this.st.seed !== st.seed;
     const prevDug = this.dug, prevDg = (this.st && this.st.dg) || {}, prevMy = this.myI;
-    this.st = st; this.F = floorOf(st); this.dug = dugArr(st); this.stAt = now;
+    this.st = st; this.F = floorOf(st); this.G = geomOf(st); this.dug = dugArr(st); this.stAt = now;
     const me_ = this.login;
     const gotOf = (i: number): Burst['got'] => {
       const d = (st!.dl || []).find((x) => x[0] === i && x[1] === st!.n); if (!d) return null;
@@ -261,7 +315,8 @@ export class MineModel {
     }
     // own stone: from the view (who digs where) — up to 4 listed per stone; trust me.i only when more dig than listed
     const mine = Object.entries(st.dg || {}).find(([, ls]) => ls.includes(me_));
-    const mb = this.me && this.me.i >= 0 ? (st.bl || {})[this.me.i] : null;
+    // site 29.10: on a big floor the hero may dig on another floor (me.f) — then me.i is not a stone of this one
+    const mb = this.me && this.me.i >= 0 && !(st.fl && st.fl.v3 && this.me.f && this.me.f !== st.n) ? (st.bl || {})[this.me.i] : null;
     this.myI = mine ? +mine[0] : (mb && st.dug[this.me!.i] !== '1' && (mb[3] || 0) > ((st.dg || {})[this.me!.i] || []).length ? this.me!.i : -1);
     if (this.left) {
       if (this.myI >= 0 && this.myI === this.left.i) {
@@ -319,14 +374,14 @@ export class MineModel {
     if (!this.st) return out;
     const OFF = [[-24, 0], [24, 4], [-8, 22], [14, -16]];
     for (const [k, ls] of Object.entries(this.st.dg || {})) {
-      const i = +k, sp = digSpot(this.dug, i); if (sp == null) continue;
-      const c = centerOf(sp), r = cellXY(i), dx = r.x - c.x;
+      const G = this.G, i = +k, sp = G.digSpot(this.dug, i); if (sp == null) continue;
+      const c = G.centerOf(sp), r = G.cellXY(i), dx = r.x - c.x;
       ls.forEach((l, j) => { if (l === this.login || j > 3) return; const [ox, oy] = OFF[j % 4]; out.push({ login: l, i, x: c.x + ox + (dx ? Math.sign(dx) * 18 : 0), y: c.y + oy - 10, k: j }); });
     }
     return out;
   }
   /** Where a walker should be drawn (in a stone → snapped to the entrance like the site walkPt). */
-  standPt(p: Pt): Pt { return walkPt(this.dug, p); }
+  standPt(p: Pt): Pt { return this.G.walkPt(this.dug, p); }
 
   get dark(): boolean { return !!this.st && this.st.n >= (this.st.darkFrom || 5) && !this.lampOn(); }
   /** Own items (hero.items) are needed for the helmet; the client sets this hook. */
@@ -339,9 +394,19 @@ export class MineModel {
   get pickOn(): boolean { return this.fx('pk') && this.buyerOn; }
   isFront(i: number): boolean { return !!this.st && (this.st.front || []).includes(i); }
   /** Stones left on the floor (not dug, not wall) — the way down opens at 0. */
-  stonesLeft(): number { if (!this.F) return 0; let n = 0; for (let i = 0; i < GW * GH; i++) if (!this.dug[i] && this.F.cells[i] && this.F.cells[i].t !== 'wall') n++; return n; }
+  stonesLeft(): number { if (!this.F || this.F.v3) return 0; let n = 0; for (let i = 0; i < N_CELLS; i++) if (!this.dug[i] && this.F.cells[i] && this.F.cells[i].t !== 'wall') n++; return n; }
+  /** «Шахта 3.0»: what the lift is doing (site draw3 chip over the cage). */
+  liftChip(): string {
+    const L = (this.st && this.st.lift) || { st: 'dig' };
+    return L.st === 'fund' ? `сбор ${Math.floor(L.need ? Math.min(100, (L.c || 0) / L.need * 100) : 0)}%` : L.st === 'up' ? 'лифт улучшается' : 'ищем шахту лифта';
+  }
   upText(): string {
     if (!this.st || !this.F) return '';
+    if (this.F.v3) {
+      const st = this.st, L = st.lift || { st: 'dig' }, deep = st.deep || st.n;
+      return L.st === 'dig' ? `Этаж ${deep + 1}: сначала докопайтесь до шахты лифта на этаже ${deep} — она далеко от лифта, под туманом`
+        : L.st === 'fund' ? `Лифт: сбор на этаж ${deep + 1} — ${this.liftChip()}` : `Лифт улучшается — скоро этаж ${deep + 1}`;
+    }
     const n = this.st.n, left = this.stonesLeft();
     const from = n > 1 ? `Отсюда спустились с этажа ${n - 1}. ` : '';
     return left ? `${from}Спуск на этаж ${n + 1} откроется, когда выкопают все камни этажа (осталось ${left})` : `${from}Этаж расчищен — спуск на этаж ${n + 1} начнётся сам`;

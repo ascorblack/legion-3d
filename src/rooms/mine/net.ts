@@ -12,7 +12,8 @@
  */
 import { dayLimit } from './state';
 import { MineModel, TX, blockTitle, mmss, type MinePayload, type MineMe, type Burst, type ChatLine, type LookRec } from './state';
-import { REACH, cellXY, type Pt } from './geo';
+import { REACH, type Pt } from './geo';
+import { GEO1, type MineGeom } from './geo3';
 
 export type MineApi = (path: string, body?: unknown) => Promise<any>;
 export interface MineBus { on(type: string, fn: (d: any) => void): () => void }
@@ -238,6 +239,11 @@ export class MineClient {
     if (stopped || wait <= 0) this.flushGo();
     else if (!this.goT) this.goT = this.T.setTimeout(() => { this.goT = 0; this.flushGo(); }, wait);
   }
+  /**
+   * «Шахта 3.0»: the entry point was a classic one (the floor was not known yet); the server already stands the hero in the
+   * lift hall (its walkPt), the site just moves its own marker there (pos3) — no go is sent until the player walks.
+   */
+  syncPos(p: Pt): void { this.pos = { x: p.x, y: p.y }; this.sent = { x: Math.round(p.x), y: Math.round(p.y) }; }
   flushGo(): void {
     if (this.goT) { this.T.clearTimeout(this.goT); this.goT = 0; }
     const p = this.pos; if (!p || !this.entered || this.closed) return;
@@ -260,19 +266,22 @@ export class MineClient {
     return null;
   }
   /** Distance (px) from p to the centre of stone i. */
-  static distTo(i: number, p: Pt): number { const c = cellXY(i); return Math.hypot(p.x - c.cx, p.y - c.cy); }
+  static distTo(i: number, p: Pt, G: MineGeom = GEO1): number { const c = G.cellXY(i); return Math.hypot(p.x - c.cx, p.y - c.cy); }
+  /** Distance (px) from p to the centre of stone i on the current floor (classic or big). */
+  dist(i: number, p: Pt): number { return MineClient.distTo(i, p, this.model.G); }
   /**
    * POST /api/mineDig {i, c, sid, x, y, k: 1, vh, pt} — our feet must be within REACH of the stone (the game checks it).
    * pt = the aimed point on the stone (site: click point). Flushes our position first.
    */
   async dig(i: number, at: Pt, pt?: Pt): Promise<boolean> {
     const why = this.digBlock(i); if (why) { this.tip(why, true); return false; }
-    if (MineClient.distTo(i, at) > REACH) { this.tip('Подойди к камню вплотную', true); return false; }
+    if (this.dist(i, at) > REACH) { this.tip('Подойди к камню вплотную', true); return false; }
     const M = this.model, cell = M.F!.cells[i];
     if (M.myI === i) { this.tip(`${TX.doing}: ${blockTitle(cell)}`); return true; }
     M.want = { i, at: this.now() }; M.left = null; this.clearQueue();   // site clickRock: a plain dig starts over (S.qq = [])
     this.pos = { x: at.x, y: at.y }; this.flushGo();
-    const r = await this.o.api('/api/mineDig', { i, c: this.c, sid: this.sid, x: Math.round(at.x), y: Math.round(at.y), k: 1, vh: this.hidden() ? 1 : 0, ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
+    // site 29.10: on a big floor the dig names the floor the player sees (n)
+    const r = await this.o.api('/api/mineDig', { i, c: this.c, sid: this.sid, x: Math.round(at.x), y: Math.round(at.y), ...(M.F && M.F.v3 && M.st ? { n: M.st.n } : {}), k: 1, vh: this.hidden() ? 1 : 0, ...(pt ? { pt: [Math.round(pt.x), Math.round(pt.y)] } : {}) });
     if (this.closed) return false;
     if (!r || !r.ok) {
       if (M.want && M.want.i === i) M.want = null;

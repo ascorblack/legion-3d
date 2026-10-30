@@ -6,6 +6,7 @@
  * Pure TS, no THREE / DOM (test/mine-walk.test.ts).
  */
 import { N_CELLS, YB, REACH, FOOT, cellOfPt, centerOf, pathTo, route, standable, segHit, inR, mx, mz, type Dug, type Foot, type Pt } from './geo';
+import type { MineGeom } from './geo3';
 
 /** A body is wider than the site's point hero: plan around the objects grown by this much (px; body ≈ 8 px + slack). */
 export const BODY_PAD = 14;
@@ -36,8 +37,36 @@ export function standNear(dug: Dug, from: Pt, to: Pt, pad = BODY_PAD): { at: Pt;
   return null;
 }
 
+/**
+ * «Шахта 3.0» (big floor): through dug cells by BFS (the hall cells count as dug — the server digs them at the start), cell
+ * centres in the tunnels, around the hall objects (grown by the body) once in the lift hall (site way(): in the hall around
+ * the objects, in the tunnels by cell centres). Waypoints in px, start excluded; null = no way.
+ */
+export function walkPlan3(G: MineGeom, dug: Dug, from: Pt, to: Pt): Pt[] | null {
+  const a = G.cellAt(from.x, from.y), b = G.cellAt(to.x, to.y);
+  if (a < 0 || b < 0) return null;
+  const ok = (i: number) => G.inZone(i) || !!dug[i];
+  const prev = new Map<number, number>([[a, -1]]), q = [a];
+  for (let k = 0; k < q.length && !prev.has(b); k++) for (const j of G.nbrs(q[k])) if (!prev.has(j) && ok(j)) { prev.set(j, q[k]); q.push(j); }
+  if (!prev.has(b)) return null;
+  const cells: number[] = []; for (let i = b; i !== -1; i = prev.get(i)!) cells.unshift(i);
+  const pts: Pt[] = []; let at = from;
+  const grown = G.FOOT.map((f) => ({ ...f, r: [f.r[0] - BODY_PAD, f.r[1] - BODY_PAD, f.r[2] + BODY_PAD, f.r[3] + BODY_PAD] as Foot['r'] }));
+  for (let k = 1; k < cells.length; k++) {
+    if (G.inZone(cells[k])) break;   // the rest of the way is inside the hall: around the objects below
+    const c = G.centerOf(cells[k]); const p = { x: c.x, y: c.y - 34 }; pts.push(p); at = p;
+  }
+  if (G.inZone(b)) {
+    // inside the hall: around the objects (the site's route over their grown rectangles), then the exact target
+    const end = G.free(to.x, to.y, grown, false);
+    for (const p of G.route(at, end, grown)) pts.push(p);
+  } else if (!pts.length || pts[pts.length - 1].x !== to.x || pts[pts.length - 1].y !== to.y) pts.push(to);
+  return pts;
+}
+
 /** Waypoints (mine px, start excluded) from `from` to the standable spot nearest `to0` in the entrance area; null = no way. */
-export function walkPlan(dug: Dug, from: Pt, to: Pt): Pt[] | null {
+export function walkPlan(dug: Dug, from: Pt, to: Pt, G?: MineGeom): Pt[] | null {
+  if (G && G.v3) return walkPlan3(G, dug, from, to);
   const a = cellOfPt(from.x, from.y), b = cellOfPt(to.x, to.y);
   if (a < 0 || b < 0) return null;
   const pts: Pt[] = [];
@@ -68,7 +97,7 @@ export class AutoWalk {
   static EPS = 0.6;
   get active(): boolean { return this.k < this.q.length; }
   /** Start a walk along px waypoints (converted to room metres). */
-  startPx(pts: Pt[]): void { this.q = pts.map((p) => ({ x: mx(p.x), z: mz(p.y) })); this.k = 0; this.issued = false; }
+  startPx(pts: Pt[], G?: MineGeom): void { const X = G ? G.mx : mx, Z = G ? G.mz : mz; this.q = pts.map((p) => ({ x: X(p.x), z: Z(p.y) })); this.k = 0; this.issued = false; }
   cancel(): void { this.q = []; this.k = 0; this.issued = false; }
   /** Call every frame with the feet (room metres). */
   frame(ctl: WalkCtl, x: number, z: number, dt: number): WalkState {

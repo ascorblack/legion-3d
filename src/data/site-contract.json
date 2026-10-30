@@ -140,6 +140,41 @@
       "why": "3D mine room (src/rooms/mine)"
     },
     {
+      "id": "LGWorldLib.mine3",
+      "kind": "global",
+      "name": "LGWorldLib",
+      "file": "world.js",
+      "keys": [
+        "mine",
+        "mine3"
+      ],
+      "type": "any",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "«Шахта 3.0» (29.10, flag mine3): geometry of the big mine floor — cell grid, PAD, lift hall objects (FOOT), walkPt / pathTo / digSpot / spawn — ported to src/rooms/mine/geo3.ts (parity: test/mine3.test.ts against a local copy)"
+    },
+    {
+      "id": "LGMine3 (mine3.js)",
+      "kind": "global",
+      "name": "LGMine3",
+      "file": "mine3.js",
+      "keys": [
+        "floorOf",
+        "scene"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "«Шахта 3.0»: the site's own renderer of the big floor; its floorOf (only the visible cells, the rest fog) is mirrored by src/rooms/mine/state.ts floorOf3 — the 3D mine shows exactly what the site shows"
+    },
+    {
+      "id": "mine view fl.v3",
+      "file": "mine.js",
+      "re": "fl\\.v3",
+      "severity": "degrade",
+      "why": "the big floor is marked by st.fl.v3 (src/rooms/mine/geo3.ts geomOf); without it the 3D mine falls back to the classic 7 × 12 floor"
+    },
+    {
       "id": "LGCampMap",
       "kind": "global",
       "name": "LGCampMap",

@@ -1,4 +1,5 @@
 import type { Cell, Dl, MineView } from './state';
+import { cellLevel } from './state';
 
 /** All values here are estimates from the current view, never a promise of loot or wages. */
 export interface StoneEstimate {
@@ -17,7 +18,7 @@ const positive = (v: unknown): number | null => typeof v === 'number' && Number.
 export function workAtLevel(st: MineView, level: number): number | null {
   const xs: number[] = [];
   for (const [key, b] of Object.entries(st.bl || {})) {
-    const lv = st.fl?.c[+key]?.[1], w = positive(b[1]);
+    const lv = cellLevel(st, +key), w = positive(b[1]);
     if (lv && w) xs.push(w / (lv * lv));
   }
   if (!xs.length || !positive(level)) return null;

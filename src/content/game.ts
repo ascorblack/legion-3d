@@ -60,6 +60,10 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
   }
 
   const hostEl = document.createElement('div'); hostEl.id = 'l3d-host';
+  // 29.10 (site city-wasd): the site's City now walks the hero with W A S D and enters with E (document keydown), and it
+  // runs hidden under our canvas — it skips those keys while a visible [aria-modal="true"] element is on the page
+  // (city.js kwBusy). Our 3D view is that element; in the classic site (F8) it is display:none and the site's keys work.
+  hostEl.setAttribute('aria-modal', 'true'); hostEl.setAttribute('role', 'application'); hostEl.setAttribute('aria-label', 'Legion 3D');
   document.body.appendChild(hostEl);
   const uiRoot = document.createElement('div'); uiRoot.id = 'l3d-ui'; document.body.appendChild(uiRoot);
   const cleanupDom = () => { hostEl.remove(); uiRoot.remove(); };

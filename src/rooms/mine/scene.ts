@@ -6,14 +6,18 @@
  *
  * Draw-call budget: static parts = one RoomKit batch (~10 calls, rebuilt only on a new floor); stones = 5 InstancedMesh
  * (hidden instances get scale 0 when dug), ore = 2 (+1 glow Points), mushrooms = 2, front halos = 1, badges ≤ ~20
- * sprites, bars ≤ 24, avatars ≤ 40.
+ * sprites, bars = 2 InstancedMesh, avatars ≤ 40.
+ * «Шахта 3.0» (big floor, geo3.ts / cave3.ts): the same stones for the front, rock mass / fog pillars in the same 5
+ * InstancedMesh, a second static batch for the dug part (lanterns, halls, drills, shaft); badges ≤ 16 nearest, bars
+ * within 14 m, ≤ 12 other miners within 24 m (q2).
  * Light: cool hemisphere + warm light POOLS (world/lightPools shader patch on every cave material; we feed it the 16
  * candidates nearest to the view: lanterns, portal, lift, stalls, and every ore stone in its ore colour — no real
  * lights) + 1–4 real lights that hop to the lanterns nearest to the player (quality-capped) + the helmet lamp.
  * Readability: diggable stones are lit up and get a gold floor halo + level badge, the others are dimmed; rock has
  * strata / crack vertex colours and the rock texture; in third person, rock right in front of the camera dissolves
  * (ordered dither, nearFade). Other miners are spread off the player / each other and fade near the camera.
- * Room space: see geo.ts (X = (x − 512)·K, Z = (y − 1956)·K, K = 2.4 m / cell). The root must stay at the origin.
+ * Room space: see geo.ts (X = (x − 512)·K, Z = (y − 1956)·K, K = 2.4 m / cell; a big floor: geo3.ts, from the lift
+ * hall's centre). Every px ⇄ metre mapping goes through this.G (the model's geometry). The root must stay at the origin.
  */
 import * as THREE from 'three';
 import { RoomKit } from '../common/kit';
@@ -26,6 +30,8 @@ import { createAvatarKit, createLabels, appearanceFrom, type LabelsEx } from '..
 import type { Avatar } from '../../contracts/modules';
 import { GW, GH, N_CELLS, K, CW, SIDE, W, YB, Y0, H, FOOT, ZONE, mx, mz, px, py, cellXY, standable, digSpot, centerOf, hashL, type Rect } from './geo';
 import { MineModel, stoneProgress, type Cell } from './state';
+import { GEO1, type MineGeom } from './geo3';
+import { buildCave3, buildDig3, slots3, CEIL3, type Slot3 } from './cave3';
 import { hideOutline, showOutline } from '../../engine/outline';
 import { minePal, rockGeo, crystalGeo, nuggetGeo, mushroomGeos, pickaxeGeo, badgeTexture, badgePriceTexture, badgeQueueTexture, drawEstimateSign, SIGN_W, SIGN_H, oreCol, ROCK, CRYSTAL, type MinePal, type RockGeo } from './art';
 import { estimateStone, valueCoins, signText } from './econ';
@@ -42,6 +48,16 @@ const Z_WALL = Z_BACK + 3.4;
 const STONE_H = 1.3;
 /** Light-pool candidates (lanterns, portal, ore glow): x, y, z, radius, r, g, b, gain. */
 const POOL_MAX = 160;
+/** «Шахта 3.0»: at most this many level badges (sprites = draw calls) — on the front stones nearest to the player. */
+const BADGE_MAX = 16;
+/** «Шахта 3.0»: progress bars only for stones being dug this close to the player (m). */
+const BAR_NEAR = 14;
+/** Progress bars drawn at most (instanced). */
+const BAR_MAX = 32;
+/** «Шахта 3.0»: other miners farther than this (m) are not drawn. */
+const ACTOR_NEAR = 24;
+/** «Шахта 3.0»: pickaxes in the paws of others only this close (m). */
+const PICK_NEAR = 14;
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color();
 const _up = new THREE.Vector3(0, 1, 0), _v = new THREE.Vector3(), _f = new THREE.Vector3();
@@ -83,14 +99,19 @@ export const footM = (k: string) => rectM(FOOT.find((f) => f.k === k)!.r);
 const KINDS: { kind: 'round' | 'slab' | 'hard' | 'pillar'; v: number }[] = [
   { kind: 'round', v: 0 }, { kind: 'round', v: 1 }, { kind: 'slab', v: 0 }, { kind: 'hard', v: 0 }, { kind: 'pillar', v: 0 },
 ];
-interface StoneSlot { kind: number; inst: number; m: THREE.Matrix4; h: number; ore: number[]; mush: number[] }
+/** mass: «Шахта 3.0» rock behind the front (a pillar to the ceiling: not a stone to dig, no badge, no glow). */
+interface StoneSlot { kind: number; inst: number; m: THREE.Matrix4; h: number; ore: number[]; mush: number[]; mass?: boolean }
 
 function readEconOn(): boolean { return mineSwitch(PREF_ECON); }
-export interface MineSceneOpts { quality?: number; style?: string; login: string }
+export interface MineSceneOpts { quality?: number; style?: string; login: string; /** Floor geometry known at creation (sizes the instanced meshes). */ geom?: MineGeom }
 
 interface Actor { key2: string; av: Avatar; pick: THREE.Group; bone: THREE.Object3D | null; key: string; x: number; z: number; face: number; dig: number; swingT: number; tempo: number; seen: number; anchor: THREE.Vector3; moving: number; ox: number; oz: number; tox: number; toz: number }
 
 export class MineScene {
+  /** Geometry of the floor on show: the classic 7 × 12 one or a big «Шахта 3.0» floor (taken from the model, M.G). */
+  private G: MineGeom = GEO1;
+  /** Instance capacity of the per-cell meshes (cells of the largest floor seen). */
+  private cap = N_CELLS;
   readonly root = new THREE.Group();
   private kit: RoomKit | null = null;
   private pal!: MinePal;
@@ -110,7 +131,8 @@ export class MineScene {
   /** Economy sign + price glyphs on/off (localStorage 'l3d.mine.econ' = '0' → off). */
   private econOn = true;
   private onSettings = (): void => { this.econOn = readEconOn(); };
-  private bars: { g: THREE.Group; fill: THREE.Mesh; mat: THREE.MeshBasicMaterial; i: number }[] = [];
+  /** Progress bars of the stones being dug: two InstancedMesh (plate + fill), billboarded per frame — 2 draw calls for all. */
+  private barBg!: THREE.InstancedMesh; private barFill!: THREE.InstancedMesh;
   private hl: THREE.Mesh; private hlI = -1;
   private ring: THREE.Mesh;
   private fronts: THREE.InstancedMesh;
@@ -159,15 +181,18 @@ export class MineScene {
 
   constructor(o: MineSceneOpts) {
     this.quality = o.quality ?? 2; this.style = o.style || 'cats'; this.login = String(o.login || '').toLowerCase();
+    if (o.geom) this.G = o.geom;
+    this.cap = Math.max(N_CELLS, this.G.N);
+    this.orePool = new Int32Array(this.cap).fill(-1); this.orePoolG = new Float32Array(this.cap); this.baseCol = new Float32Array(this.cap * 3);
     this.root.name = 'mine';
     this.econOn = readEconOn();
     if (typeof window !== 'undefined') window.addEventListener('l3d:settings', this.onSettings);
     this.stoneMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.92, metalness: 0 });
     for (const k of KINDS) {
       const g: RockGeo = rockGeo(k.kind, k.v);
-      const im = new THREE.InstancedMesh(g.geo, this.stoneMat, N_CELLS);
+      const im = new THREE.InstancedMesh(g.geo, this.stoneMat, this.cap);
       im.name = 'mine:stones:' + k.kind + k.v; im.count = 0; im.castShadow = true; im.receiveShadow = true;
-      im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(N_CELLS * 3), 3);
+      im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.cap * 3), 3);
       im.frustumCulled = false;
       this.stones.push(im); this.dynamic.add(im);
     }
@@ -181,8 +206,8 @@ export class MineScene {
     cryMat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n#ifdef USE_INSTANCING_COLOR\ntotalEmissiveRadiance += vColor.rgb * (0.55 + 0.35 * clamp(normal.y, 0.0, 1.0));\n#endif'); };
     cryMat.customProgramCacheKey = () => 'mine:crystal';
     nearFade(cryMat);
-    this.nugget = new THREE.InstancedMesh(nuggetGeo(), nugMat, N_CELLS * 12); this.nugget.name = 'mine:ore';
-    this.crystal = new THREE.InstancedMesh(crystalGeo(), cryMat, N_CELLS * 12); this.crystal.name = 'mine:gems';
+    this.nugget = new THREE.InstancedMesh(nuggetGeo(), nugMat, this.cap * 12); this.nugget.name = 'mine:ore';
+    this.crystal = new THREE.InstancedMesh(crystalGeo(), cryMat, this.cap * 12); this.crystal.name = 'mine:gems';
     for (const im of [this.nugget, this.crystal]) { im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(im.count * 3), 3); im.count = 0; im.frustumCulled = false; this.dynamic.add(im); }
     const mg = mushroomGeos();
     this.mStem = new THREE.InstancedMesh(mg.stem, new THREE.MeshStandardMaterial({ color: '#efe6d0', roughness: 0.8 }), 400); this.mStem.name = 'mine:mushStem';
@@ -195,10 +220,16 @@ export class MineScene {
     // own-stone dig spot: ring on the floor
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd23f', transparent: true, opacity: 0.9, depthWrite: false }));
     this.ring.visible = false; this.ring.name = 'mine:ring'; this.dynamic.add(this.ring);
+    // progress bars: plate + fill, drawn over the rock (no depth test) like the site's bars
+    this.barBg = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.08, 0.2), new THREE.MeshBasicMaterial({ color: '#15122e', depthTest: false, transparent: true }), BAR_MAX);
+    this.barFill = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 0.13).translate(0, 0, 0.001), new THREE.MeshBasicMaterial({ color: '#ffffff', depthTest: false, transparent: true }), BAR_MAX);
+    this.barFill.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(BAR_MAX * 3), 3);
+    this.barBg.name = 'mine:barBg'; this.barFill.name = 'mine:barFill'; this.barBg.renderOrder = 6; this.barFill.renderOrder = 7;
+    for (const im of [this.barBg, this.barFill]) { im.count = 0; im.frustumCulled = false; this.dynamic.add(im); }
     // «жёлтый круг»: a glowing ring on the floor around every stone that can be dug now
     // a glowing gold halo on the floor (crisp ring + soft outer glow, additive) — reads from far away and in the dark
     this.ringTex = haloTexture();
-    this.fronts = new THREE.InstancedMesh(new THREE.PlaneGeometry(3.4, 3.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd23f', map: this.ringTex, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), N_CELLS);
+    this.fronts = new THREE.InstancedMesh(new THREE.PlaneGeometry(3.4, 3.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd23f', map: this.ringTex, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), this.cap);
     this.fronts.count = 0; this.fronts.name = 'mine:fronts'; this.fronts.frustumCulled = false; this.fronts.renderOrder = 2; this.dynamic.add(this.fronts);
     // a few warm lights along the hall (quality-capped); the entrance has its own (RoomKit lights)
     // (they follow the player: every 0.3 s they move to the lanterns nearest to the feet — see placeLights)
@@ -239,22 +270,11 @@ export class MineScene {
 
   /* ================================================================ floor (static) */
 
-  /** (Re)build everything for the model's floor; cheap no-op when the floor did not change. */
-  setFloor(M: MineModel): boolean {
-    const st = M.st, F = M.F; if (!st || !F) return false;
-    const depth = mineSwitch(PREF_LAYERS), key = `${st.seed}.${st.n}.${depth ? 1 : 0}`;   // the «Пласты глубины» switch rebuilds on the next view
-    if (key === this.floorKey) return false;
-    this.floorKey = key; this.dugKey = '';
-    this.pal = minePal(F.biome, F.n, depth);
-    this.poolN = 0; this.lanterns = []; this.orePool.fill(-1); this.poolT = 0; this.lightT = 0;
-    if (this.kit) { this.root.remove(this.kit.root); this.kit.dispose(); for (const l of this.kit.lights) l.removeFromParent(); }
-    for (const a of this.npcs) { a.root.removeFromParent(); a.dispose(); }
-    this.npcs = [];
-    const P = this.pal;
-    const base = paletteOf(this.style);
+  /** The materials every cave batch uses (rock faces, soil), pool-lit; `name` = the batch's name. */
+  private makeKit(name: string): RoomKit {
+    const P = this.pal, base = paletteOf(this.style);
     const pal: Pal = { ...base, ground: P.floor, groundL: P.floorL, ground2: P.floor, mortar: P.wall, stone: P.wallL, timber: '#7a4e2a', wood: '#a8754f', woodD: '#5a3a1e', woodL: '#d9a066', line: '#15122e', metal: '#3a3448' };
-    const kit = new RoomKit(pal, this.quality, 'mine:static');
-    this.kit = kit;
+    const kit = new RoomKit(pal, this.quality, name);
     // cave materials: rough rock for walls / lumps / ceiling, soil for the hall floor (instead of ashlar blocks)
     const cave = (k: TexKind, seed: number, ns: number) => {
       // soil: a low-contrast grey palette (the neutral one has bright square flecks that read as noise on a big floor)
@@ -265,29 +285,77 @@ export class MineScene {
     };
     (kit.mats as Record<string, THREE.Material>).stone = cave('rock', 3, 1.0);
     (kit.mats as Record<string, THREE.Material>).lowPaving = cave('soil', 5, 0.35);
-    this.buildCave(kit, M);
-    this.buildEntrance(kit);
-    this.buildTop(kit, M);
+    return kit;
+  }
+  /** Pool-light patches on a finished batch, then into the scene. */
+  private finishKit(kit: RoomKit): void {
     // the cave surfaces take the lantern pools (walls, floors, timber, props)
     for (const k of ['stone', 'lowPaving', 'paving', 'wood', 'metal', 'canvas', 'plaster', 'roof', 'brick'] as const) {
       const m = (kit.mats as Record<string, THREE.Material>)[k]; if (m && k === 'stone') nearFade(m); if (m) this.pool.patch(m, { vary: k === 'stone' ? 0.16 : 0.08, ao: k === 'stone' ? 0.35 : 0.2, gain: 1.05, rim: 0.06 });
     }
     kit.finish();
     this.root.add(kit.root);
+  }
+  private dropKit(kit: RoomKit | null): void { if (!kit) return; this.root.remove(kit.root); kit.dispose(); for (const l of kit.lights) l.removeFromParent(); }
+  /** Per-cell instanced meshes and arrays for a floor of N cells (a bigger floor than any before re-allocates them). */
+  private growTo(N: number): void {
+    if (N <= this.cap) return;
+    this.cap = N;
+    this.orePool = new Int32Array(N).fill(-1); this.orePoolG = new Float32Array(N); this.baseCol = new Float32Array(N * 3);
+    const re = (im: THREE.InstancedMesh, n: number): THREE.InstancedMesh => {
+      const nm = new THREE.InstancedMesh(im.geometry, im.material, n);
+      nm.name = im.name; nm.count = 0; nm.castShadow = im.castShadow; nm.receiveShadow = im.receiveShadow; nm.frustumCulled = false; nm.renderOrder = im.renderOrder;
+      if (im.instanceColor) nm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+      im.removeFromParent(); im.dispose(); this.dynamic.add(nm); return nm;
+    };
+    this.stones = this.stones.map((im) => re(im, N));
+    this.nugget = re(this.nugget, N * 12); this.crystal = re(this.crystal, N * 12); this.fronts = re(this.fronts, N);
+  }
+
+  /** (Re)build everything for the model's floor; cheap no-op when the floor did not change. */
+  setFloor(M: MineModel): boolean {
+    const st = M.st, F = M.F; if (!st || !F) return false;
+    if (M.G !== this.G) { this.G = M.G; this.growTo(this.G.N); }
+    const G = this.G;
+    const depth = mineSwitch(PREF_LAYERS), key = `${G.v3 ? `v3:${G.w}x${G.h}:${G.hallBox.join(',')}` : 'v1'}.${st.seed}.${st.n}.${depth ? 1 : 0}`;   // the «Пласты глубины» switch rebuilds on the next view
+    if (key === this.floorKey) return false;
+    this.floorKey = key; this.dugKey = ''; this.slotKey = '';
+    this.pal = minePal(F.biome, F.n, depth);
+    this.poolN = 0; this.lanterns = []; this.orePool.fill(-1); this.poolT = 0; this.lightT = 0;
+    this.dropKit(this.kit); this.kit = null; this.dropKit(this.kit3); this.kit3 = null;
+    for (const a of this.npcs) { a.root.removeFromParent(); a.dispose(); }
+    this.npcs = [];
+    const kit = this.makeKit('mine:static');
+    this.kit = kit;
+    if (G.v3) {
+      const out = buildCave3(kit, G, F, this.pal, (x, y, z, r, c, g) => this.addPool(x, y, z, r, c, g));
+      this.lanterns.push(...out.lanterns);
+      this.buildEntrance(kit);
+    } else {
+      this.buildCave(kit, M);
+      this.buildEntrance(kit);
+      this.buildTop(kit, M);
+    }
+    this.finishKit(kit);
     this.buildNpcs();
-    // stone slots (geometry choice per cell is stable for a floor)
     this.slots = []; this.hlI = -2;   // stones rebuilt: re-bind the aimed stone's outline
     for (const im of this.stones) im.count = 0;
-    for (let i = 0; i < N_CELLS; i++) {
+    if (G.v3) {
+      // the rock layout of a big floor follows the digging and the fog: built by setView (buildSlots3)
+      this.poolStatic = this.poolN; this.lanternsStatic = this.lanterns.length;
+      return true;
+    }
+    // stone slots (geometry choice per cell is stable for a floor)
+    for (let i = 0; i < G.N; i++) {
       const c = F.cells[i];
       if (!c || c.t === 'void' || c.t === 'entry') { this.slots.push(null); continue; }
       const kind = c.t === 'wall' ? 4 : c.t === 'hard' ? 3 : Math.floor(rnd(i, st.seed % 97) * 3);
       const im = this.stones[kind], inst = im.count++;
-      const p = cellXY(i), sc = 1 + Math.max(0, (c.lv || F.n) - F.n) * 0.1;
+      const p = G.cellXY(i), sc = 1 + Math.max(0, (c.lv || F.n) - F.n) * 0.1;
       const h = c.t === 'wall' ? CEIL + 0.4 : STONE_H * sc * (c.t === 'hard' ? 1.08 : 1) * (0.92 + rnd(i, 3) * 0.16);
       const wxz = c.t === 'wall' ? 1.45 : 0.98 + rnd(i, 4) * 0.1;
       _q.setFromAxisAngle(_up, rnd(i, 5) * Math.PI * 2);
-      const m = new THREE.Matrix4().compose(_p.set(mx(p.cx) + (rnd(i, 6) - 0.5) * 0.12, -0.05, mz(p.cy) + (rnd(i, 7) - 0.5) * 0.12), _q, _s.set(wxz, h, wxz));
+      const m = new THREE.Matrix4().compose(_p.set(G.mx(p.cx) + (rnd(i, 6) - 0.5) * 0.12, -0.05, G.mz(p.cy) + (rnd(i, 7) - 0.5) * 0.12), _q, _s.set(wxz, h, wxz));
       im.setMatrixAt(inst, m);
       const col = this.rockColor(c, i);
       im.setColorAt(inst, col); col.toArray(this.baseCol, i * 3);
@@ -298,6 +366,60 @@ export class MineScene {
     this.buildMushrooms(M);
     this.buildOreGlow(M);
     return true;
+  }
+
+  /* ---------------------------------------------------------------- «Шахта 3.0»: rock layout of a big floor */
+  /** Second batch of a big floor (tunnel lanterns, special halls, drills, the lift shaft, vein sparks). */
+  private kit3: RoomKit | null = null;
+  private slotKey = '';
+  /** Vein sparks on the rock faces (x, y, z …) — dev / tests. */
+  sparks3: number[] = [];
+  private poolStatic = 0; private lanternsStatic = 0;
+  /** Rock mode of every cell of a big floor (cave3.slots3). */
+  private mode3: (Slot3 | null)[] = [];
+  /**
+   * Rock of a big floor from the view: front stones are boulders (the classic stones, with ore / badges / halo), the rock
+   * behind them a solid mass to the ceiling (ore streaks on visible rock, pitch-dark where the site shows fog).
+   * Rebuilt when the dug cells, the front, the visible cells or the drills change (a few times a minute at most).
+   */
+  private buildSlots3(M: MineModel): void {
+    const st = M.st!, F = M.F!, G = this.G;
+    const front = new Set(st.front || []);
+    const mode = slots3(G, F, M.dug, front); this.mode3 = mode;
+    this.poolN = this.poolStatic; this.lanterns.length = this.lanternsStatic; this.orePool.fill(-1); this.poolT = 0; this.lightT = 0;
+    this.slots = []; this.hlI = -2;
+    for (const im of this.stones) im.count = 0;
+    const P = this.pal, fogA = new THREE.Color(P.wall).multiplyScalar(0.28), fogB = new THREE.Color(P.wall).multiplyScalar(0.4);
+    for (let i = 0; i < G.N; i++) {
+      const md = mode[i], c = F.cells[i];
+      if (!md) { this.slots.push(null); continue; }
+      const p = G.cellXY(i);
+      let kind: number, h: number, wxz: number;
+      if (md === 'stone') {
+        kind = c.t === 'hard' ? 3 : Math.floor(rnd(i, st.seed % 97) * 3);
+        const sc = 1 + Math.max(0, (c.lv || F.n) - F.n) * 0.1;
+        h = STONE_H * sc * (c.t === 'hard' ? 1.08 : 1) * (0.92 + rnd(i, 3) * 0.16); wxz = 0.98 + rnd(i, 4) * 0.1;
+      } else { kind = 4; h = CEIL + 0.4; wxz = 1.42 + rnd(i, 4) * 0.12; }
+      const im = this.stones[kind], inst = im.count++;
+      _q.setFromAxisAngle(_up, rnd(i, 5) * Math.PI * 2);
+      const m = new THREE.Matrix4().compose(_p.set(G.mx(p.cx) + (rnd(i, 6) - 0.5) * 0.12, -0.05, G.mz(p.cy) + (rnd(i, 7) - 0.5) * 0.12), _q, _s.set(wxz, h, wxz));
+      im.setMatrixAt(inst, m);
+      // fog: nothing known — the same dark rock for every hidden cell (no type, no ore: the site hides it)
+      const col = md === 'fog' ? _c.copy(fogA).lerp(fogB, rnd(i, 9)) : md === 'wall' ? this.rockColor({ ...c, t: 'wall' }, i) : this.rockColor(c, i);
+      if (md === 'mass') col.multiplyScalar(0.82);
+      im.setColorAt(inst, col); col.toArray(this.baseCol, i * 3);
+      this.slots.push({ kind, inst, m, h, ore: [], mush: [], mass: md !== 'stone' });
+    }
+    for (const im of this.stones) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+    this.buildOre(M);
+    this.buildMushrooms(M);
+    this.buildOreGlow(M);
+    // tunnel lanterns, special halls, drills, the shaft, vein sparks
+    this.dropKit(this.kit3);
+    const k3 = this.makeKit('mine:dig3');
+    this.sparks3 = buildDig3(k3, G, F, M.dug, mode, P, (x, y, z, r, cc, g) => this.addPool(x, y, z, r, cc, g), this.lanterns).sparks;
+    this.finishKit(k3); this.kit3 = k3;
+    this.badgeAtFeet.set(1e9, 0, 1e9);
   }
 
   /** Add a light-pool candidate; returns its index. */
@@ -357,15 +479,15 @@ export class MineScene {
   private buildOreGlow(M: MineModel): void {
     if (this.oreGlow) { this.oreGlow.removeFromParent(); this.oreGlow.geometry.dispose(); (this.oreGlow.material as THREE.Material).dispose(); this.oreGlow = null; }
     const F = M.F!, data: number[] = []; this.oreGlowCell = []; this.oreGlowSize = [];
-    for (let i = 0; i < N_CELLS; i++) {
-      const c = F.cells[i], s = this.slots[i]; if (!c || !s || !c.r || (c.t !== 'ore' && c.t !== 'rare') || c.r === 'coal') continue;
-      const gem = CRYSTAL.has(c.r) || (c.t === 'rare' && c.r === F.gem), C = oreCol(c.r), p = cellXY(i);
+    for (let i = 0; i < this.G.N; i++) {
+      const c = F.cells[i], s = this.slots[i]; if (!c || !s || s.mass || !c.r || (c.t !== 'ore' && c.t !== 'rare') || c.r === 'coal') continue;
+      const gem = CRYSTAL.has(c.r) || (c.t === 'rare' && c.r === F.gem), C = oreCol(c.r), p = this.G.cellXY(i);
       const size = gem ? 2.4 : c.t === 'rare' ? 2.0 : 1.6;
       _c.set(C[0]).lerp(new THREE.Color(C[1]), 0.35).multiplyScalar(gem ? 0.95 : 0.75);
-      data.push(mx(p.cx), s.h * 0.75, mz(p.cy), size, _c.r, _c.g, _c.b);
+      data.push(this.G.mx(p.cx), s.h * 0.75, this.G.mz(p.cy), size, _c.r, _c.g, _c.b);
       this.oreGlowCell.push(i); this.oreGlowSize.push(size);
       this.orePoolG[i] = gem ? 1.7 : 1.0;
-      this.orePool[i] = this.addPool(mx(p.cx), s.h + 0.3, mz(p.cy), gem ? 4.6 : 3.4, C[gem ? 0 : 1], this.orePoolG[i]);
+      this.orePool[i] = this.addPool(this.G.mx(p.cx), s.h + 0.3, this.G.mz(p.cy), gem ? 4.6 : 3.4, C[gem ? 0 : 1], this.orePoolG[i]);
     }
     if (!data.length) return;
     this.oreGlow = glowPoints(data, 7, this.glowTex, { flicker: 0.18, intensity: 0.85 });
@@ -442,16 +564,16 @@ export class MineScene {
     }
     cone.dispose();
     // void cells: shallow puddle or gravel; the hall entrance: a timber portal at the bottom of the entry cell
-    for (let i = 0; i < N_CELLS; i++) {
+    for (let i = 0; i < this.G.N; i++) {
       const c = F.cells[i]; if (!c) continue;
-      const p = cellXY(i), x = mx(p.cx), z = mz(p.cy);
+      const p = this.G.cellXY(i), x = this.G.mx(p.cx), z = this.G.mz(p.cy);
       if (c.t === 'void') {
         if (P.pud) kit.box('water', P.pud, x - 0.8, x + 0.8, 0, 0.02, z - 0.7, z + 0.7);
         else for (let k = 0; k < 6; k++) kit.ball('stone', P.rock[2], x + (rnd(i, k) - 0.5) * 1.6, 0.04, z + (rnd(i, k + 9) - 0.5) * 1.6, 0.1 + rnd(i, k + 3) * 0.1, 0.6);
       }
     }
-    const ent = F.entry >= 0 && F.entry < N_CELLS ? F.entry : (GH - 1) * GW + 3;
-    const ex = mx(cellXY(ent).cx), ez = mz(Y0 + (Math.floor(ent / GW) + 1) * CW);
+    const ent = F.entry >= 0 && F.entry < this.G.N ? F.entry : (GH - 1) * GW + 3;
+    const ex = this.G.mx(this.G.cellXY(ent).cx), ez = this.G.mz(Y0 + (Math.floor(ent / GW) + 1) * CW);
     for (const s of [-1, 1]) kit.box('wood', '#7a4e2a', ex + s * 1.12 - 0.13, ex + s * 1.12 + 0.13, 0, 3.0, ez - 0.13, ez + 0.13);
     kit.box('wood', '#8a5a32', ex - 1.4, ex + 1.4, 3.0, 3.3, ez - 0.16, ez + 0.16);
     kit.sign('ШАХТА', ex, 3.55, ez + 0.2, 1.3, 0, { bg: '#5a3a1e', fg: '#ffd23f' });
@@ -472,7 +594,7 @@ export class MineScene {
       for (const o of [-0.32, 0.32]) kit.box('metal', '#8a8a9a', x0, x1, 0, 0.07, z + o - 0.03, z + o + 0.03);
       for (let x = x0; x < x1; x += 0.55) kit.box('wood', '#5a3a1e', x, x + 0.18, 0, 0.04, z - 0.5, z + 0.5);
     };
-    const cart = footM('cart');
+    const cart = this.footM('cart');
     rail(-OUT_X + 0.3, ex - 1.5, cart.cz);
     // grass / moss on the floor by nature
     if (P.deco === 'grass' || P.moss) {
@@ -484,10 +606,23 @@ export class MineScene {
     }
   }
 
+  /** Room-space rectangle of an object of the entrance area / lift hall (site FOOT r). */
+  private footM(k: string): { x0: number; x1: number; z0: number; z1: number; cx: number; cz: number } {
+    const G = this.G, f = G.FOOT.find((q) => q.k === k), r = f ? f.r : [0, 0, 0, 0];
+    return { x0: G.mx(r[0]), x1: G.mx(r[2]), z0: G.mz(r[1]), z1: G.mz(r[3]), cx: G.mx((r[0] + r[2]) / 2), cz: G.mz((r[1] + r[3]) / 2) };
+  }
+  /** Set an object's hit volume in place (the interactables hold these Box3 objects: a new floor moves them). */
+  private setBox(k: string, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
+    const b = this.objBoxes[k] || (this.objBoxes[k] = new THREE.Box3());
+    b.min.set(x0, y0, z0); b.max.set(x1, y1, z1);
+  }
+
   private buildEntrance(kit: RoomKit): void {
-    const P = this.pal;
+    const P = this.pal, v3 = this.G.v3, lift = v3 ? 'ЛИФТ' : 'В ГОРОД ↑';
+    // the far wall of the area for the decor crates (classic: the outer wall; big floor: the lift hall's edge)
+    const xMax = v3 ? this.G.mx(this.G.hall[0] + this.G.hall[2]) : OUT_X;
     // lift «В ГОРОД»: a timber cage with a platform, ropes to the ceiling
-    const L = footM('lift');
+    const L = this.footM('lift');
     kit.box('wood', '#8a5a32', L.x0, L.x1, 0, 0.18, L.z0, L.z1);
     // slim cage: corner posts up to a top frame at 3 m, only the hoist ropes go on to the ceiling (it stands right by
     // the spawn — thick posts to the ceiling framed the third-person view like a doorway)
@@ -497,14 +632,15 @@ export class MineScene {
     for (const x of [L.x0, L.x1]) kit.box('wood', '#6e4626', x - 0.07, x + 0.07, 2.9, 3.02, L.z0, L.z1);
     kit.box('metal', '#3a3448', L.x0 + 0.3, L.x1 - 0.3, 1.0, 1.06, L.z1 - 0.05, L.z1 + 0.05);
     for (const x of [L.cx - 0.5, L.cx + 0.5]) kit.box('metal', '#c8b890', x - 0.015, x + 0.015, 3.0, CEIL, L.cz - 0.015, L.cz + 0.015);
-    kit.sign('В ГОРОД ↑', L.cx, 3.35, L.z0 - 0.1, 2.0, Math.PI, { bg: '#3a2a5e', fg: '#ffd23f' });
-    kit.sign('В ГОРОД ↑', L.x1 + 0.1, 3.35, L.cz, 1.4, Math.PI / 2, { bg: '#3a2a5e', fg: '#ffd23f' });
+    kit.sign(lift, L.cx, 3.35, v3 ? L.z1 + 0.1 : L.z0 - 0.1, 2.0, v3 ? 0 : Math.PI, { bg: v3 ? '#2e5a2a' : '#3a2a5e', fg: v3 ? '#e8ffd8' : '#ffd23f' });
+    if (!v3) kit.sign(lift, L.x1 + 0.1, 3.35, L.cz, 1.4, Math.PI / 2, { bg: '#3a2a5e', fg: '#ffd23f' });
     kit.light(L.cx, 2.4, L.z0 - 0.3, '#ffcf6a', 5, 8, 1.2); this.addPool(L.cx, 2.4, L.z0 - 0.3, 5.5, '#ffcf6a', 0.9);
-    this.objBoxes.lift = new THREE.Box3(new THREE.Vector3(L.x0, 0, L.z0), new THREE.Vector3(L.x1, 2.6, L.z1));
+    this.setBox('lift', L.x0, 0, L.z0, L.x1, 2.6, L.z1);
     kit.solid(L.x0, L.x1, L.z0, L.z1, Infinity);
     // minecart on the rails, full of ore — low (≈1 m) and at the lift end of its spot, so it never fills the view
     // from the spawn (players spawn right in front of it) or the third-person camera
-    const C = footM('cart'), ccx = Math.min(C.cx, C.x0 + 0.75);
+    if (!v3) {
+    const C = this.footM('cart'), ccx = Math.min(C.cx, C.x0 + 0.75);
     kit.box('metal', '#4a4458', ccx - 0.7, ccx + 0.7, 0.28, 0.74, C.cz - 0.44, C.cz + 0.44);
     kit.box('wood', '#8a5a32', ccx - 0.75, ccx + 0.75, 0.7, 0.78, C.cz - 0.48, C.cz + 0.48);
     for (const sx of [-0.42, 0.42]) kit.box('metal', '#2a2440', ccx + sx - 0.04, ccx + sx + 0.04, 0.28, 0.74, C.cz - 0.45, C.cz + 0.45);
@@ -516,8 +652,9 @@ export class MineScene {
     // the rest of the cart's (not walkable) spot: a buffer stop and a low heap of ore sacks — nothing tall
     kit.box('wood', '#5a3a1e', C.x1 - 0.5, C.x1 - 0.3, 0, 0.45, C.cz - 0.5, C.cz + 0.5);
     for (let k = 0; k < 4; k++) kit.ball('canvas', '#b89a70', C.x1 - 1.0 - k * 0.45, 0.2, C.cz + (rnd(k, 37) - 0.5) * 0.5, 0.24, 0.8);
+    }
     // quest board «ПОРУЧЕНИЯ»
-    const B = footM('board');
+    const B = this.footM('board');
     // a low slanted notice desk (≈1.5 m) instead of a tall roofed board: it stands between the spawn and the hall
     // portal, so it must not cut the sightline; faces its use spot / the spawn (+Z) and carries pinned notices
     const bw = 1.7, bz = B.cz;
@@ -533,36 +670,36 @@ export class MineScene {
     kit.sign('ПОРУЧЕНИЯ', B.cx, 1.78, bz - 0.14, 1.2, Math.PI, { bg: '#7a0f1d', fg: '#ffd23f' });
     for (const sx of [-1, 1]) kit.box('wood', '#6e4626', B.cx + sx * 0.5 - 0.03, B.cx + sx * 0.5 + 0.03, 1.25, 1.62, bz - 0.16, bz - 0.1);
     // hit = the board itself (not its whole floor spot: the spawn is right next to it, the crosshair kept catching it)
-    this.objBoxes.board = new THREE.Box3(new THREE.Vector3(B.cx - 0.9, 0.3, B.cz - 0.3), new THREE.Vector3(B.cx + 0.9, 1.95, B.cz + 0.4));
+    this.setBox('board', B.cx - 0.9, 0.3, B.cz - 0.3, B.cx + 0.9, 1.95, B.cz + 0.4);
     kit.solid(B.x0, B.x1, B.z0, B.z1, Infinity);
     // buyer «СКУПКА»: a stall with a striped awning, crates of ore, scales
-    const S = footM('buyer');
+    const S = this.footM('buyer');
     kit.prop('stall', S.cx, 0, S.cz, Math.PI, 1.35, { solid: false, colors: ['#e0605a', '#f7e8d0'] });
     kit.sign('СКУПКА', S.cx, 3.3, S.cz - 0.3, 2.0, Math.PI, { bg: '#e0605a', fg: '#ffffff' });
     kit.sign('СКУПКА', S.cx, 3.3, S.cz + 0.3, 2.0, 0, { bg: '#e0605a', fg: '#ffffff' });
-    for (const [dx, dz, t] of [[-2.6, -0.2, 'crate'], [2.4, 0.3, 'barrel'], [2.7, -0.6, 'crate']] as const) if (S.cx + dx < OUT_X - 0.5) kit.prop(t, S.cx + dx, 0, S.cz + dz, 0.3, 0.9, { solid: false });
+    for (const [dx, dz, t] of [[-2.6, -0.2, 'crate'], [2.4, 0.3, 'barrel'], [2.7, -0.6, 'crate']] as const) if (S.cx + dx < xMax - 0.5) kit.prop(t, S.cx + dx, 0, S.cz + dz, 0.3, 0.9, { solid: false });
     kit.light(S.cx, 2.4, S.z0 - 0.6, '#ffb35c', 6, 9, 1.4); this.addPool(S.cx, 2.4, S.z0 - 0.6, 6, '#ffb35c', 1.0);
-    this.objBoxes.buyer = new THREE.Box3(new THREE.Vector3(S.x0, 0, S.z0), new THREE.Vector3(S.x1, 2.8, S.z1));
+    this.setBox('buyer', S.x0, 0, S.z0, S.x1, 2.8, S.z1);
     kit.solid(S.x0, S.x1, S.z0, S.z1, Infinity);
     // supplier's lamp post: a tall post with lanterns + a crate of helmets
-    const Lp = footM('lamp');
+    const Lp = this.footM('lamp');
     kit.prop('lamp', Lp.cx - 0.5, 0, Lp.cz, 0, 1, { solid: false });
     kit.prop('crate', Lp.cx + 0.5, 0, Lp.cz, 0.2, 0.8, { solid: false });
     for (let k = 0; k < 3; k++) kit.ball('flat', '#ffcf3a', Lp.cx + 0.3 + k * 0.22, 0.72, Lp.cz - 0.05, 0.12, 0.7);
     kit.light(Lp.cx - 0.5, 2.9, Lp.cz, '#ffcf6a', 6, 9, 1.4); this.addPool(Lp.cx - 0.5, 2.9, Lp.cz, 6.5, '#ffcf6a', 1.0);
-    this.objBoxes.lamp = new THREE.Box3(new THREE.Vector3(Lp.x0, 0, Lp.z0), new THREE.Vector3(Lp.x1, 3.2, Lp.z1));
+    this.setBox('lamp', Lp.x0, 0, Lp.z0, Lp.x1, 3.2, Lp.z1);
     kit.solid(Lp.x0, Lp.x1, Lp.z0, Lp.z1, Infinity);
   }
 
   private buildTop(kit: RoomKit, M: MineModel): void {
     const F = M.F!;
     const col = F.exit >= 0 && F.exit < GW ? F.exit : 3;
-    const x = mx(SIDE + col * CW + CW / 2), z = Z_TOP - 1.6;
+    const x = this.G.mx(SIDE + col * CW + CW / 2), z = Z_TOP - 1.6;
     kit.box('wood', '#8a5a32', x - 1.2, x + 1.2, 0, 0.18, z - 1.0, z + 1.0);
     for (const [dx, dz] of [[-1.1, -0.9], [1.1, -0.9], [-1.1, 0.9], [1.1, 0.9]]) kit.box('wood', '#6e4626', x + dx - 0.1, x + dx + 0.1, 0, CEIL, z + dz - 0.1, z + dz + 0.1);
     kit.box('wood', '#6e4626', x - 1.2, x + 1.2, 2.6, 2.75, z + 0.85, z + 1.0);
     kit.sign('СПУСК ↓', x, 3.15, z + 1.05, 1.8, 0, { bg: '#3a2a5e', fg: '#ffd23f' });
-    this.objBoxes.up = new THREE.Box3(new THREE.Vector3(x - 1.2, 0, z - 1.0), new THREE.Vector3(x + 1.2, 2.6, z + 1.0));
+    this.setBox('up', x - 1.2, 0, z - 1.0, x + 1.2, 2.6, z + 1.0);
     this.upLamp.position.set(x, 2.45, z + 1.0); this.upGlow.position.set(x, 2.2, z + 1.4);
     // the top area behind the last row is rock shelf (not walkable): low boulders
     const lump = rockGeo('round', 1);
@@ -583,28 +720,30 @@ export class MineScene {
       this.root.add(av.root); this.npcs.push(av);
       return av;
     };
-    const nb = footM('npcBuy'), nl = footM('npcLamp');
+    const nb = this.footM('npcBuy'), nl = this.footM('npcLamp');
     mk('mine-buyer', 'Скупщик Гром', { shape: 'bean', color: '#8a6a4a', eyes: 'happy', mouth: 'grin', acc: ['mustache'] }, nb.cx, nb.cz, Math.PI * 0.85);
     mk('mine-supplier', 'Снабженец Кремень', { shape: 'egg', color: '#6a7a8a', eyes: 'dots', acc: ['scarf'], accColor: '#e0605a' }, nl.cx, nl.cz, Math.PI * 0.8);
     this.labels.set('npc:buyer', { name: 'Скупщик Гром', color: '#ffd23f' });
     this.labels.set('npc:lamp', { name: 'Снабженец Кремень', color: '#ffd23f' });
     this.anchors.set('npc:buyer', new THREE.Vector3(nb.cx, 1.75, nb.cz));
     this.anchors.set('npc:lamp', new THREE.Vector3(nl.cx, 1.75, nl.cz));
-    this.objBoxes.npcBuy = new THREE.Box3(new THREE.Vector3(nb.x0 - 0.2, 0, nb.z0 - 0.2), new THREE.Vector3(nb.x1 + 0.2, 1.6, nb.z1 + 0.2));
-    this.objBoxes.npcLamp = new THREE.Box3(new THREE.Vector3(nl.x0 - 0.2, 0, nl.z0 - 0.2), new THREE.Vector3(nl.x1 + 0.2, 1.6, nl.z1 + 0.2));
+    this.setBox('npcBuy', nb.x0 - 0.2, 0, nb.z0 - 0.2, nb.x1 + 0.2, 1.6, nb.z1 + 0.2);
+    this.setBox('npcLamp', nl.x0 - 0.2, 0, nl.z0 - 0.2, nl.x1 + 0.2, 1.6, nl.z1 + 0.2);
   }
 
   /** Ore nuggets / gem crystals on ore and rare stones (stable per floor; hidden with the stone). */
   private buildOre(M: MineModel): void {
     const F = M.F!; this.oreInfo = [];
     let nn = 0, nc = 0;
-    for (let i = 0; i < N_CELLS; i++) {
+    for (let i = 0; i < this.G.N; i++) {
       const c = F.cells[i], s = this.slots[i]; if (!c || !s || !c.r || (c.t !== 'ore' && c.t !== 'rare')) continue;
       const g = rockGeo(KINDS[s.kind].kind, KINDS[s.kind].v);
       const gem = CRYSTAL.has(c.r) || c.t === 'rare' && (c.r === F.gem);
-      const n = gem ? 12 : c.t === 'rare' ? 11 : 10;
+      const n = s.mass ? 7 : gem ? 12 : c.t === 'rare' ? 11 : 10;
+      // rock behind the front (big floor): ore streaks on its face, at eye height (site: «глубже в толще - только прожилки руды»)
+      const tops = s.mass ? g.tops.filter((q) => q.p.y > 0.08 && q.p.y < 0.45) : g.tops;
       for (let k = 0; k < n; k++) {
-        const t = g.tops[Math.floor(rnd(i * 13 + k, 51) * g.tops.length)]; if (!t) continue;
+        const t = tops[Math.floor(rnd(i * 13 + k, 51) * tops.length)]; if (!t) continue;
         // local → stone instance space (the stone matrix scales non-uniformly: place, then orient along the normal)
         _v.copy(t.p).applyMatrix4(s.m);
         _p.copy(t.n).transformDirection(s.m).normalize();
@@ -635,14 +774,14 @@ export class MineScene {
       this.mCap.setColorAt(n, _c); this.mStem.setColorAt(n, _c.set('#ffffff'));
       return n++;
     };
-    for (let i = 0; i < N_CELLS; i++) {
-      const s = this.slots[i], c = F.cells[i]; if (!s || !c || c.t === 'wall') continue;
-      if (rnd(i, 70) > 0.45) continue;
-      const p = cellXY(i), x = mx(p.cx), z = mz(p.cy), a = rnd(i, 71) * 6.28;
-      for (let k = 0; k < 3; k++) { const r = 1.05 + rnd(i, 72 + k) * 0.15, aa = a + k * 0.35; const id = put(x + Math.cos(aa) * r, z + Math.sin(aa) * r, 0.5 + rnd(i, 75 + k) * 0.5, i * 7 + k); if (id >= 0) s.mush.push(id); }
+    for (let i = 0; i < this.G.N; i++) {
+      const s = this.slots[i], c = F.cells[i]; if (!s || !c || c.t === 'wall' || c.t === 'fog') continue;
+      if (rnd(i, 70) > (s.mass ? 0.25 : 0.45)) continue;
+      const p = this.G.cellXY(i), x = this.G.mx(p.cx), z = this.G.mz(p.cy), a = rnd(i, 71) * 6.28;
+      for (let k = 0; k < 3; k++) { const r = (s.mass ? 1.5 : 1.05) + rnd(i, 72 + k) * 0.15, aa = a + k * 0.35; const id = put(x + Math.cos(aa) * r, z + Math.sin(aa) * r, 0.5 + rnd(i, 75 + k) * 0.5, i * 7 + k); if (id >= 0) s.mush.push(id); }
     }
     // along the walls (always visible)
-    for (let k = 0; k < 34; k++) {
+    for (let k = 0; k < (this.G.v3 ? 0 : 34); k++) {
       const side = k % 2 ? 1 : -1, z = Z_TOP + rnd(k, 81) * (Z_BACK - Z_TOP - 1);
       const x = side * (HALL_X + 0.15 + rnd(k, 82) * 0.7);
       for (let j = 0; j < 3; j++) put(x + (rnd(k, 83 + j) - 0.5) * 0.5, z + (rnd(k, 86 + j) - 0.5) * 0.5, 0.5 + rnd(k, 89 + j) * 0.7, 1000 + k * 3 + j);
@@ -664,12 +803,15 @@ export class MineScene {
   setView(M: MineModel, queue: readonly number[] = []): void {
     const st = M.st; if (!st || !M.F) return;
     this.setFloor(M);
-    const key = st.dug + '|' + (st.front || []).join(',') + '|' + (M.dark ? 1 : 0) + '|' + JSON.stringify(st.bp || {}) + '|' + queue.join(',');
+    // big floor: the rock layout follows the digging, the front, the fog and the drills
+    const v3k = this.G.v3 ? `|${st.fl ? st.fl.c.length : 0}|${(st.drills || []).map((d) => d[0] + d[3] + d[4]).join(',')}|${st.fl && st.fl.shaft}` : '';
+    if (this.G.v3) { const sk = st.dug + '|' + (st.front || []).join(',') + v3k; if (sk !== this.slotKey) { this.slotKey = sk; this.buildSlots3(M); } }
+    const key = st.dug + '|' + (st.front || []).join(',') + '|' + (M.dark ? 1 : 0) + '|' + JSON.stringify(st.bp || {}) + '|' + queue.join(',') + v3k + (this.G.v3 ? `|${Math.round(this.badgeAtFeet.x)},${Math.round(this.badgeAtFeet.z)}` : '');
     if (key === this.dugKey) return;
     this.dugKey = key;
     this.queueOf = queue.slice();
     const hidden = new Set<number>();
-    for (let i = 0; i < N_CELLS; i++) {
+    for (let i = 0; i < this.G.N; i++) {
       const s = this.slots[i]; if (!s) continue;
       const im = this.stones[s.kind];
       if (M.dug[i]) { hidden.add(i); im.setMatrixAt(s.inst, _m.makeScale(0, 0, 0)); }
@@ -677,7 +819,7 @@ export class MineScene {
     }
     // stones that can be dug now are lit up (warmer, brighter); the rest of the face is dimmed a little
     const front = new Set(M.dark ? [] : st.front || []);
-    for (let i = 0; i < N_CELLS; i++) {
+    for (let i = 0; i < this.G.N; i++) {
       const s = this.slots[i]; if (!s || M.dug[i]) continue;
       _c.fromArray(this.baseCol, i * 3);
       if (front.has(i)) _c.multiplyScalar(1.1).lerp(WARM, 0.08);
@@ -686,7 +828,7 @@ export class MineScene {
     }
     for (const im of this.stones) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
     // ore glow / pools go out with their stone
-    for (let i = 0; i < N_CELLS; i++) if (this.orePool[i] >= 0) this.poolC[this.orePool[i] * 8 + 7] = hidden.has(i) ? 0 : this.orePoolG[i];
+    for (let i = 0; i < this.G.N; i++) if (this.orePool[i] >= 0) this.poolC[this.orePool[i] * 8 + 7] = hidden.has(i) ? 0 : this.orePoolG[i];
     if (this.oreGlow) {
       const sz = this.oreGlow.geometry.attributes.size as THREE.BufferAttribute;
       for (let k = 0; k < this.oreGlowCell.length; k++) sz.setX(k, hidden.has(this.oreGlowCell[k]) || M.dark ? 0 : this.oreGlowSize[k]);
@@ -695,7 +837,7 @@ export class MineScene {
     this.poolT = 0;
     for (const o of this.oreInfo) { const im = o.mesh ? this.crystal : this.nugget; im.setMatrixAt(o.inst, hidden.has(o.cell) ? _m.makeScale(0, 0, 0) : o.m); }
     this.nugget.instanceMatrix.needsUpdate = this.crystal.instanceMatrix.needsUpdate = true;
-    for (let i = 0; i < N_CELLS; i++) {
+    for (let i = 0; i < this.G.N; i++) {
       const s = this.slots[i]; if (!s || !s.mush.length) continue;
       for (const id of s.mush) {
         if (hidden.has(i)) { this.mStem.setMatrixAt(id, _m.makeScale(0, 0, 0)); this.mCap.setMatrixAt(id, _m); }
@@ -706,15 +848,15 @@ export class MineScene {
     // badges over front stones: yellow «level in a circle» (site: stones with a yellow circle are available)
     for (const b of this.badges) b.visible = false;
     let k = 0, nf = 0;
-    if (!M.dark) for (const i of st.front || []) {
-      const s = this.slots[i], c = M.F.cells[i]; if (!s || !c || M.dug[i]) continue;
+    if (!M.dark) for (const i of this.frontList(st.front || [])) {
+      const s = this.slots[i], c = M.F.cells[i]; if (!s || s.mass || !c || M.dug[i]) continue;
       let b = this.badges[k];
       if (!b) { b = new THREE.Sprite(new THREE.SpriteMaterial({ depthWrite: false, transparent: true })); b.scale.set(0.8, 0.8, 1); b.renderOrder = 5; this.badges.push(b); this.dynamic.add(b); }
       const qk = this.queueOf.indexOf(i);
       (b.material as THREE.SpriteMaterial).map = b.userData.plain = qk >= 0 ? badgeQueueTexture(c.lv, qk + 1) : badgeTexture(c.lv, true); (b.material as THREE.SpriteMaterial).needsUpdate = true;
       b.scale.set(0.8, 0.8, 1); b.center.set(0.5, 0.5); b.renderOrder = 5; b.userData.wide = false; b.userData.priced = null;
-      const p = cellXY(i); b.position.set(mx(p.cx), s.h + 0.45, mz(p.cy)); b.visible = true; b.userData.i = i; b.userData.y0 = s.h + 0.45;
-      this.fronts.setMatrixAt(nf++, _m.makeTranslation(mx(p.cx), 0.03, mz(p.cy)));
+      const p = this.G.cellXY(i); b.position.set(this.G.mx(p.cx), s.h + 0.45, this.G.mz(p.cy)); b.visible = true; b.userData.i = i; b.userData.y0 = s.h + 0.45;
+      this.fronts.setMatrixAt(nf++, _m.makeTranslation(this.G.mx(p.cx), 0.03, this.G.mz(p.cy)));
       // the buyer price rides on the badge itself (a tag to its right, one texture): 0 extra draw calls, never collides with it
       if (c.r && qk < 0) { const band = valueCoins(st.bp?.[c.r], st.bp); if (band) b.userData.priced = badgePriceTexture(c.lv, band, st.bp![c.r]); }
       k++;
@@ -722,10 +864,17 @@ export class MineScene {
     this.fronts.count = nf; this.fronts.instanceMatrix.needsUpdate = true;
     this.rebuildColliders(M);
   }
+  /** Where the badges were laid out last (big floor: the BADGE_MAX front stones nearest to the player get one). */
+  private badgeAtFeet = new THREE.Vector3(1e9, 0, 1e9);
+  private frontList(front: readonly number[]): readonly number[] {
+    if (!this.G.v3 || front.length <= BADGE_MAX) return front;
+    const G = this.G, f = this.badgeAtFeet, d = (i: number) => { const p = G.cellXY(i); return (G.mx(p.cx) - f.x) ** 2 + (G.mz(p.cy) - f.z) ** 2; };
+    return front.slice().sort((a, b) => d(a) - d(b)).slice(0, BADGE_MAX);
+  }
   private restoreMush(i: number, id: number): void {
     // recompute the original mushroom matrix (deterministic, same as buildMushrooms)
-    const s = this.slots[i]!, k = s.mush.indexOf(id), p = cellXY(i), x = mx(p.cx), z = mz(p.cy), a = rnd(i, 71) * 6.28;
-    const r = 1.05 + rnd(i, 72 + k) * 0.15, aa = a + k * 0.35, sc = 0.5 + rnd(i, 75 + k) * 0.5;
+    const s = this.slots[i]!, k = s.mush.indexOf(id), p = this.G.cellXY(i), x = this.G.mx(p.cx), z = this.G.mz(p.cy), a = rnd(i, 71) * 6.28;
+    const r = (s.mass ? 1.5 : 1.05) + rnd(i, 72 + k) * 0.15, aa = a + k * 0.35, sc = 0.5 + rnd(i, 75 + k) * 0.5;
     _q.setFromAxisAngle(_up, rnd(i * 7 + k, 1) * 6.28);
     _m.compose(_p.set(x + Math.cos(aa) * r, 0, z + Math.sin(aa) * r), _q, _s.set(sc, sc, sc));
     this.mStem.setMatrixAt(id, _m); this.mCap.setMatrixAt(id, _m);
@@ -737,14 +886,24 @@ export class MineScene {
       for (const y of [y0, y1]) for (const z of [z0, z1]) for (const x of [x0, x1]) pos.push(x, y, z);
       idx.push(o, o + 1, o + 3, o, o + 3, o + 2, o + 4, o + 6, o + 7, o + 4, o + 7, o + 5, o, o + 4, o + 5, o, o + 5, o + 1, o + 2, o + 3, o + 7, o + 2, o + 7, o + 6, o, o + 2, o + 6, o, o + 6, o + 4, o + 1, o + 5, o + 7, o + 1, o + 7, o + 3);
     };
-    for (let i = 0; i < N_CELLS; i++) {
+    for (let i = 0; i < this.G.N; i++) {
       const s = this.slots[i]; if (!s || M.dug[i]) continue;
-      const p = cellXY(i), x = mx(p.cx), z = mz(p.cy);
-      box(x - 1.0, x + 1.0, 0, Math.min(CEIL, s.h * 0.9), z - 1.0, z + 1.0);
+      const p = this.G.cellXY(i), x = this.G.mx(p.cx), z = this.G.mz(p.cy);
+      // rock mass of a big floor fills its cell (the camera never looks through a tunnel wall)
+      const r = s.mass ? 1.2 : 1.0;
+      box(x - r, x + r, 0, Math.min(CEIL, s.h * 0.9), z - r, z + r);
     }
+    if (this.G.v3) {
+      // ceiling + the rock ring round the floor
+      const G = this.G, x0 = G.mx(0), x1 = G.mx(G.W), z0 = G.mz(0), z1 = G.mz(G.H), e = G.PADM;
+      box(x0 - 2, x1 + 2, CEIL - 0.2, CEIL + 1, z0 - 2, z1 + 2);
+      box(x0 - 2, x0 + e, 0, CEIL, z0 - 2, z1 + 2); box(x1 - e, x1 + 2, 0, CEIL, z0 - 2, z1 + 2);
+      box(x0, x1, 0, CEIL, z0 - 2, z0 + e); box(x0, x1, 0, CEIL, z1 - e, z1 + 2);
+    } else {
     box(-OUT_X - 1, OUT_X + 1, CEIL - 0.2, CEIL + 1, Z_TOP - 10, Z_WALL + 2);
     for (const sx of [-1, 1]) box(sx * OUT_X - (sx > 0 ? 0 : 1), sx * OUT_X + (sx > 0 ? 1 : 0), 0, CEIL, Z_TOP - 10, Z_WALL + 2);
     box(-OUT_X, OUT_X, 0, CEIL, Z_WALL - 0.1, Z_WALL + 1);
+    }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeBoundingSphere(); g.computeBoundingBox();
     this.camCol.geometry.dispose(); this.camCol.geometry = g;
@@ -753,10 +912,10 @@ export class MineScene {
   /* ================================================================ queries */
 
   /** Can the player stand at room point (x, z)? */
-  free(dug: ArrayLike<number>, x: number, z: number): boolean { return standable(dug, px(x), py(z), 4); }
+  free(dug: ArrayLike<number>, x: number, z: number): boolean { return this.G.standable(dug, this.G.px(x), this.G.py(z), 4); }
   /** World-space AABB of stone i (for the crosshair). */
   stoneBox(i: number, out = new THREE.Box3()): THREE.Box3 {
-    const p = cellXY(i), x = mx(p.cx), z = mz(p.cy), s = this.slots[i];
+    const p = this.G.cellXY(i), x = this.G.mx(p.cx), z = this.G.mz(p.cy), s = this.slots[i];
     return out.set(_v.set(x - 1.1, 0, z - 1.1), _p.set(x + 1.1, s ? Math.min(CEIL, s.h) : STONE_H, z + 1.1));
   }
   stoneHeight(i: number): number { const s = this.slots[i]; return s ? s.h : STONE_H; }
@@ -805,8 +964,8 @@ export class MineScene {
     if (aimI !== this.hlI) this.outlineStone(aimI);
     // the own stone: a ring on the floor at the dig spot
     if (st && M.myI >= 0 && !M.dug[M.myI]) {
-      const sp = digSpot(M.dug, M.myI);
-      if (sp != null) { const c = centerOf(sp); this.ring.position.set(mx(c.x), 0.02, mz(c.y)); this.ring.visible = true; this.ring.scale.setScalar(1 + Math.sin(t * 4) * 0.06); }
+      const sp = this.G.digSpot(M.dug, M.myI);
+      if (sp != null) { const c = this.G.centerOf(sp); this.ring.position.set(this.G.mx(c.x), 0.02, this.G.mz(c.y)); this.ring.visible = true; this.ring.scale.setScalar(1 + Math.sin(t * 4) * 0.06); }
     } else this.ring.visible = false;
     this.updateEstimateSign(M, now, aimI >= 0 ? aimI : this.lookedAt(_f));
     // badges bob (price glyphs bob with their badge)
@@ -815,23 +974,28 @@ export class MineScene {
     // progress bars of stones being dug («здоровье» камня: full at start, empty at the end)
     let k = 0;
     if (st && st.bl) for (const key in st.bl) {
-      const i = +key; if (M.dug[i]) continue;
+      const i = +key; if (M.dug[i] || i >= this.G.N) continue;
       if (dark && i !== M.myI) continue;
+      if (this.G.v3 && i !== M.myI) { const c = this.G.cellXY(i); if (Math.hypot(this.G.mx(c.cx) - feet.x, this.G.mz(c.cy) - feet.z) > BAR_NEAR) continue; }
       const pr = stoneProgress(st, i, now); if (!pr) continue;
-      let b = this.bars[k];
-      if (!b) b = this.makeBar(k);
-      const p = cellXY(i), rem = 1 - pr.p, mine = i === M.myI;
-      b.g.visible = true; b.i = i;
-      b.g.position.set(mx(p.cx), this.stoneHeight(i) + (this.badgeAt(i) ? 1.0 : 0.45), mz(p.cy));
-      b.g.quaternion.copy(camera.quaternion);
-      b.g.scale.setScalar(mine ? 1.5 : 1.15);
-      b.fill.scale.x = Math.max(0.001, rem); b.fill.position.x = -0.5 + rem / 2;
-      b.mat.color.set(hp(rem));
+      if (k >= BAR_MAX) break;
+      const p = this.G.cellXY(i), rem = 1 - pr.p, sc = i === M.myI ? 1.5 : 1.15;
+      _p.set(this.G.mx(p.cx), this.stoneHeight(i) + (this.badgeAt(i) ? 1.0 : 0.45), this.G.mz(p.cy));
+      this.barBg.setMatrixAt(k, _m.compose(_p, camera.quaternion, _s.set(sc, sc, sc)));
+      // the fill shrinks towards the left end of the plate: shift it along the camera's right axis
+      _v.set(1, 0, 0).applyQuaternion(camera.quaternion).multiplyScalar((-0.5 + rem / 2) * sc);
+      _p.add(_v);
+      this.barFill.setMatrixAt(k, _m.compose(_p, camera.quaternion, _s.set(Math.max(0.001, rem) * sc, sc, sc)));
+      this.barFill.setColorAt(k, _c.set(hp(rem)));
       k++;
     }
-    for (let j = k; j < this.bars.length; j++) this.bars[j].g.visible = false;
+    this.barBg.count = k; this.barFill.count = k;
+    if (k) { this.barBg.instanceMatrix.needsUpdate = true; this.barFill.instanceMatrix.needsUpdate = true; if (this.barFill.instanceColor) this.barFill.instanceColor.needsUpdate = true; }
     // up-cage glows when the floor is cleared
-    const cleared = st ? M.stonesLeft() === 0 : false;
+    const cleared = st && !this.G.v3 ? M.stonesLeft() === 0 : false;
+    this.upLamp.visible = !this.G.v3;
+    // big floor: badges follow the player (the nearest BADGE_MAX front stones get one)
+    if (this.G.v3 && st && Math.hypot(feet.x - this.badgeAtFeet.x, feet.z - this.badgeAtFeet.z) > 6) { this.badgeAtFeet.set(feet.x, 0, feet.z); this.setView(M, this.queueOf); }
     this.upGlow.intensity = cleared ? 6 + Math.sin(t * 3) * 1.5 : 0;
     (this.upLamp.material as THREE.MeshBasicMaterial).color.set(cleared ? '#ffe27a' : '#5a4a3a');
     this.updateActors(dt, t, M, now, feet, opts.hideOthers || dark);
@@ -885,7 +1049,7 @@ export class MineScene {
     const sign = this.sign;
     if (!this.econOn || !M.st || !M.F || aimI < 0 || M.dug[aimI] || M.dark) { if (sign) sign.visible = false; return; }
     const cell = M.F.cells[aimI]; if (!cell) { if (sign) sign.visible = false; return; }
-    const p = cellXY(aimI), x = mx(p.cx), z = mz(p.cy), y = this.stoneHeight(aimI) + (this.badgeAt(aimI) ? 1.28 : 0.8);
+    const p = this.G.cellXY(aimI), x = this.G.mx(p.cx), z = this.G.mz(p.cy), y = this.stoneHeight(aimI) + (this.badgeAt(aimI) ? 1.28 : 0.8);
     const d = Math.hypot(x - this.lastCam.x, y - this.lastCam.y, z - this.lastCam.z);
     const alpha = d < 10.5 ? 1 : 1 - (d - 10.5) / 1.5;
     if (alpha <= 0.02) { if (sign) sign.visible = false; return; }
@@ -923,15 +1087,7 @@ export class MineScene {
     s.visible = true;
   }
   private badgeAt(i: number): boolean { for (const b of this.badges) if (b.visible && b.userData.i === i) return true; return false; }
-  private makeBar(k: number) {
-    const g = new THREE.Group(); g.renderOrder = 6;
-    const bg = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 0.2), new THREE.MeshBasicMaterial({ color: '#15122e', depthTest: false, transparent: true }));
-    const mat = new THREE.MeshBasicMaterial({ color: '#5fd35f', depthTest: false, transparent: true });
-    const fill = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.13), mat); fill.position.z = 0.001;
-    bg.renderOrder = 6; fill.renderOrder = 7;
-    g.add(bg, fill); this.dynamic.add(g);
-    const b = { g, fill, mat, i: -1 }; this.bars[k] = b; return b;
-  }
+
 
   /* ---------------------------------------------------------------- others */
   private appOf(login: string, M: MineModel) {
@@ -978,24 +1134,26 @@ export class MineScene {
       const digging = new Set<string>();
       for (const d of M.diggers()) {
         digging.add(d.login);
-        const c = cellXY(d.i), sx = mx(c.cx), sz = mz(c.cy);
+        const c = this.G.cellXY(d.i), sx = this.G.mx(c.cx), sz = this.G.mz(c.cy);
         // the site draws them at the dig spot (3 m away in 3D): pull them to the stone's face, keep the site's spread
-        let x = mx(d.x), z = mz(d.y);
+        let x = this.G.mx(d.x), z = this.G.mz(d.y);
         const dx0 = x - sx, dz0 = z - sz, L0 = Math.hypot(dx0, dz0) || 1, slot = this.slots[d.i];
         const rr = (slot ? slot.m.elements[0] ** 2 + slot.m.elements[2] ** 2 : 1) ** 0.5 + 0.42;
         if (L0 > rr) { x = sx + dx0 / L0 * rr; z = sz + dz0 / L0 * rr; }
-        want.push({ l: d.login, x, z, dig: d.i, moving: 0, face: Math.atan2(-(mx(c.cx) - x), -(mz(c.cy) - z)) });
+        want.push({ l: d.login, x, z, dig: d.i, moving: 0, face: Math.atan2(-(this.G.mx(c.cx) - x), -(this.G.mz(c.cy) - z)) });
       }
       for (const [l, o] of M.others) {
         if (digging.has(l)) continue;
         const p = M.posOf(o, now, this.tp), q = M.standPt(p);
         const moving = p.x !== o.tx || p.y !== o.ty ? 1 : 0;
-        want.push({ l, x: mx(q.x), z: mz(q.y), dig: -1, moving, face: moving ? Math.atan2(-(o.tx - o.x), -(o.ty - o.y)) : null });
+        want.push({ l, x: this.G.mx(q.x), z: this.G.mz(q.y), dig: -1, moving, face: moving ? Math.atan2(-(o.tx - o.x), -(o.ty - o.y)) : null });
       }
       want.sort((a, b) => Math.hypot(a.x - feet.x, a.z - feet.z) - Math.hypot(b.x - feet.x, b.z - feet.z));
-      const cap = this.quality <= 0 ? 14 : this.quality === 1 ? 24 : 40;
+      // a big floor spreads the crowd over many tunnels: only the nearest ones (the rest is behind rock anyway)
+      const v3 = this.G.v3, cap = v3 ? (this.quality <= 0 ? 6 : this.quality === 1 ? 9 : 12) : this.quality <= 0 ? 14 : this.quality === 1 ? 24 : 40;
       for (let j = 0; j < want.length && j < cap; j++) {
         const w = want[j];
+        if (v3 && Math.hypot(w.x - feet.x, w.z - feet.z) > ACTOR_NEAR) break;
         let a = this.actors.get(w.l);
         const v = M.lookOf(w.l), key = JSON.stringify([v && v.lk, v && v.g, v && v.gh]);
         if (a && a.key !== key) { a.av.setAppearance(this.appOf(w.l, M)); a.key = key; a.bone = null; this.labels.set(w.l, { name: (v && v.n) || w.l, level: (v && v.lv) || undefined }); }
@@ -1024,7 +1182,7 @@ export class MineScene {
           if (a.swingT >= a.tempo) { a.swingT -= a.tempo; a.av.play('swing'); }
         }
         if (!a.bone || (this.frame & 31) === 0) a.bone = MineScene.attachPick(a.av.root, a.pick);
-        a.pick.visible = d < 22;
+        a.pick.visible = d < (this.G.v3 ? PICK_NEAR : 22);
         a.anchor.set(x, d >= 0.9 ? a.av.headTop + 0.25 : -100, z); this.anchors.set(a.key2, a.anchor);
       }
     }
@@ -1057,7 +1215,7 @@ export class MineScene {
     const k = 1 - Math.exp(-dt * 4);
     for (let j = 0; j < n; j++) {
       const a = A[j];
-      if (a.dig >= 0 || !standable(M.dug, px(a.x + a.tox), py(a.z + a.toz), 2)) { a.tox = 0; a.toz = 0; }
+      if (a.dig >= 0 || !this.G.standable(M.dug, this.G.px(a.x + a.tox), this.G.py(a.z + a.toz), 2)) { a.tox = 0; a.toz = 0; }
       a.ox += (a.tox - a.ox) * k; a.oz += (a.toz - a.oz) * k;
     }
   }
@@ -1071,7 +1229,7 @@ export class MineScene {
   /* ---------------------------------------------------------------- debris */
   /** Stone i was dug: rock chips fly (colour of the rock and of its ore). */
   burst(i: number, M: MineModel): void {
-    const c = M.F && M.F.cells[i]; const p = cellXY(i), x = mx(p.cx), z = mz(p.cy);
+    const c = M.F && M.F.cells[i]; const p = this.G.cellXY(i), x = this.G.mx(p.cx), z = this.G.mz(p.cy);
     const pos = this.parts.geometry.attributes.position as THREE.BufferAttribute, col = this.parts.geometry.attributes.color as THREE.BufferAttribute;
     const NP = this.partLife.length;
     for (let k = 0; k < 24; k++) {
@@ -1101,7 +1259,7 @@ export class MineScene {
   }
 
   /** Room-space point of an entrance object's use spot (FOOT at) or the dig spot of a stone. */
-  static digSpotM(M: MineModel, i: number): THREE.Vector3 | null { const sp = digSpot(M.dug, i); if (sp == null) return null; const c = centerOf(sp); return new THREE.Vector3(mx(c.x), 0, mz(c.y)); }
+  static digSpotM(M: MineModel, i: number): THREE.Vector3 | null { const G = M.G, sp = G.digSpot(M.dug, i); if (sp == null) return null; const c = G.centerOf(sp); return new THREE.Vector3(G.mx(c.x), 0, G.mz(c.y)); }
   static ZONE_M = { x0: mx(ZONE[0]), x1: mx(ZONE[2]), z0: mz(ZONE[1]), z1: mz(ZONE[3]) };
   static readonly YB = YB;
 
@@ -1121,7 +1279,7 @@ export class MineScene {
     for (const b of this.badges) (b.material as THREE.Material).dispose();
     if (this.sign) (this.sign.material as THREE.Material).dispose();
     this.signTexture?.dispose();
-    for (const b of this.bars) { b.mat.dispose(); for (const c of b.g.children) { const m = c as THREE.Mesh; m.geometry.dispose(); if (m.material !== b.mat) (m.material as THREE.Material).dispose(); } }
+    for (const im of [this.barBg, this.barFill]) { im.geometry.dispose(); (im.material as THREE.Material).dispose(); im.dispose(); }
     for (const m of this.pickMats) m.dispose();
     this.fronts.dispose(); this.fronts.geometry.dispose(); (this.fronts.material as THREE.Material).dispose(); for (const l of this.hallLights) l.dispose();
     this.heroLight.dispose(); this.upGlow.dispose(); this.hemi.dispose(); this.fill.dispose();

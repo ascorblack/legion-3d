@@ -21,7 +21,8 @@ import type { Registry, RoomDef, RoomContext, RoomScene, Interactable } from '..
 import { MineClient, type MineApi, type MineBus } from './net';
 import { MineScene, footM } from './scene';
 import { MineHud } from './hud';
-import { N_CELLS, REACH, mx, mz, px, py, spawnPt, frontOfObj, cellXY, type Pt } from './geo';
+import { REACH, spawnPt, type Pt } from './geo';
+import type { MineGeom } from './geo3';
 import { TX, blockTitle, gotText, type Burst } from './state';
 import {
   TabSignals, domTabEnv, ReachRing, StepGuard, RenderThrottle, registerMineAfkSettings, afkOn, mineStatus, alertOf, chimeEvents,
@@ -88,15 +89,21 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   });
   const M = client.model;
   const burstText = (b: Burst) => { const cell = M.F && M.F.cells[b.i]; return burstLoot(b, cell ? cell.r : null); };
-  const spawn = spawnPt(login);
+  // the site sends the classic spawn before it knows the floor (enter); a big floor puts the hero into the lift hall (pos3)
+  let spawn = spawnPt(login);
   let entryErr = '';
   const offErr = client.on((e) => { if (e.type === 'error') entryErr = e.text; });
   const ok = await client.enter(spawn);
   offErr();
   if (!ok || !M.st) { client.close(); throw new Error(entryErr || 'Шахта не открылась'); }
+  // geometry of the floor on show (classic 7 × 12 or «Шахта 3.0»): every px ⇄ metre mapping goes through it
+  const G = (): MineGeom => M.G;
+  const mx = (x: number) => M.G.mx(x), mz = (y: number) => M.G.mz(y), px = (X: number) => M.G.px(X), py = (Z: number) => M.G.py(Z);
+  const cellXY = (i: number) => M.G.cellXY(i);
+  if (G().v3) { spawn = G().spawn(login); client.syncPos(spawn); }
 
   const style = (ctx.player.app && ctx.player.app.styleId) || 'cats';
-  const scene = new MineScene({ quality: ctx.quality(), style, login });
+  const scene = new MineScene({ quality: ctx.quality(), style, login, geom: G() });
   scene.setView(M, client.queue());
   let floorN: number | null = M.st ? M.st.n : null;
 
@@ -150,8 +157,15 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   const offEv = client.on((e) => {
     if (e.type === 'state') {
       scene.setView(M, client.queue());
+      syncStones();
       if (e.newFloor) {
         fogDark = null; refreshBoxes();
+        // a new floor of another size / kind: a hero standing in rock goes to the lift hall / the entrance (site pos3)
+        if (geomKey !== geomKeyOf()) {
+          geomKey = geomKeyOf();
+          const f = feetPx();
+          if (!scene.free(M.dug, ctx.player.x, ctx.player.z)) { const sp = G().spawn(login), ctl = core0.controller && core0.controller(); if (ctl && typeof ctl.teleport === 'function') ctl.teleport(mx(sp.x), mz(sp.y)); void f; }
+        }
         // a new depth layer (every 5 floors, site mine-biome.js): one banner line
         const n = M.st ? M.st.n : null, ban = n != null ? layerBanner(floorN, n) : ''; floorN = n;
         if (ban) hud.tip(ban);
@@ -257,9 +271,8 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
 
   /* ---------------------------------------------------------------- interactables */
   const unsubs: Unsub[] = [];
-  const boxes: THREE.Box3[] = [];
   const feetPx = (): Pt => ({ x: px(ctx.player.x), y: py(ctx.player.z) });
-  const refreshBoxes = () => { for (let i = 0; i < N_CELLS; i++) scene.stoneBox(i, boxes[i]); };
+  const refreshBoxes = () => { for (const [i, s] of stoneIts) scene.stoneBox(i, s.box); };
   // the prompt line of the aimed stone (#8): title + the econ estimate (econ.ts), re-estimated at most every 2 s or when the
   // view / own stone / queue changes — the getter is read every frame, so the string is cached (no per-frame work)
   const lab = { i: -1, at: 0, snap: -1, my: -2, raw: null as number[] | null, text: '' };
@@ -279,20 +292,31 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   let shiftE = false;
   const onShiftE = (e: KeyboardEvent) => { if (e.code === 'KeyE') shiftE = e.shiftKey; };
   document.addEventListener('keydown', onShiftE, true);
-  for (let i = 0; i < N_CELLS; i++) {
-    boxes.push(scene.stoneBox(i));
+  // one interactable per stone: every cell of the classic floor (enabled while it is a front stone); on a big floor only the
+  // front stones (hundreds of cells, a few dozen diggable) — re-synced with every view
+  const stoneIts = new Map<number, { off: Unsub; box: THREE.Box3 }>();
+  const addStone = (i: number) => {
+    const box = scene.stoneBox(i);
     const it: Interactable = {
       id: 'mine:stone:' + i,
       icon: '⛏',
       get label() { return stoneLabel(i); },
-      hit: boxes[i], reach: 3.4,
+      hit: box, reach: 3.4,
       enabled: () => !M.dug[i] && M.isFront(i) && !M.dark && !modalOn,
       use: () => { const q = shiftE; shiftE = false; void (q ? queueAt(i) : digAt(i)); },
       // the scene outlines the aimed stone's own shape (scene.update → outlineStone), not the hit box
       highlight: () => { /* drawn by the scene */ },
     } as Interactable;
-    unsubs.push(ctx.interact.add(it));
-  }
+    stoneIts.set(i, { off: ctx.interact.add(it), box });
+  };
+  const syncStones = () => {
+    const want = new Set<number>(G().v3 ? (M.st && M.st.front) || [] : Array.from({ length: G().N }, (_, i) => i));
+    for (const [i, s] of stoneIts) if (!want.has(i)) { s.off(); stoneIts.delete(i); }
+    for (const i of want) if (i >= 0 && i < G().N) { const s = stoneIts.get(i); if (s) scene.stoneBox(i, s.box); else addStone(i); }
+  };
+  const geomKeyOf = () => (G().v3 ? `${G().w}x${G().h}:${G().hallBox.join(',')}` : 'v1');
+  let geomKey = geomKeyOf();
+  syncStones();
   /** Shift+E: queue stone i after the current one (only with the site's fx.q and while digging), else a normal dig. */
   const queueAt = async (i: number) => {
     const cc = cellXY(i);
@@ -302,18 +326,18 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   };
   const digAt = async (i: number) => {
     const f = feetPx(), cc = cellXY(i);
-    if (MineClient.distTo(i, f) > REACH) { hud.tip('Подойди к камню вплотную — встань на расчищенную клетку рядом', true); return; }
+    if (client.dist(i, f) > REACH) { hud.tip('Подойди к камню вплотную — встань на расчищенную клетку рядом', true); return; }
     await client.dig(i, f, { x: cc.cx, y: cc.cy });
     hud.render();
   };
   const obj = (id: string, box: THREE.Box3 | undefined, label: () => string, use: () => void, reach = 3.2, proximity = true) => {
     if (!box) return;
-    unsubs.push(ctx.interact.add({ id: 'mine:' + id, get label() { return label(); }, hit: box, reach, proximity, enabled: () => !modalOn, use }));
+    unsubs.push(ctx.interact.add({ id: 'mine:' + id, get label() { return label(); }, hit: box, reach, proximity, enabled: () => !modalOn && !(id === 'up' && G().v3), use }));
   };
   const openNpc = (kind: 'buy' | 'lamp') => {
     if (M.myI >= 0) client.leaveRock();
     client.flushGo();
-    npcAt = frontOfObj(kind === 'buy' ? 'buyer' : 'lamp', login); npcOn = false;
+    npcAt = G().frontOfObj(kind === 'buy' ? 'buyer' : 'lamp', login); npcOn = false;
     hud.open(kind);
   };
   let npcAt: Pt | null = null, npcOn = false;
@@ -328,13 +352,14 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       hud.tip('Герой отложит кирку и пойдёт к скупщику — нажми «Скупщик» ещё раз', true);
       return;
     }
-    const to = frontOfObj('buyer', login), plan = walkPlan(M.dug, feetPx(), to);
+    const to = G().frontOfObj('buyer', login), plan = walkPlan(M.dug, feetPx(), to, G());
     openNpc('buy');
     const f0 = feetPx();
-    if (plan && plan.length && Math.hypot(f0.x - to.x, f0.y - to.y) > 40 && ctlOf()) walk.startPx(plan);
+    if (plan && plan.length && Math.hypot(f0.x - to.x, f0.y - to.y) > 40 && ctlOf()) walk.startPx(plan, G());
   };
   // the lift and the board stand right next to the spawn: aim only (E at the spawn must not leave the mine)
-  obj('lift', scene.objBoxes.lift, () => 'В город — подъёмник', () => ctx.exit(), 3.2, false);
+  // big floor: the lift is the floors' lift (site: «Лифт - этажи, сбор на следующий») — its card; the classic one goes to town
+  obj('lift', scene.objBoxes.lift, () => (G().v3 ? `Лифт — ${M.liftChip()}` : 'В город — подъёмник'), () => { if (G().v3) hud.open('lift'); else ctx.exit(); }, 3.2, false);
   obj('buyer', scene.objBoxes.buyer, () => `${TX.seller} — сдать руду`, () => openNpc('buy'));
   obj('npcBuy', scene.objBoxes.npcBuy, () => `${TX.seller} — сдать руду`, () => openNpc('buy'));
   const supLabel = () => (M.pickOn ? `${TX.sup} — кирки, рудная сумка, каска` : `${TX.lampNpc} — каска шахтёра`);
@@ -381,12 +406,12 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     // walked away from the own stone → the hero puts the pickaxe down (site leaveRock; the game also stops by go)
     // (only after the hero stood at it: a stone given by the queue or dug from the city does not stop by itself — the site
     // walks the hero there instead; here the player walks or just lets him work)
-    if (leave.check(M.myI, M.myI >= 0 && !!M.dug[M.myI], M.myI >= 0 ? MineClient.distTo(M.myI, f) : 0)) client.leaveRock();
+    if (leave.check(M.myI, M.myI >= 0 && !!M.dug[M.myI], M.myI >= 0 ? client.dist(M.myI, f) : 0)) client.leaveRock();
     // auto-walk to the buyer (HUD button): own movement keys cancel it
     if (walk.active) { const c = ctlOf(); if (c) walk.frame(c, ctx.player.x, ctx.player.z, dt); else walk.cancel(); }
     // reach ring: gold → red towards the limit, «Ещё шаг…» once per approach to the edge
     {
-      const my = myStone(M), d = my >= 0 ? MineClient.distTo(my, f) : 0, k = reachK(d);
+      const my = myStone(M), d = my >= 0 ? client.dist(my, f) : 0, k = reachK(d);
       const on = afk.guard && my >= 0 && d <= REACH_LIMIT;
       if (on && ringI !== my) { const cc = cellXY(my); ringI = my; ringX = mx(cc.cx); ringZ = mz(cc.cy); }   // once per stone
       if (on) ring.update(true, ringX, ringZ, k, t, !moved || REDUCED); else ring.update(false, 0, 0, 0, t, true);
@@ -400,7 +425,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       if (d <= NPC_FAR) npcOn = true; else if (npcOn) { hud.close(); npcAt = null; }
     }
     // own digging animation
-    digNow = M.myI >= 0 && !M.dug[M.myI] && MineClient.distTo(M.myI, f) <= REACH + 30 && !moved;
+    digNow = M.myI >= 0 && !M.dug[M.myI] && client.dist(M.myI, f) <= REACH + 30 && !moved;
     const fp = ctx.rig.mode === 'fp';
     fpPick.visible = digNow && fp;
     // the own weapon / shield step aside while the pickaxe is in the paws: through the shared state (core decides the
@@ -426,7 +451,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       if (fp && swingT >= T) swingT -= T;
     } else { tpPick.visible = false; swingT = 0.4; }
     // HUD: the progress bar and «ещё N мин» move by themselves, re-render twice a second
-    hudT += dt; if (hudT > 0.5) { hudT = 0; hud.render(); }
+    hudT += dt; if (hudT > 0.5) { hudT = 0; hud.render(); hud.minimap(G().v3 ? G().cellAt(f.x, f.y) : -1); }
     hud.update(dt, project);
   });
 
@@ -464,15 +489,25 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   };
   let sweepT = 0;
 
-  const roomScene: RoomScene & { combat: RoomCombat; afk: object } = {
+  const roomScene: RoomScene & { combat: RoomCombat; afk: object; mine: () => object } = {
     combat,
     // dev / screenshot handles (not in the contract)
     afk: { guard, throttle, tab, ring, walk },
+    /** Dev / e2e: a read-only look at the floor on show (no actions). */
+    mine: () => ({ v3: G().v3, w: G().w, h: G().h, n: M.st ? M.st.n : null, front: M.st ? (M.st.front || []).length : 0,
+      vis: M.F && M.F.vis ? M.F.vis.reduce((a, b) => a + b, 0) : null, dug: M.dug.reduce((a, b) => a + b, 0), stones: stoneIts.size,
+      cell: G().cellAt(feetPx().x, feetPx().y), inHall: G().inZone(G().cellAt(feetPx().x, feetPx().y)), lift: M.liftChip(), others: M.others.size }),
     root: scene.root,
     free: (x, z) => scene.free(M.dug, x, z),
     groundAt: () => 0,
     // look towards the hall portal (the cart would fill the first view straight ahead)
-    spawn: { x: mx(spawn.x), z: mz(spawn.y), face: (() => { const e = M.F && M.F.entry >= 0 ? M.F.entry : 80, ex = mx(cellXY(e).cx), ez = mz(cellXY(e).cy); return Math.atan2(-(ex - mx(spawn.x)), -(ez - mz(spawn.y))); })() },
+    spawn: { x: mx(spawn.x), z: mz(spawn.y), face: (() => {
+      // classic: towards the hall portal; big floor: towards the lift cage (the site's view of the hall)
+      let ex: number, ez: number;
+      if (G().v3) { const L = G().FOOT.find((q) => q.k === 'lift')!.r; ex = mx((L[0] + L[2]) / 2); ez = mz(L[3]); }
+      else { const e = M.F && M.F.entry >= 0 ? M.F.entry : 80; ex = mx(cellXY(e).cx); ez = mz(cellXY(e).cy); }
+      return Math.atan2(-(ex - mx(spawn.x)), -(ez - mz(spawn.y)));
+    })() },
     colliders: scene.colliders,
     update(dt, t, camera) {
       if (fogDark !== M.dark) { fogDark = M.dark; applyFog(); }
@@ -486,7 +521,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     dispose() {
       emitStatus(false); offAfk();
       afterFns.length = 0; miners.clear();
-      offFrame(); offEv(); offChatTab(); offKey(); for (const u of unsubs) u();
+      offFrame(); offEv(); offChatTab(); offKey(); for (const u of unsubs) u(); for (const s of stoneIts.values()) s.off(); stoneIts.clear();
       document.removeEventListener('keydown', onShiftE, true); walk.cancel();
       client.close(); hud.dispose();
       if (vmHidden && core.vm) core.vm.setVisible(true);

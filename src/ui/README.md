@@ -107,3 +107,20 @@ commands /help /mods /mod /unmod /mute /ban /unban (never sent to the feed). One
 - «⛏ Шахта» tab (dock and fallback) and the fallback City panel: `Moderator` (requests) + `ModUi` (menu / window in a
   Shadow DOM host `#l3d-chatmod`: keyboard, Esc / click outside close, input modal `chat:mod` = pointer free, gameplay off).
 - Tests: `test/chat-mod.test.ts`; parity against the real site module: `.local/chatmod/parity.mjs` (needs a saved site copy).
+
+### Личные сообщения и друзья (site 29.10: `window.LGDm`, `window.LGFriends`) — `dm.ts`, `friends-chip.ts`, `features/friends.ts`
+The site draws the DMs itself (per-nick tabs, history `GET /api/dm?with=`, send `POST /api/dm/say`, SSE «dm») inside the
+«Личные» tab of the City chat (`.cy-chat-dmx`), so the docked chat shows them in the City and in the mine (the mine tab is ours
+and hides the block, `.l3d-mine-on`). We only add: look (`SITE_CHAT_CSS`), Enter / T focusing the DM field, `Esc` / send leave it
+(gameplay back); the nick menu of OUR mine tab (right button / long press: Ответить · ✉ Написать · Пожаловаться · the items of
+`LGFriends.menuItems`, each pick = `LGDm.open` / `LGDm.report` / `LGFriends.menuAct(key, nick)` — the site's own code;
+the City list's menu is the site's `.cy-nm` anyway); «Написать» anywhere → LGDm 'show' → the mine tab steps back;
+a new incoming DM (the unread counter of LGDm grows) → a toast («✉ Мурка: новое личное сообщение», ≤ 1 per 2.5 s; the badge on
+«Личные» is the site's); without a chat box the site's small `.dm-float` window is lifted above our UI (z 165), hidden under menus
+(`html.l3d-dm-off`) and focused by Enter / T when the hero has no chat.
+Friends: pause-menu entry «Друзья» + HUD chip «👥 Заявки в друзья · N» (N = the badge of the site's `#frBtn`, polled from the
+DOM) call `LGFriends.open()`; the window `.fr-back` is lifted over the canvas (z 170) and is a modal on the input while open
+(pointer free, Esc → its «×»). **Site overlay detection** (`src/net/site.ts` DIALOGS `[role="dialog"]`) treats the window as a
+site dialog and hides + pauses the game behind it; to keep the 3D visible dimmed behind it add `.fr-back` to `OWN` there.
+Nothing is sent by us: friends, blocks, the coin of the day, DMs are the site's buttons pressed by the player.
+Tests: `test/dm-friends.test.ts` (fake LGDm / LGFriends); the real site modules in a page: `.local/dmfr/scenarios.mjs`.
