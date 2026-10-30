@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag: { description: 'Release tag, e.g. v0.4.4', required: true }
+      cancel_publisher: { description: 'Publisher id: cancel the pending review first (replace a version still in review)', required: false, default: '' }
 permissions:
   contents: read
 jobs:
@@ -25,4 +26,5 @@ jobs:
           CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
           CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
           TAG: ${{ inputs.tag }}
+          CWS_CANCEL_PUBLISHER: ${{ inputs.cancel_publisher }}
         run: node scripts/cws-publish.mjs "rel/legion-3d-${TAG#v}-store.zip"

@@ -4,6 +4,8 @@
 // Prints Google's error body (never the credentials) so a failure says why: e.g. an item still in review cannot take
 // a new package (ITEM_NOT_UPDATABLE / "in review"), or the refresh token was revoked (invalid_grant).
 //   node scripts/cws-publish.mjs legion-3d-0.4.4-store.zip [--no-publish]
+// CWS_CANCEL_PUBLISHER=<publisher id>: first cancel the item's pending review (API v2 cancelSubmission) so a newer
+// package can replace a version still in review. Without it a pending review makes the upload fail (ITEM_NOT_UPDATABLE).
 import { readFileSync } from 'node:fs';
 
 const { CWS_EXTENSION_ID: id, CWS_CLIENT_ID: cid, CWS_CLIENT_SECRET: cs, CWS_REFRESH_TOKEN: rt } = process.env;
@@ -27,6 +29,12 @@ async function main() {
   }, 'token');
   const H = { Authorization: `Bearer ${tok.access_token}`, 'x-goog-api-version': '2' };
   const base = `https://www.googleapis.com/chromewebstore/v1.1/items/${id}`;
+  const pubId = process.env.CWS_CANCEL_PUBLISHER;
+  if (pubId) {
+    const r = await fetch(`https://chromewebstore.googleapis.com/v2/publishers/${pubId}/items/${id}:cancelSubmission`, { method: 'POST', headers: H });
+    const t = (await r.text()).slice(0, 300);
+    console.log(`cancel pending review: HTTP ${r.status}${r.ok ? '' : ' ' + t}`);   // no pending review → an error here is fine
+  }
   const before = await call(`${base}?projection=DRAFT`, { headers: H }, 'item');
   console.log(`item draft version before upload: ${before.crxVersion ?? '?'}`);
   const up = await call(`https://www.googleapis.com/upload/chromewebstore/v1.1/items/${id}`, { method: 'PUT', headers: H, body: readFileSync(file) }, 'upload');
