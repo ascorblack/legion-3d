@@ -19,6 +19,22 @@ export function nz(t1: number, t2: number, s = 0): number {
 /** small per-cell hash 0..1 */
 export function hash2(i: number, j: number, s = 0): number { const v = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); }
 
+/**
+ * Planting rows across one period (pumpkin field, wheat): [x, z, r] triples with x ∈ [−P/2, P/2) for rows at `zs`, one plant
+ * per `step` m (rounded so the rows tile seamlessly) with a little jitter; `keep` = the share kept (gaps read hand-planted).
+ */
+export function rowPoints(zs: readonly number[], step: number, keep: number, seed: number, jitter = 0.25): number[] {
+  const out: number[] = [];
+  const n = Math.max(1, Math.round(PERIOD / step)), st = PERIOD / n;
+  zs.forEach((z, j) => {
+    for (let i = 0; i < n; i++) {
+      if (hash2(i, j + 17, seed) > keep) continue;
+      out.push(-PERIOD / 2 + (i + 0.5 + (hash2(i, j, seed + 3) - 0.5) * 2 * jitter) * st, z + (hash2(i, j, seed + 5) - 0.5) * jitter * 1.5, hash2(i, j, seed + 7));
+    }
+  });
+  return out;
+}
+
 export interface ShellOpts {
   U: number; V: number;
   pos: (u: number, v: number, out: THREE.Vector3) => void;

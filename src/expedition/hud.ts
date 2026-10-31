@@ -35,22 +35,33 @@ canvas{display:block}
 .hint b{color:#ffe27a}
 .veil{position:fixed;inset:0;background:#0d0b22;opacity:0;pointer-events:none}
 .spec{font:600 12px 'Golos Text',sans-serif;color:#d8d0f5;text-shadow:0 1px 3px #000}
+.town{position:fixed;left:50%;top:64px;transform:translateX(-50%);pointer-events:auto;cursor:pointer;display:flex;gap:8px;align-items:center;
+  padding:10px 20px;border-radius:14px;border:2px solid #ffc94d;background:linear-gradient(180deg,#ff8fc8,#e0559a);color:#fff;
+  font:800 16px/1.15 'Golos Text','Nunito',sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.45);white-space:nowrap;max-width:90vw}
+.town[hidden]{display:none}
+.town:hover{filter:brightness(1.08)}.town:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.town[aria-busy="true"]{opacity:.7;cursor:progress}
 `;
 
 const ICON: Record<string, string> = { gather: '⛺', vote: '🗳', travel: '🥾', battle: '⚔', boss: '👹', trap: '🪤', treasure: '💎', rest: '🔥', shop: '🛒', event: '✦', town: '🏘', dungeon: '🗝', lair: '🏝', loot: '🎁' };
+
+export const HINT_DEFAULT = '<b>Q</b> — выйти из 3D · мышь — осмотреться · колесо — ближе/дальше · <b>F8</b> — сайт';
 
 export class ExpeditionHud {
   readonly el: HTMLElement;
   private sh: ShadowRoot;
   private top: HTMLElement; private cmd: HTMLElement; private veil: HTMLElement; private hint: HTMLElement; private timer: HTMLElement | null = null;
   private key = '';
-  constructor(root: HTMLElement, hintText = '<b>Q</b> — выйти из 3D · мышь — осмотреться · колесо — ближе/дальше · <b>F8</b> — сайт', hintBottom = 16) {
+  /** «🏘 Войти в город «…»» — the site's own quest button (quest.js data-qtown), shown while the party stands in a town */
+  readonly townBtn: HTMLButtonElement;
+  constructor(root: HTMLElement, hintText = HINT_DEFAULT, hintBottom = 16) {
     this.el = document.createElement('div');
     this.el.className = 'l3d-expedition-hud';
     this.el.style.cssText = 'position:fixed;inset:0;z-index:130;pointer-events:none;';
     root.appendChild(this.el);
     this.sh = this.el.attachShadow({ mode: 'open' });
-    setHtml(this.sh, `<style>${CSS}</style><div class="veil"></div><div class="top" role="status" aria-live="polite"></div><div class="cmd"></div><div class="hint">${hintText}</div>`);
+    setHtml(this.sh, `<style>${CSS}</style><div class="veil"></div><div class="top" role="status" aria-live="polite"></div><div class="cmd"></div><div class="hint">${hintText}</div><button type="button" class="town" hidden></button>`);
+    this.townBtn = this.sh.querySelector('.town') as HTMLButtonElement;
     this.veil = this.sh.querySelector('.veil') as HTMLElement;
     this.top = this.sh.querySelector('.top') as HTMLElement;
     this.cmd = this.sh.querySelector('.cmd') as HTMLElement;
@@ -58,6 +69,17 @@ export class ExpeditionHud {
     this.hint.style.bottom = hintBottom + 'px';
     if (!hintText) this.hint.hidden = true;
   }
+  /** Controls hint (HTML of our own strings); empty hides it. */
+  setHint(html: string): void { setHtml(this.hint, html); this.hint.hidden = !html; }
+  /** The town-entry button: a name shows it (click → onClick), null hides it. */
+  setTown(name: string | null, onClick: (() => void) | null): void {
+    const b = this.townBtn;
+    b.hidden = !name;
+    b.onclick = name && onClick ? (e) => { e.stopPropagation(); onClick(); } : null;
+    if (name) { const t = `🏘 Войти в город «${name}»`; if (b.textContent !== t) b.textContent = t; }
+    else b.removeAttribute('aria-busy');
+  }
+  setTownBusy(on: boolean): void { if (on) this.townBtn.setAttribute('aria-busy', 'true'); else this.townBtn.removeAttribute('aria-busy'); }
   setFade(a: number): void { this.veil.style.opacity = String(Math.round(a * 100) / 100); }
   /** Rebuild when the content changes; the countdown is patched in place. */
   update(s: SceneState | null, secLeft: number): void {

@@ -10,3 +10,4 @@ dist-dev/
 /video/
 dist-firefox/
 amo-metadata.gen.json
+__pycache__/

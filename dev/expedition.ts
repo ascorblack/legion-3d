@@ -3,6 +3,7 @@
  * through the real DelayBuffer → adapter → scene path. Nothing touches the network.
  *   ?speed=2 (default)  ?dl=4 stream delay the fake reports (s)  ?at=SEC start at plan second SEC  ?spec=1 spectator
  *   ?role=archer|legionary|mage|priest…  ?q=0..3 quality  ?n=50 big party (extra cats)
+ *   ?demo=travel|battle|…&ter=Тыквенное поле : a fixed view on that terrain (biome checks)
  *   ?hud=battle|battle-tele|map-vote|rune-door|rune-vote|pz-cups|pz-riddle|skeldance|gob-bet|gob-shell|ev-traveler|ev-dice|gather
  *     the quest HUD (src/quest) over a FAKE site «Поход» tab (src/quest/fake-site.ts: the site's markup and handlers, presses are
  *     logged to window.__site.log, never sent); &qa=0 = a hero without the site's button flag (→ «пиши в чат стрима»)
@@ -55,6 +56,8 @@ const widen = (v: QuestPayload): QuestPayload => {
 };
 /* ---- ?demo=… : a fixed synthetic view for the stages the FakeQuest does not visit (vignettes) ---- */
 const HUD = Q.get('hud') as FakeStage | null;
+/** ?ter=Кладбище : the terrain of a ?demo view (biome checks: demo=travel|battle&ter=…) */
+const TER = Q.get('ter');
 const DEMO = Q.get('demo') || (HUD ? FAKE_MOCK[HUD] || null : null);
 const demo = (k: string): QuestPayload => {
   const mock = mockById(k);
@@ -111,7 +114,7 @@ if (HUD) {
   window.dispatchEvent(new CustomEvent('l3d:expedition', { detail: { active: true, onAir: true, expOnly: true } }));
 }
 const tick = () => {
-  if (DEMO) { const v = demo(DEMO); if (HUD) { hudQuest = v; hudFns.forEach((f) => f()); } view.push(v, now()); return; }
+  if (DEMO) { const v0 = demo(DEMO), v = TER ? { ...v0, ter: TER, t: v0.k === 'travel' ? TER : v0.t } : v0; if (HUD) { hudQuest = v; hudFns.forEach((f) => f()); } view.push(v, now()); return; }
   const el = now() - start; const v = widen(fake.at(el)); view.push(rebase(v, start - fake.t0), now());
 };
 tick();

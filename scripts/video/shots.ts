@@ -22,7 +22,7 @@ export interface Segment {
   /** test-only segments are not part of the final cut */
   test?: boolean;
   /** which video the segment belongs to (render.mjs --cut=…); default 'promo' */
-  cut?: 'promo' | 'gameplay' | 'edit';
+  cut?: 'promo' | 'gameplay' | 'edit' | 'lore' | 'expmovie';
   /** edit cut: capture only output seconds [a, b) of the segment (the rest is fast-forwarded with rendering off) */
   win?: [number, number];
   /** slow-mo / speed ramp: [[output s, game-time rate], …] piecewise linear; frame(G, t) then gets GAME time */

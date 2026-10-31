@@ -1,0 +1,9 @@
+{
+  "_note": "Map stage of a live expedition (31.10, sanitized: no names). The two plain map views are the live shape recorded by e2e/quest-rec.mjs; the town stop (q.town {id,name}) is the field quest.js tabHtml reads for «Войти в город «…»» (the live stop was not caught by the recorder in time). Hero flags: cy (City open) and tw (district towns open).",
+  "hero": { "cy": 1, "tw": 1, "qt": 1 },
+  "views": [
+    { "on": true, "k": "map", "t": "", "ter": "", "dl": 4, "at": 1793460876229, "n": 2032, "test": false, "roll": null, "party": "in", "late": [], "cm": true, "now": 1793460876264 },
+    { "on": true, "k": "map", "t": "округ «Склоны Сломанного меча»", "ter": "", "dl": 4, "at": 1793460900000, "n": 2002, "test": false, "roll": null, "party": "in", "late": [], "cm": true, "town": { "id": "d7", "name": "Рябиново" }, "now": 1793460900050 },
+    { "on": true, "k": "trap", "t": "Чаща", "ter": "Чаща", "dl": 4, "at": 1793460990000, "n": 2002, "test": false, "roll": null, "party": "in", "late": [], "cm": true, "now": 1793460990050 }
+  ]
+}

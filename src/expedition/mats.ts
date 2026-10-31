@@ -353,8 +353,8 @@ uniform float uTime;
 varying vec2 vUv; varying vec4 vCol;
 void main() {
   vUv = uv * 2.0 - 1.0;
-  float fl = 1.0 + iCol.a * (sin(uTime * iP.x + iP.y) * 0.5 + sin(uTime * iP.x * 2.3 + iP.y * 1.7) * 0.5);
-  vCol = vec4(iCol.rgb * fl, 1.0);
+  float fl = 1.0 + abs(iCol.a) * (sin(uTime * iP.x + iP.y) * 0.5 + sin(uTime * iP.x * 2.3 + iP.y * 1.7) * 0.5);
+  vCol = vec4(iCol.rgb * fl, iCol.a < 0.0 ? 1.0 : 0.0);   // a = 1: ground mist (soft, no core)
   float sc = length(instanceMatrix[0].xyz);
   vec4 c = modelViewMatrix * vec4(instanceMatrix[3].xyz, 1.0);
   c.xy += position.xy * sc * (0.94 + 0.06 * fl);
@@ -364,9 +364,9 @@ const HALO_FRAG = /* glsl */`
 varying vec2 vUv; varying vec4 vCol;
 void main() {
   float r = length(vUv);
-  float a = pow(max(1.0 - r, 0.0), 2.2);
-  float core = pow(max(1.0 - r * 2.2, 0.0), 2.0);
-  gl_FragColor = vec4(vCol.rgb * (a * 0.55 + core * 0.9), 1.0);
+  float a = pow(max(1.0 - r, 0.0), 2.2 - vCol.a * 0.9);
+  float core = pow(max(1.0 - r * 2.2, 0.0), 2.0) * (1.0 - vCol.a);
+  gl_FragColor = vec4(vCol.rgb * (a * (0.55 + vCol.a * 0.25) + core * 0.9), 1.0);
 }`;
 
 export class ExpMats {

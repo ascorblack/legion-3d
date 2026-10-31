@@ -16,19 +16,31 @@ import { bossName, emptyParty, EMPTY_PARTY, stageOf, kindOf, cmdFor, isMulti, SI
 
 export type SceneKind = 'off' | 'gather' | 'vote' | 'travel' | 'battle' | 'boss' | 'trap' | 'treasure' | 'rest' | 'shop' | 'event'
   | 'town' | 'dungeon' | 'lair' | 'loot' | 'puzzle';
-export type BiomeId = 'meadow' | 'forest' | 'river' | 'falls' | 'bridge' | 'mound' | 'gorge' | 'mine' | 'cave' | 'dungeon' | 'gate' | 'swamp' | 'snow' | 'desert';
+export type BiomeId = 'meadow' | 'forest' | 'river' | 'falls' | 'bridge' | 'mound' | 'gorge' | 'mine' | 'cave' | 'dungeon' | 'gate' | 'swamp' | 'snow' | 'desert'
+  | 'pumpkin' | 'graveyard' | 'ruins' | 'mill' | 'deadtree' | 'village';
 
 /** Terrain name (`v.ter`, Russian) → biome. Known names from docs/QUEST.md §9; unknown names by word stems, else meadow. */
 export function biomeOf(ter: unknown): BiomeId {
   const t = String(ter ?? '').trim().toLowerCase();
   if (!t) return 'meadow';
   const exact: Record<string, BiomeId> = { 'река': 'river', 'брод': 'river', 'водопад': 'falls', 'старый мост': 'bridge', 'курган': 'mound', 'ущелье': 'gorge',
-    'шахта': 'mine', 'пещера': 'cave', 'данж': 'dungeon', 'врата башни': 'gate' };
+    'шахта': 'mine', 'пещера': 'cave', 'данж': 'dungeon', 'врата башни': 'gate',
+    // live 31.10 (main channel, the Halloween map): q views per terrain — pumpkin field 490, graveyard 211, ruins 209, mill 85
+    'тыквенное поле': 'pumpkin', 'кладбище': 'graveyard', 'руины': 'ruins', 'мельница': 'mill', 'сухое дерево': 'deadtree',
+    'заброшенная деревня': 'village', 'врата полуночи': 'gate', 'чаща': 'forest', 'болото': 'swamp' };
   if (exact[t]) return exact[t];
   if (/мост/.test(t)) return 'bridge';
   if (/водопад/.test(t)) return 'falls';
   if (/рек|брод|озер|берег|ручей/.test(t)) return 'river';
-  if (/курган|могил|холм|каменн|менгир|дольмен/.test(t)) return 'mound';   // live 28.10: «Каменный круг», «Холмы»
+  // 31.10 stems (route names of that map: «Мельница пугал», «Деревня без теней», «Часовня без колокола»…)
+  if (/мельниц/.test(t)) return 'mill';
+  if (/тыкв|бахч|огород|пугал/.test(t)) return 'pumpkin';
+  if (/кладбищ|погост|надгроб|часовн|могил/.test(t)) return 'graveyard';
+  if (/руин|развалин|колонн|разрушенн/.test(t)) return 'ruins';
+  if (/дерев[оа](?![а-яё])|древо|коряг|пустош|засохш/.test(t)) return 'deadtree';
+  if (/деревн|селени|хутор|посёл|посел|хижин|изб[аыу]/.test(t)) return 'village';
+  if (/ферм|нив[аы]|жатв|пашн|амбар|пшени|колос/.test(t)) return 'mill';
+  if (/курган|холм|каменн|менгир|дольмен/.test(t)) return 'mound';   // live 28.10: «Каменный круг», «Холмы»
   if (/ущел|скал|гор|перевал|овраг|расщел/.test(t)) return 'gorge';   // live 28.10: «Овраг»
   if (/шахт|рудн/.test(t)) return 'mine';
   if (/пещер|грот/.test(t)) return 'cave';
@@ -193,7 +205,9 @@ export interface SceneState {
   /** map puzzle (site 28.10): kind, stage, the task line, scale sums, the poisoned cup after the result;
    *  changed: `items` (every stage); letter: `letter`, words `got` of `goal` */
   puzzle: { kind: string; st: string; name: string; icon: string; line: string; sums: number[]; ans: string; items: number; letter: string; got: number; goal: number } | null;
-  loot: { name: string; votes: number } | null;
+  /** the loot vote; live 31.10 it comes inside the finished boss view (`b.st === 'end'`): `rar`, the leaders `top`
+   *  [login, name, votes], the weight of «случайно» `rnd`, own vote `my` ('' none, '*' random, else a login) */
+  loot: { name: string; votes: number; rarity: string; top: { name: string; votes: number; me: boolean }[]; rnd: number; my: string } | null;
   town: { id: string; name: string } | null;
   dungeon: { name: string; esc: boolean; opts: { n: number; label: string; icon: string; votes: number; back: boolean }[] } | null;
   lair: { isles: number; gone: number[]; my: number; hp: number | null; phase: number; round: number; stage: string; acted: boolean; rt: number } | null;
@@ -207,7 +221,6 @@ export interface SceneState {
 
 /* ------------------------------------------------------------------ roster: the party across stages */
 
-const GENERIC = ['Котик', 'Мурзик', 'Пушистик', 'Кексик', 'Тигруля', 'Плюшка', 'Ватрушка', 'Пончик', 'Сырник', 'Носок', 'Лапка', 'Хвостик'];
 const ROLES_CYCLE: Role[] = ['legionary', 'rogue', 'archer', 'mage', 'priest', 'recruit', 'paladin', 'archer', 'necromancer', 'legionary', 'priest', 'rogue'];
 
 /**
@@ -235,13 +248,14 @@ export class Roster {
     for (const p of this.list) { if (out.length >= want) break; if (seen.has(p.login)) continue; seen.add(p.login); out.push(member(p.login, p.role, 'R', false, false, p.name || this.nameOf(p.login))); }
     for (let i = 0; out.length < want; i++) {
       const login = `#cat${i}`;
-      out.push(member(login, ROLES_CYCLE[i % ROLES_CYCLE.length], 'R', false, true, `${GENERIC[i % GENERIC.length]}${i >= GENERIC.length ? ' ' + (1 + Math.floor(i / GENERIC.length)) : ''}`));
+      // filler cat: the site sends only `n` outside battles — never invent a name for it (owner 31.10: no fake nicks)
+      out.push(member(login, ROLES_CYCLE[i % ROLES_CYCLE.length], 'R', false, true));
     }
     return out;
   }
 }
 function member(login: string, role: string, side: Side, me: boolean, ghost: boolean, name = ''): Member {
-  return { login, name: name || login, role, zone: zoneOf(role), side, shield: role === 'legionary' || role === 'paladin', rank: 2, me, low: -1, ghost };
+  return { login, name: name || (ghost ? '' : login), role, zone: zoneOf(role), side, shield: role === 'legionary' || role === 'paladin', rank: 2, me, low: -1, ghost };
 }
 
 /* ------------------------------------------------------------------ helpers */
@@ -315,6 +329,8 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
         : k === 'shop' ? 'shop' : k === 'boss' || k === 'bossgen' ? 'boss' : 'travel';
     }
   }
+  // live 31.10: after the generated boss the whole loot vote (~2 min) arrives inside the finished boss view — show the loot
+  if (q.loot && typeof q.loot === 'object' && q.b && typeof q.b === 'object' && q.b.st === 'end') kind = 'loot';
   s.kind = kind;
 
   /* ---- party (outside battles: roster + generic) ---- */
@@ -339,9 +355,10 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   if (kind === 'event') eventOf(q, s);
   if (kind === 'puzzle') puzzleOf(q, s);
   if (kind === 'shop') shopOf(q, s);
-  if (kind === 'loot') lootOf(q, s);
+  if (kind === 'loot') lootOf(q, s, c);
   if (kind === 'dungeon') dungeonOf(q, s);
   if (kind === 'lair') lairOf(q, s);
+  placeCmds(s);
   if (!s.status) s.status = s.title || 'Поход';
   if (s.roll) s.status += ` · бросок ${s.roll.n}${s.roll.tier ? ' (' + s.roll.tier + ')' : ''}`;
 
@@ -349,6 +366,25 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   const bid = s.battle ? s.battle.id : '';
   s.setKey = `${kind}|${biome}|${bid}|${kind === 'event' ? s.event?.look + ':' + s.event?.game : kind === 'trap' ? s.trap?.type : kind === 'puzzle' ? s.puzzle?.kind : ''}`;
   return s;
+}
+
+/**
+ * The site's place buttons (`pb`, live 31.10: flee / buy-off in a battle, «хватаю» at the greed chest, freeing a vined cat, the
+ * boss's clock vote, the loot «случайно»): every button is a chat line `t` — listed when the stage did not say it already.
+ */
+function placeCmds(s: SceneState) {
+  if (!s.placeActions?.length || s.kind === 'gather') return;
+  const have = new Set(s.cmds.map((c) => c.text.toLowerCase()));
+  let k = 0;
+  for (const b of s.placeActions) {
+    const t = str(b?.t).trim(), low = t.toLowerCase();
+    if (!t || have.has(low) || k >= 4) continue;
+    have.add(low); k++;
+    const label = str(b.l).replace(/^[^\p{L}\p{N}]+/u, '').trim();
+    if (/^\d+$/.test(t)) { s.cmds.push({ kind: 'num', text: t, note: label.replace(/^\d+\s*·\s*/, '') || undefined }); continue; }
+    const note = b.g === 'tg' ? label.replace(/^.*·\s*/, '') : label.toLowerCase() === low ? '' : label;
+    s.cmds.push({ kind: 'say', text: t, note: note || undefined });
+  }
 }
 
 function travelCmds(q: any, s: SceneState) {
@@ -677,12 +713,17 @@ function shopOf(q: any, s: SceneState) {
 }
 
 /* ---- loot ---- */
-function lootOf(q: any, s: SceneState) {
-  const L = q.loot;
-  s.loot = { name: str(L.name, 'Добыча'), votes: num(L.n, 0) };
+function lootOf(q: any, s: SceneState, c: AdaptCtx) {
+  const L = q.loot, my = str(L.my), me = c.login.toLowerCase();
+  const top = arr<any[]>(L.top).filter((p) => Array.isArray(p) && typeof p[0] === 'string').slice(0, 3)
+    .map((p) => ({ name: str(p[1]) || c.roster.nameOf(String(p[0])) || String(p[0]), votes: Math.max(0, Math.round(num(p[2], 0))), me: String(p[0]).toLowerCase() === me }));
+  s.loot = { name: str(L.name, 'Добыча'), votes: Math.max(0, Math.round(num(L.n, 0))), rarity: str(L.rar), top, rnd: Math.max(0, num(L.rnd, 0)), my };
   s.until = num(L.until, 0);
   s.title = s.title || 'Делёж добычи'; s.status = `Делёж: ${s.loot.name}`;
-  s.cmds.push(L.my ? { kind: 'ok', text: 'твой голос учтён' } : { kind: 'say', text: 'случайно', note: 'или номер / ник — кому отдать' });
+  if (my) {
+    const who = my === '*' ? 'случайно' : my.toLowerCase() === me ? 'себе' : arr<any[]>(L.top).find((p) => Array.isArray(p) && String(p[0]).toLowerCase() === my.toLowerCase())?.[1] || c.roster.nameOf(my) || my;
+    s.cmds.push({ kind: 'ok', text: `твой голос: ${who}` });
+  } else s.cmds.push({ kind: 'say', text: 'случайно', note: 'или номер / ник — кому отдать' });
 }
 
 /* ---- dungeon ---- */

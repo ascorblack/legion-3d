@@ -1324,11 +1324,21 @@ export type PropKind = 'tree' | 'pine' | 'dead' | 'bush' | 'rock' | 'grass' | 'f
   | 'stone' | 'mound' | 'cliff' | 'snowpine' | 'cactus' | 'support' | 'lily' | 'fence'
   | 'birch' | 'willow' | 'fern' | 'boulder' | 'stump' | 'fallen' | 'tomb' | 'ruin' | 'bones' | 'barrel' | 'crate' | 'drift' | 'ice' | 'agave' | 'hang'
   | 'pebbles' | 'dry' | 'snowtuft' | 'menhir' | 'dolmen' | 'brazier' | 'moss' | 'spire' | 'tumble' | 'cattail' | 'berry'
-  | 'sandrock' | 'scree' | 'shrub' | 'ribs' | 'arch' | 'slab';
+  | 'sandrock' | 'scree' | 'shrub' | 'ribs' | 'arch' | 'slab'
+  // 31.10 biomes (pumpkin field, graveyard, ruins, mill, dead tree, abandoned village)
+  | 'pumpkin' | 'furrow' | 'flagstone' | 'vine' | 'corn' | 'scarecrow' | 'cross' | 'ironfence' | 'lantern' | 'crypt' | 'column' | 'wall' | 'rubble' | 'colonnade'
+  | 'windmill' | 'sails' | 'wheat' | 'hay' | 'bigtree' | 'hut' | 'well';
 /** Vertical-gradient colour of a part (AO-like: dark at the bottom, light on top) — baked per vertex. */
 const grad = (b: GB, g: THREE.BufferGeometry, c0: string, c1: string, m: THREE.Matrix4, y0: number, y1: number, tint = 0) => b.addG(g, c0, c1, m, y0, y1, tint);
 /** tiny hash for deterministic variety inside geometry builders */
 const hh = (i: number) => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+/** sphere pinched into `ribs` lobes around y (pumpkins) */
+const ribbed = (r: number, ribs: number, w: number, h: number, depth: number) => {
+  const g = new THREE.SphereGeometry(r, w, h), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), k = 1 - depth * (0.5 - 0.5 * Math.cos(ribs * Math.atan2(z, x))); p.setXYZ(i, x * k, p.getY(i), z * k); }
+  g.computeVertexNormals();
+  return g;
+};
 export function propGeo(k: PropKind, pal = 0): THREE.BufferGeometry {
   return cached(`prop:${k}:${pal}`, () => {
     const b = new GB();
@@ -1693,10 +1703,359 @@ export function propGeo(k: PropKind, pal = 0): THREE.BufferGeometry {
         b.add(cyl(0.005, 0.005, 0.3, 3), '#2a2020', T(0, 2.8, -0.15)); b.add(sph(0.15, 8, 6), '#ffd37a', T(0, 2.62, -0.15));
         break;
       case 'fence':
+        if (pal % 2) {   // broken, weathered: one post leaning, the top rail snapped and hanging
+          grad(b, box(0.1, 0.85, 0.1), '#5a4a3a', '#8a7a62', T(-0.8, 0.42, 0), 0, 0.85);
+          grad(b, box(0.1, 0.62, 0.1), '#5a4a3a', '#8a7a62', T(0, 0.31, 0, 0, 0, 0.05), 0, 0.62);
+          grad(b, box(0.1, 0.8, 0.1), '#5a4a3a', '#8a7a62', T(0.85, 0.36, 0, 0, 0, -0.32), 0, 0.8);
+          b.add(box(1.0, 0.08, 0.06), '#8a7a62', T(-0.4, 0.62, 0.01, 0, 0, 0.06));
+          b.add(box(0.9, 0.08, 0.06), '#7a6a52', T(0.45, 0.42, 0.01, 0, 0, -0.42));
+          b.add(box(1.8, 0.08, 0.06), '#8a7a62', T(0, 0.3, 0.01, 0, 0, 0.03));
+          break;
+        }
         for (let i = 0; i < 3; i++) grad(b, box(0.1, 0.85, 0.1), '#6a4a2c', '#9a7a52', T(-0.8 + i * 0.8, 0.42, 0), 0, 0.85);
         b.add(box(1.8, 0.08, 0.06), '#9a7a52', T(0, 0.65, 0.01));
         b.add(box(1.8, 0.08, 0.06), '#9a7a52', T(0, 0.32, 0.01));
         break;
+      /* ---- 31.10 biomes: pumpkin field, graveyard, ruins, mill, dead tree, abandoned village ---- */
+      case 'pumpkin': {
+        // ribbed squashed gourd (pal 0 orange, 1 small pale-gold, 2 carved jack-o'-lantern: glowing face toward +z)
+        const C = [['#a83400', '#ff7410'], ['#b86a08', '#ffb424'], ['#982e00', '#ff6a00']][pal % 3];
+        const R = pal % 3 === 1 ? 0.32 : 0.46;
+        grad(b, ribbed(R, 5, 10, 5, 0.14), C[0], C[1], T(0, R * 0.74, 0, 0, 0, 0, [1, 0.76, 1]), 0, R * 1.5);
+        b.add(cyl(0.03, 0.05, 0.16, 4), '#4a5a22', T(0.02, R * 1.52, 0, 0.2, 0, 0.25));
+        b.add(box(0.3, 0.02, 0.2), '#3f7a2e', T(0.24, 0.03, -0.24, 0, 0.6, 0.1));
+        if (pal % 3 === 2) {
+          const z = R * 0.9;
+          for (const s of [-1, 1]) b.addGlow(cyl(0.1, 0.1, 0.06, 3), '#ffc040', T(s * 0.16, R * 0.88, z, Math.PI / 2, 0, Math.PI), 3.2);
+          b.addGlow(cyl(0.06, 0.06, 0.06, 3), '#ffc040', T(0, R * 0.7, z + 0.02, Math.PI / 2, 0, 0), 3.2);
+          b.addGlow(box(0.36, 0.09, 0.06), '#ffb030', T(0, R * 0.5, z - 0.02, 0, 0, 0), 3.2);
+          for (const s of [-1, 1]) b.addGlow(box(0.08, 0.08, 0.06), '#ffb030', T(s * 0.2, R * 0.57, z - 0.03, 0, 0, s * 0.5), 3.2);
+        }
+        break;
+      }
+      case 'flagstone': {
+        // worn paving slabs (old road / ruined floor): three irregular flat stones
+        const c = ['#7e7466', '#bcb09a'];
+        grad(b, cyl(0.55, 0.58, 0.1, 5), c[0], c[1], T(0, 0.0, 0, 0, 0.3, 0, [1.0, 1, 0.8]), -0.05, 0.05);
+        grad(b, cyl(0.4, 0.42, 0.1, 5), c[0], c[1], T(0.55, -0.01, 0.45, 0, 1.1, 0.03, [1, 1, 0.8]), -0.06, 0.04);
+        grad(b, cyl(0.36, 0.4, 0.1, 4), c[0], c[1], T(-0.5, -0.01, 0.5, 0.02, 0.4, 0, [1.1, 1, 0.8]), -0.06, 0.04);
+        break;
+      }
+      case 'furrow': {
+        // a 6 m ridge of tilled soil under a planting row
+        grad(b, cyl(0.62, 0.62, 6, 6), '#33241a', '#4e3a28', T(0, -0.08, 0, 0, 0, Math.PI / 2, [0.3, 1, 1]), -0.1, 0.12);
+        break;
+      }
+      case 'vine': {
+        // pumpkin vine on the soil: a zigzag runner, broad leaves, a curl and a little green gourd
+        for (let i = 0; i < 3; i++) b.add(cyl(0.025, 0.025, 0.62, 3), '#3f6a22', T(-0.6 + i * 0.58, 0.04, (i % 2 ? 0.08 : -0.08), 0, (i % 2 ? 0.3 : -0.3), Math.PI / 2));
+        for (let i = 0; i < 3; i++) grad(b, ico(0.22, 0), '#2f6a2a', '#7ab048', T(-0.55 + i * 0.55, 0.06, (i % 2 ? -0.18 : 0.18), 0, i, 0, [1.2, 0.25, 1]), 0, 0.12);
+        break;
+      }
+      case 'corn': {
+        // dry corn shock: a cone of tied stalks with frayed tops (pumpkin field / farmland)
+        const c = ['#7a6a32', '#d8c070'];
+        for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2 + hh(i) * 0.4, lean = 0.14 + hh(i + 3) * 0.08; grad(b, new THREE.ConeGeometry(0.1, 1.9 + hh(i + 1) * 0.3, 3, 1, true), c[0], c[1], T(Math.cos(a) * 0.22, 0.95, Math.sin(a) * 0.22, Math.sin(a) * -lean, 0, Math.cos(a) * lean), 0, 1.9); }
+        b.add(cyl(0.16, 0.18, 0.12, 7), '#8a5a2a', T(0, 1.05, 0));
+        for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; grad(b, new THREE.ConeGeometry(0.07, 0.6, 3, 1, true), '#a89040', '#f0dc90', T(Math.cos(a) * 0.12, 1.55, Math.sin(a) * 0.12, Math.sin(a) * 0.7, 0, -Math.cos(a) * 0.7), 1.2, 1.9); }
+        break;
+      }
+      case 'scarecrow': {
+        // stuffed scarecrow on a cross pole, facing +z: burlap head with a stitched grin, patched shirt, straw tufts;
+        // pal 0 a crooked witch hat and a crow on the arm (Halloween), pal 1 a straw hat (farmland)
+        const wood = ['#4a3424', '#7a5a3a'];
+        grad(b, cyl(0.05, 0.06, 2.3, 6), wood[0], wood[1], T(0, 1.15, -0.02), 0, 2.3);
+        b.add(cyl(0.04, 0.04, 1.7, 5), wood[1], T(0, 1.62, -0.02, 0, 0, Math.PI / 2));
+        grad(b, box(0.5, 0.62, 0.26), '#7a2a24', '#b84a36', T(0, 1.42, 0), 1.1, 1.75);
+        b.add(box(0.16, 0.16, 0.02), '#4a6a8a', T(0.1, 1.32, 0.135, 0, 0, 0.2));
+        b.add(box(0.5, 0.05, 0.27), '#5a3a22', T(0, 1.16, 0));
+        for (const s of [-1, 1]) {
+          grad(b, cyl(0.1, 0.12, 0.6, 6), '#7a2a24', '#b84a36', T(s * 0.52, 1.62, 0, 0, 0, Math.PI / 2), 1.5, 1.75);
+          for (let i = 0; i < 3; i++) b.add(new THREE.ConeGeometry(0.05, 0.24, 3), '#e0c060', T(s * (0.86 + hh(i) * 0.04), 1.62 + (i - 1) * 0.06, 0, 0, 0, -s * (Math.PI / 2 + (i - 1) * 0.3)));
+        }
+        for (let i = 0; i < 5; i++) b.add(new THREE.ConeGeometry(0.05, 0.3, 3), '#d8b850', T(-0.18 + i * 0.09, 0.98, 0.02, Math.PI, 0, (i - 2) * 0.12));
+        grad(b, sph(0.24, 9, 7), '#a8885a', '#d8bc8a', T(0, 2.02, 0, 0, 0, 0, [1, 1.05, 0.95]), 1.8, 2.26);
+        b.add(box(0.07, 0.07, 0.02), '#2a1a1a', T(-0.09, 2.08, 0.225, 0, 0, 0.78)); b.add(box(0.07, 0.07, 0.02), '#2a1a1a', T(0.09, 2.08, 0.225, 0, 0, 0.78));
+        for (let i = 0; i < 4; i++) b.add(box(0.07, 0.015, 0.02), '#2a1a1a', T(-0.1 + i * 0.066, 1.95 + (i % 2) * 0.02, 0.215, 0, 0, (i % 2 ? -0.4 : 0.4)));
+        b.add(cyl(0.05, 0.06, 0.06, 6), '#6a4a2a', T(0, 1.8, 0));
+        if (pal % 2 === 0) {
+          b.add(cyl(0.4, 0.4, 0.03, 10), '#2e2238', T(0, 2.2, 0, 0.1, 0, 0.06));
+          grad(b, cone(0.2, 0.55, 8), '#2e2238', '#4a3a5a', T(0.05, 2.46, -0.02, -0.2, 0, -0.3), 2.2, 2.75);
+          b.add(cyl(0.205, 0.205, 0.05, 8), '#d86a1a', T(0, 2.25, 0, 0.1, 0, 0.06));
+          // the crow on the right arm
+          b.add(sph(0.11, 6, 5), '#1e1a26', T(0.62, 1.79, 0, 0, 0, 0, [1.3, 1, 0.9]));
+          b.add(sph(0.07, 6, 4), '#1e1a26', T(0.73, 1.89, 0.02));
+          b.add(cone(0.025, 0.09, 4), '#e0a020', T(0.81, 1.89, 0.02, 0, 0, -Math.PI / 2));
+          b.add(box(0.14, 0.02, 0.08), '#1e1a26', T(0.5, 1.8, 0, 0, 0, 0.5));
+        } else {
+          b.add(cyl(0.42, 0.44, 0.04, 10), '#c8a040', T(0, 2.2, 0, 0.05, 0, 0.04));
+          grad(b, cyl(0.17, 0.21, 0.2, 9), '#b89038', '#e8c868', T(0, 2.3, 0, 0.05, 0, 0.04), 2.2, 2.4);
+          b.add(cyl(0.215, 0.215, 0.05, 9), '#9a3a2a', T(0, 2.24, 0, 0.05, 0, 0.04));
+        }
+        break;
+      }
+      case 'cross': {
+        // grave: pal 0 stone cross with a ring and a mossy plinth, pal 1 a crooked wooden cross on an earth mound
+        if (pal % 2 === 0) {
+          const c = ['#5e5e6c', '#a8a8b6'];
+          b.add(box(0.46, 0.18, 0.34), '#6a6a78', T(0, 0.09, 0));
+          grad(b, box(0.16, 1.05, 0.12), c[0], c[1], T(0, 0.68, 0), 0.1, 1.2);
+          grad(b, box(0.58, 0.15, 0.12), c[0], c[1], T(0, 0.86, 0), 0.7, 1.0);
+          b.add(tor(0.17, 0.028, Math.PI * 2, 3, 10), '#8a8a98', T(0, 0.86, 0));
+          b.add(box(0.48, 0.05, 0.36), '#4f8a4a', T(0, 0.19, 0.0));
+          grad(b, dod(0.26), '#3a5a32', '#5a8a46', T(0, 0.02, 0.42, 0, 0, 0, [1.2, 0.3, 1.8]), 0, 0.1);
+        } else {
+          const w = ['#4a3628', '#8a6a4a'];
+          grad(b, box(0.1, 1.0, 0.08), w[0], w[1], T(0, 0.48, 0, 0, 0, 0.14), 0, 1.0);
+          grad(b, box(0.5, 0.09, 0.07), w[0], w[1], T(0.04, 0.7, 0.01, 0, 0, -0.08), 0.6, 0.8);
+          grad(b, dod(0.34), '#3a3024', '#5a4a34', T(0, 0.0, 0.32, 0, 0.3, 0, [1.0, 0.36, 1.9]), -0.1, 0.12);
+          b.add(sph(0.04, 4, 3), '#d8d0ff', T(0.12, 0.08, 0.32));
+        }
+        break;
+      }
+      case 'ironfence': {
+        // wrought-iron cemetery fence (2.4 m): stone posts with caps, two rails, spear-tipped bars
+        const iron = '#2a2834', ironHi = '#4a4658';
+        for (const s of [-1, 1]) { grad(b, box(0.3, 1.25, 0.3), '#5a5866', '#9a98a6', T(s * 1.2, 0.62, 0), 0, 1.25); b.add(cone(0.24, 0.22, 4), '#7a7886', T(s * 1.2, 1.36, 0, 0, Math.PI / 4, 0)); }
+        b.add(box(2.1, 0.05, 0.05), ironHi, T(0, 0.28, 0)); b.add(box(2.1, 0.05, 0.05), ironHi, T(0, 0.92, 0));
+        for (let i = 0; i < 8; i++) { const x = -0.92 + i * 0.263; b.add(box(0.035, 1.12, 0.035), iron, T(x, 0.6, 0)); b.add(cone(0.05, 0.13, 4), ironHi, T(x, 1.22, 0)); }
+        b.add(tor(0.09, 0.015, Math.PI * 2, 3, 8), ironHi, T(0, 0.6, 0));
+        break;
+      }
+      case 'lantern': {
+        // grave lantern on an iron stake: a glowing candle box under a small roof
+        b.add(cyl(0.025, 0.03, 0.85, 5), '#2a2834', T(0, 0.42, 0));
+        b.add(box(0.2, 0.03, 0.2), '#2a2834', T(0, 0.84, 0));
+        for (const [x, z] of [[-0.09, -0.09], [0.09, -0.09], [-0.09, 0.09], [0.09, 0.09]]) b.add(box(0.025, 0.24, 0.025), '#2a2834', T(x, 0.97, z));
+        b.addGlow(box(0.14, 0.18, 0.14), '#ffc860', T(0, 0.96, 0), 2.0);
+        b.add(cone(0.17, 0.14, 4), '#3a3646', T(0, 1.16, 0, 0, Math.PI / 4, 0));
+        b.add(tor(0.035, 0.01, Math.PI * 2, 3, 6), '#2a2834', T(0, 1.26, 0, Math.PI / 2, 0, 0));
+        break;
+      }
+      case 'crypt': {
+        // family crypt (~5 m): a stepped plinth, walls, two front columns, a gabled roof with a cross, a dark iron door
+        const st = ['#5a5668', '#a49eb4'], dk = '#4a4658';
+        b.add(box(5.0, 0.3, 4.4), '#6a6676', T(0, 0.15, 0)); b.add(box(4.6, 0.25, 4.0), '#7a7688', T(0, 0.42, 0));
+        grad(b, box(4.0, 2.8, 3.4), st[0], st[1], T(0, 1.95, -0.1), 0.5, 3.4);
+        for (const s of [-1, 1]) {
+          grad(b, cyl(0.2, 0.24, 2.7, 8), '#7a7688', '#c8c2d6', T(s * 1.55, 1.9, 1.85), 0.5, 3.3);
+          b.add(box(0.55, 0.2, 0.55), '#8a8698', T(s * 1.55, 3.32, 1.85)); b.add(box(0.55, 0.2, 0.55), '#8a8698', T(s * 1.55, 0.62, 1.85));
+        }
+        b.add(box(4.3, 0.32, 4.2), '#6e6a80', T(0, 3.55, 0.25));
+        const gable = new THREE.CylinderGeometry(1, 1, 4.25, 3);
+        grad(b, gable, '#4a4258', '#7a6e90', T(0, 4.25, 0.25, Math.PI / 2, 0, 0, [2.6, 1, 0.9]), 3.7, 4.9);
+        grad(b, box(0.16, 0.95, 0.14), st[0], st[1], T(0, 5.25, 2.0), 4.8, 5.7); b.add(box(0.56, 0.14, 0.14), '#a49eb4', T(0, 5.4, 2.0));
+        b.add(box(1.5, 2.1, 0.1), '#14101c', T(0, 1.6, 1.62));
+        b.add(box(1.7, 0.18, 0.18), dk, T(0, 2.72, 1.64)); for (const s of [-1, 1]) b.add(box(0.14, 2.2, 0.16), dk, T(s * 0.82, 1.6, 1.64));
+        for (let i = 0; i < 5; i++) b.add(box(0.03, 1.9, 0.03), '#2a2834', T(-0.5 + i * 0.25, 1.55, 1.7));
+        b.addGlow(cyl(0.24, 0.24, 0.05, 10), '#9a7aff', T(0, 3.05, 1.67, Math.PI / 2, 0, 0), 1.6);
+        b.add(box(1.0, 0.16, 0.6), '#7a7688', T(0, 0.08, 2.5)); b.add(box(1.2, 0.12, 0.5), '#6a6676', T(0, 0.02, 2.95));
+        for (const s of [-1, 1]) grad(b, dod(0.5), '#2f5a32', '#5a8a46', T(s * 2.2, 0.5, 1.6, 0, s, 0, [1.1, 0.7, 1]), 0.1, 0.9);
+        grad(b, dod(0.6), '#2f5a32', '#5a8a46', T(1.8, 3.7, -1.2, 0, 0, 0, [1.4, 0.3, 1.2]), 3.6, 3.9);
+        break;
+      }
+      case 'column': {
+        // antique column: pal 0 standing with a snapped top, 1 fallen drums + a toppled capital, 2 whole with a capital
+        const c = ['#6a5840', '#cbb690'];
+        if (pal % 3 === 1) {
+          grad(b, cyl(0.34, 0.34, 1.0, 12), c[0], c[1], T(0, 0.3, 0, 0, 0.2, Math.PI / 2), 0, 0.64);
+          grad(b, cyl(0.33, 0.33, 0.8, 12), c[0], c[1], T(1.25, 0.28, 0.45, 0.1, 0.7, Math.PI / 2), 0, 0.6);
+          grad(b, box(0.8, 0.26, 0.8), c[0], c[1], T(-1.1, 0.13, 0.5, 0, 0.5, 0.1), 0, 0.3);
+          grad(b, dod(0.3), '#3f7a3a', '#7ab050', T(0.5, 0.55, 0.05, 0, 0, 0, [1.6, 0.35, 1.0]), 0.45, 0.7);
+          grad(b, dod(0.22), '#8a7a62', '#c8bca0', T(-0.4, 0.1, -0.5, 0.4, 0.3, 0, [1.2, 0.6, 1]), 0, 0.2);
+          break;
+        }
+        const h = pal % 3 === 2 ? 3.2 : 2.2;
+        b.add(box(0.95, 0.24, 0.95), '#8a7a62', T(0, 0.12, 0)); b.add(cyl(0.42, 0.44, 0.14, 12), '#b8aa8c', T(0, 0.31, 0));
+        grad(b, cyl(0.31, 0.35, h, 12), c[0], c[1], T(0, 0.38 + h / 2, 0), 0.2, h + 0.4);
+        if (pal % 3 === 2) { b.add(cyl(0.44, 0.32, 0.22, 12), '#c8bca0', T(0, h + 0.49, 0)); grad(b, box(1.0, 0.24, 1.0), '#a89a7e', '#e8dcc4', T(0, h + 0.72, 0), h + 0.6, h + 0.85); }
+        else {
+          grad(b, cyl(0.2, 0.3, 0.42, 12), c[0], c[1], T(0.07, h + 0.55, 0.02, 0.18, 0, -0.28), h, h + 0.8);
+          grad(b, dod(0.26), '#3f7a3a', '#7ab050', T(-0.12, h + 0.44, 0, 0, 0, 0, [1.2, 0.35, 1.1]), h + 0.3, h + 0.6);
+        }
+        grad(b, dod(0.34), '#3a6a32', '#6aa048', T(0.3, 0.3, 0.34, 0, 0.4, 0, [1.4, 0.7, 1.1]), 0.1, 0.6);
+        for (let i = 0; i < 3; i++) b.add(box(0.12, 0.5, 0.03), '#4f8a3a', T(Math.cos(i * 1.1 + 2.0) * 0.33, 0.9 + i * 0.35, Math.sin(i * 1.1 + 2.0) * 0.33, 0, -(i * 1.1 + 2.0) + Math.PI / 2, 0.3));
+        break;
+      }
+      case 'wall': {
+        // broken stone wall: pal 0 a segment with an arched window and a crumbled top, pal 1 a low ruined corner
+        const c = ['#86786a', '#cfc2aa'], ivy = ['#2f6a32', '#6aa848'];
+        if (pal % 2 === 0) {
+          grad(b, box(1.1, 2.6, 0.55), c[0], c[1], T(-1.15, 1.3, 0), 0, 2.6);
+          grad(b, box(0.9, 1.7, 0.55), c[0], c[1], T(1.25, 0.85, 0), 0, 1.7);
+          grad(b, box(1.3, 0.8, 0.55), c[0], c[1], T(0.1, 0.4, 0), 0, 0.8);
+          grad(b, box(0.5, 0.5, 0.55), c[0], c[1], T(0.95, 1.95, 0, 0, 0, 0.2), 1.6, 2.2);
+          grad(b, tor(0.62, 0.2, Math.PI * 0.55, 4, 6), c[0], c[1], T(0.05, 1.9, 0, 0, 0, Math.PI * 0.45), 1.8, 2.7);
+          for (let i = 0; i < 3; i++) b.add(box(0.36, 0.22, 0.5), i % 2 ? '#a89a84' : '#bcae96', T(-1.4 + i * 0.3, 2.68 + (i % 2) * 0.12, 0, 0, 0, (i - 1) * 0.15));
+          grad(b, dod(0.5), ivy[0], ivy[1], T(-1.25, 1.6, 0.3, 0, 0, 0, [0.9, 1.6, 0.25]), 0.6, 2.4);
+          grad(b, dod(0.32), ivy[0], ivy[1], T(1.3, 0.9, 0.3, 0, 0, 0, [1.2, 1.0, 0.25]), 0.5, 1.3);
+          for (let i = 0; i < 4; i++) b.add(box(0.42, 0.3, 0.42), '#9a8c76', T(-0.6 + i * 0.55, 0.12, 0.6 + (i % 2) * 0.3, 0.2, i, 0.3));
+        } else {
+          grad(b, box(2.2, 1.1, 0.5), c[0], c[1], T(0, 0.55, 0), 0, 1.1);
+          grad(b, box(0.5, 1.5, 1.6), c[0], c[1], T(-0.85, 0.75, 0.55), 0, 1.5);
+          for (let i = 0; i < 3; i++) b.add(box(0.34, 0.22, 0.48), '#b0a28a', T(0.7 - i * 0.32, 1.2 + (i % 2) * 0.08, 0, 0, 0, 0.1 * i));
+          grad(b, dod(0.42), ivy[0], ivy[1], T(0.6, 0.8, 0.28, 0, 0, 0, [1.4, 0.9, 0.25]), 0.3, 1.2);
+          for (let i = 0; i < 3; i++) b.add(box(0.4, 0.28, 0.4), '#9a8c76', T(0.4 + i * 0.5, 0.12, 0.7, 0.2, i, 0.3));
+        }
+        break;
+      }
+      case 'rubble': {
+        // cut stone blocks tumbled in the grass, moss caps
+        const c = ['#8e8068', '#d4c8ae'];
+        for (let i = 0; i < 5; i++) { const a = i * 2.3, r = 0.2 + hh(i) * 0.6, s = 0.28 + hh(i + 7) * 0.22; grad(b, box(s * 1.5, s, s * 1.1), c[0], c[1], T(Math.cos(a) * r, s * 0.4, Math.sin(a) * r, hh(i + 2) * 0.5, a, hh(i + 4) * 0.4), 0, s); }
+        grad(b, dod(0.22), '#3f7a3a', '#7ab050', T(0.1, 0.38, 0.05, 0, 0, 0, [1.5, 0.3, 1.1]), 0.3, 0.45);
+        break;
+      }
+      case 'colonnade': {
+        // temple front in ruin (~12 m): a stepped stylobate, six columns (whole, snapped, a stump), a piece of architrave
+        const c = ['#6a5840', '#cbb690'];
+        b.add(box(13, 0.3, 3.6), '#8a7a62', T(0, 0.15, 0)); b.add(box(12.2, 0.3, 3.0), '#a09078', T(0, 0.45, 0)); b.add(box(11.4, 0.25, 2.5), '#b4a68a', T(0, 0.72, 0));
+        const H = [4.4, 4.4, 2.6, 0.7, 4.4, 3.3];
+        for (let i = 0; i < 6; i++) {
+          const x = -5 + i * 2, h = H[i];
+          b.add(cyl(0.48, 0.5, 0.18, 12), '#b8aa8c', T(x, 0.93, 0));
+          grad(b, cyl(0.36, 0.42, h, 12), c[0], c[1], T(x, 1.02 + h / 2, 0), 0.8, 5.5);
+          if (h > 4) { b.add(cyl(0.52, 0.38, 0.26, 12), '#c8bca0', T(x, 1.15 + h, 0)); b.add(box(1.15, 0.26, 1.15), '#d0c4a8', T(x, 1.41 + h, 0)); }
+          else grad(b, cyl(0.25, 0.36, 0.4, 12), c[0], c[1], T(x + 0.05, 1.2 + h, 0, 0.15, 0, -0.3), 0.8, 5.5);
+        }
+        grad(b, box(3.0, 0.7, 1.15), '#a89a7e', '#e8dcc4', T(-4, 6.2, 0), 5.8, 6.6);
+        grad(b, box(1.6, 0.7, 1.15), '#a89a7e', '#e8dcc4', T(3.4, 6.2, 0, 0, 0, -0.08), 5.8, 6.6);
+        grad(b, box(2.2, 0.7, 1.15), '#9a8c72', '#d8ccb2', T(1.8, 0.45, 2.6, 0.1, 0.4, 0.15), 0, 1);
+        grad(b, cyl(0.38, 0.38, 1.2, 12), c[0], c[1], T(-1.5, 0.4, 2.4, 0, 0.9, Math.PI / 2), 0, 0.8);
+        for (const [x, y, s] of [[-4.6, 6.6, 1.2], [1.0, 1.6, 1.0], [-5.6, 1.1, 1.0], [5.0, 4.8, 0.8]] as const) grad(b, dod(0.5 * s), '#2f6a32', '#6aa848', T(x, y, 0.45, 0, x, 0, [1.4, 0.45, 0.8]), y - 0.3, y + 0.3);
+        break;
+      }
+      case 'windmill': {
+        // farm windmill (~8.5 m; the sails are `sails`, hub at (0, 6.75, 1.55) facing +z): white-washed tower, stone foot,
+        // a wooden cap, a door, windows and a little gallery
+        grad(b, cyl(1.25, 1.9, 6.0, 8), '#cabca4', '#f4ecd8', T(0, 3.3, 0), 0.3, 6.3);
+        grad(b, cyl(2.0, 2.15, 0.6, 8), '#7a7468', '#a8a090', T(0, 0.3, 0), 0, 0.6);
+        b.add(cyl(1.35, 1.35, 0.22, 8), '#7a5636', T(0, 4.2, 0));
+        for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; b.add(box(0.06, 0.5, 0.06), '#6a4a2c', T(Math.cos(a) * 1.55, 4.55, Math.sin(a) * 1.55)); }
+        b.add(cyl(1.58, 1.58, 0.06, 8), '#8a6a42', T(0, 4.8, 0));
+        grad(b, cone(1.75, 1.9, 8), '#7a3a2a', '#c86a48', T(0, 7.25, 0), 6.3, 8.2);
+        b.add(cyl(1.5, 1.5, 0.3, 8), '#5a3a26', T(0, 6.35, 0));
+        b.add(cyl(0.16, 0.2, 1.0, 6), '#4a3424', T(0, 6.75, 1.1, Math.PI / 2, 0, 0));
+        b.add(box(0.9, 1.5, 0.1), '#4a3020', T(0, 1.15, 1.84, -0.12, 0, 0)); b.add(box(1.1, 0.16, 0.22), '#7a5636', T(0, 1.95, 1.84, -0.12, 0, 0));
+        for (const [x, y] of [[0.0, 3.2], [0.0, 5.3]] as const) { b.add(box(0.42, 0.55, 0.1), '#3a2a3a', T(x, y, 1.75 - (y - 3.2) * 0.13, -0.13, 0, 0)); b.addGlow(box(0.3, 0.42, 0.04), '#ffd890', T(x, y, 1.79 - (y - 3.2) * 0.13, -0.13, 0, 0), 1.3); }
+        for (const s of [-1, 1]) grad(b, dod(0.6), '#4a7a32', '#8ab850', T(s * 2.1, 0.4, 0.8, 0, s, 0, [1.2, 0.6, 1]), 0, 0.8);
+        break;
+      }
+      case 'sails': {
+        // four lattice sails around the hub (origin); turned about z by the terrain
+        b.add(cyl(0.26, 0.26, 0.3, 8), '#5a3a26', T(0, 0, 0.15, Math.PI / 2, 0, 0));
+        b.add(sph(0.18, 8, 6), '#8a6a42', T(0, 0, 0.32));
+        for (let i = 0; i < 4; i++) {
+          const a = i * Math.PI / 2, ca = Math.cos(a), sa = Math.sin(a);
+          b.add(box(0.2, 4.6, 0.16), '#5a3e26', T(-sa * 2.3, ca * 2.3, 0.3, 0, 0, a));
+          grad(b, box(1.3, 3.5, 0.06), '#d8c8a4', '#f4ecd8', T(-sa * 2.65 + ca * 0.72, ca * 2.65 + sa * 0.72, 0.25, 0, 0, a), -5, 5);
+          for (let k = 0; k < 5; k++) b.add(box(1.42, 0.07, 0.08), '#7a5636', T(-sa * (1.05 + k * 0.82) + ca * 0.72, ca * (1.05 + k * 0.82) + sa * 0.72, 0.31, 0, 0, a));
+          b.add(box(0.07, 3.5, 0.08), '#7a5636', T(-sa * 2.65 + ca * 1.38, ca * 2.65 + sa * 1.38, 0.31, 0, 0, a));
+        }
+        break;
+      }
+      case 'wheat': {
+        // a clump of ripe wheat (pal 0 gold, 1 green-gold): thin stalks with ears
+        const c = pal % 2 ? ['#7a8a32', '#c8c860', '#d8d070'] : ['#9a7a2a', '#e0c060', '#f4d880'];
+        for (let i = 0; i < 5; i++) {
+          const a = i / 5 * Math.PI * 2 + hh(i) * 0.6, r = 0.08 + hh(i + 2) * 0.16, h = 0.85 + hh(i + 4) * 0.3, lean = (hh(i + 6) - 0.5) * 0.3;
+          grad(b, new THREE.ConeGeometry(0.04, h, 3, 1, true), c[0], c[1], T(Math.cos(a) * r, h / 2, Math.sin(a) * r, lean, 0, lean * 0.6), 0, h);
+          b.add(new THREE.ConeGeometry(0.05, 0.26, 3), c[2], T(Math.cos(a) * r, h + 0.03, Math.sin(a) * r, Math.PI, 0, 0));
+        }
+        break;
+      }
+      case 'hay': {
+        // round hay bale lying on its side, a spiral face and loose wisps
+        grad(b, cyl(0.6, 0.6, 1.05, 10), '#b08a38', '#ecd078', T(0, 0.6, 0, 0, 0, Math.PI / 2), 0, 1.2);
+        for (const s of [-1, 1]) { b.add(cyl(0.5, 0.5, 0.02, 10), '#d8b860', T(s * 0.53, 0.6, 0, 0, 0, Math.PI / 2)); b.add(tor(0.28, 0.025, Math.PI * 1.7, 3, 10), '#a8822e', T(s * 0.545, 0.6, 0, 0, Math.PI / 2, 0)); }
+        for (let i = 0; i < 4; i++) b.add(new THREE.ConeGeometry(0.05, 0.3, 3), '#e0c060', T(-0.4 + i * 0.27, 0.06, 0.62, Math.PI / 2 - 0.3, 0, (i - 1.5) * 0.4));
+        break;
+      }
+      case 'bigtree': {
+        // the one big gnarled dead tree (~8 m): a twisted trunk of bent segments, spread roots, crooked limbs and twigs,
+        // a dark hollow with two faint glowing eyes
+        const bark = ['#2e2630', '#6e6066'];
+        let r = 0.85;
+        const seg = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r0: number, r1: number, s = 7) => {
+          const dx = x1 - x0, dy = y1 - y0, dz = z1 - z0, L = Math.hypot(dx, dy, dz);
+          const g = cyl(r1, r0, L * 1.04, s);
+          const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / L, dy / L, dz / L));
+          const m = new THREE.Matrix4().compose(new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), q, new THREE.Vector3(1, 1, 1));
+          grad(b, g, bark[0], bark[1], m, 0, 8);
+        };
+        const trunk: [number, number, number][] = [[0, 0, 0], [0.25, 1.3, 0.1], [-0.15, 2.6, -0.1], [0.3, 3.7, 0.05], [0.0, 4.6, 0]];
+        for (let i = 0; i < trunk.length - 1; i++) { const a = trunk[i], c = trunk[i + 1], r1 = r * 0.78; seg(a[0], a[1], a[2], c[0], c[1], c[2], r, r1, 8); r = r1; }
+        b.add(cyl(1.2, 1.5, 0.5, 8), bark[0], T(0, 0.2, 0));
+        for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + 0.3; seg(Math.cos(a) * 0.5, 0.35, Math.sin(a) * 0.5, Math.cos(a) * 2.1, -0.1, Math.sin(a) * 2.1, 0.32, 0.08, 5); }
+        const limb = (x0: number, y0: number, z0: number, ang: number, rise: number, len: number, r0: number, depth: number) => {
+          let px = x0, py = y0, pz = z0, pr = r0, a = ang, up = rise;
+          for (let k = 0; k < 3; k++) {
+            const l = len * (1 - k * 0.22), nx = px + Math.cos(a) * l, nz = pz + Math.sin(a) * l * 0.6, ny = py + up * l;
+            seg(px, py, pz, nx, ny, nz, pr, pr * 0.62, 5);
+            if (depth > 0 && k === 1) limb(nx, ny, nz, a + (hh(depth * 7 + k) > 0.5 ? 0.9 : -0.9), up + 0.3, l * 0.6, pr * 0.55, depth - 1);
+            px = nx; py = ny; pz = nz; pr *= 0.62; a += (hh(k + depth * 3 + x0) - 0.5) * 0.9; up = up * 0.7 - 0.05;
+          }
+          b.add(cone(pr * 0.9, 0.5, 4), bark[1], T(px, py + 0.2, pz, 0, 0, (Math.cos(a) > 0 ? -1 : 1) * 0.5));
+        };
+        limb(0.1, 4.4, 0, 0.3, 0.55, 1.6, 0.36, 1);
+        limb(-0.1, 4.2, 0, Math.PI - 0.2, 0.5, 1.7, 0.36, 1);
+        limb(0.25, 3.3, 0.1, -0.3, 0.25, 1.5, 0.3, 1);
+        limb(-0.2, 2.8, -0.1, Math.PI + 0.4, 0.3, 1.3, 0.28, 0);
+        limb(0.0, 4.6, 0, Math.PI / 2 + 0.2, 0.9, 1.2, 0.3, 1);
+        b.add(sph(0.36, 8, 6), '#0e0a12', T(0.05, 1.7, 0.6, 0, 0, 0, [0.8, 1.2, 0.4]));
+        for (const s of [-1, 1]) b.addGlow(sph(0.075, 5, 4), '#b8ff9a', T(0.05 + s * 0.13, 1.86, 0.74, 0, 0, 0, [1, 0.7, 1]), 1.8);
+        break;
+      }
+      case 'hut': {
+        // abandoned hut facing +z: pal 0 log walls with a holed thatch roof and a sagging door, 1 the roof collapsed into the
+        // house, 2 a burnt-out frame (posts, a beam, a stone chimney)
+        const logs = ['#5a4430', '#957556'], thatch = ['#6a5a34', '#b0a060'], stone = ['#6a6470', '#a8a2b0'];
+        const p = pal % 3;
+        if (p === 2) {
+          for (const [x, z, h] of [[-1.4, -1.2, 2.0], [1.4, -1.2, 1.4], [-1.4, 1.2, 1.1], [1.4, 1.2, 1.9]] as const) grad(b, box(0.2, h, 0.2), '#1e1a1a', '#4a3a34', T(x, h / 2, z, 0, 0, (x > 0 ? -1 : 1) * 0.04), 0, h);
+          b.add(box(3.1, 0.18, 0.2), '#2a2220', T(0, 1.9, -1.2, 0, 0, 0.1)); b.add(box(0.2, 0.18, 2.6), '#2a2220', T(-1.4, 1.05, 0));
+          grad(b, box(2.8, 0.6, 0.25), logs[0], '#6a5040', T(0, 0.3, -1.2), 0, 0.6);
+          grad(b, box(0.7, 3.0, 0.7), stone[0], stone[1], T(1.0, 1.5, -0.9), 0, 3.0);
+          for (let i = 0; i < 4; i++) b.add(box(0.18, 0.18, 1.6), '#2a2220', T(-0.6 + i * 0.45, 0.1, 0.3, 0, 0.3 * i, 0.1));
+          grad(b, dod(0.6), '#2f6a32', '#6aa848', T(-1.1, 0.35, 1.3, 0, 0, 0, [1.3, 0.6, 1]), 0, 0.7);
+          break;
+        }
+        const wh = p === 1 ? 1.5 : 1.9;
+        grad(b, box(3.0, wh, 2.6), logs[0], logs[1], T(0, wh / 2, 0), 0, wh);
+        for (let i = 0; i < 4; i++) b.add(box(3.06, 0.05, 2.66), '#4a3624', T(0, 0.35 + i * (wh / 4), 0));
+        for (const [x, z] of [[-1.5, -1.3], [1.5, -1.3], [-1.5, 1.3], [1.5, 1.3]] as const) b.add(box(0.22, wh + 0.1, 0.22), '#4a3424', T(x, (wh + 0.1) / 2, z));
+        b.add(box(0.75, 1.3, 0.06), '#120e14', T(-0.6, 0.65, 1.31)); b.add(box(0.6, 1.25, 0.06), '#6a4a30', T(-0.15, 0.62, 1.52, 0, -1.0, 0.06));
+        b.add(box(0.55, 0.45, 0.06), '#120e14', T(0.75, 1.15, 1.31)); b.add(box(0.3, 0.5, 0.05), '#7a5a3a', T(1.12, 1.0, 1.36, 0, 0, 0.45));
+        if (p === 0) {
+          grad(b, box(1.75, 0.18, 3.3), thatch[0], thatch[1], T(-0.78, wh + 0.68, 0, 0, 0, 0.72), wh, wh + 1.5);
+          grad(b, box(1.75, 0.18, 1.55), thatch[0], thatch[1], T(0.78, wh + 0.68, -0.88, 0, 0, -0.72), wh, wh + 1.5);
+          grad(b, box(1.75, 0.18, 0.7), thatch[0], thatch[1], T(0.78, wh + 0.68, 1.3, 0, 0, -0.72), wh, wh + 1.5);
+          const gable = new THREE.CylinderGeometry(1, 1, 2.62, 3);
+          grad(b, gable, logs[0], logs[1], T(0, wh + 0.3, 0, Math.PI / 2, 0, 0, [1.45, 1, 0.62]), wh, wh + 1.1);
+          b.add(box(0.12, 0.12, 0.9), '#3a2a1e', T(0.6, wh + 0.85, 0.35, 0.2, 0.2, -0.72)); b.add(box(0.1, 0.1, 0.8), '#3a2a1e', T(0.9, wh + 0.6, 0.1, -0.1, 0, -0.72));
+          grad(b, box(0.5, 1.6, 0.5), stone[0], stone[1], T(-0.9, wh + 0.9, -0.6), wh, wh + 1.7);
+          grad(b, dod(0.5), '#3a6a32', '#7ab050', T(-0.8, wh + 0.95, 0.9, 0, 0, 0.72, [1.3, 0.3, 1.1]), wh + 0.6, wh + 1.2);
+        } else {
+          grad(b, box(1.85, 0.2, 3.3), thatch[0], thatch[1], T(-0.5, wh + 0.35, 0, 0.0, 0.08, 0.38), wh - 0.2, wh + 1.0);
+          grad(b, box(2.2, 0.2, 3.2), thatch[0], thatch[1], T(1.45, wh * 0.55, 0.2, 0.05, -0.1, -1.0), 0, wh + 0.6);
+          b.add(box(0.14, 0.14, 3.3), '#3a2a1e', T(-0.2, wh + 0.75, 0.05, 0.1, 0, 0.3));
+          for (let i = 0; i < 3; i++) b.add(box(0.1, 0.1, 1.8), '#3a2a1e', T(0.4 + i * 0.4, wh + 0.1 - i * 0.2, -0.3, 0.6, 0.4 * i, 0.4));
+        }
+        for (const [x, z, s] of [[-1.6, 1.2, 0.7], [1.5, -1.4, 0.6], [1.6, 1.0, 0.5]] as const) grad(b, dod(s), '#2f6a32', '#6aa848', T(x, s * 0.4, z, 0, x, 0, [1.4, 0.8, 1.2]), 0, s);
+        for (let i = 0; i < 5; i++) b.add(new THREE.ConeGeometry(0.08, 0.7, 3, 1, true), '#5a8a3a', T(-1.3 + i * 0.62, 0.3, 1.45 + (i % 2) * 0.1, 0.3, 0, (i - 2) * 0.2));
+        break;
+      }
+      case 'well': {
+        // old village well: a round stone wall, two posts, a little shingle roof, a winch and a bucket
+        grad(b, cyl(0.75, 0.8, 0.8, 10), '#6a6470', '#aaa4b2', T(0, 0.4, 0), 0, 0.8);
+        b.add(cyl(0.6, 0.6, 0.04, 10), '#0e0c14', T(0, 0.75, 0));
+        for (const s of [-1, 1]) grad(b, box(0.14, 1.7, 0.14), '#4a3424', '#7a5a3a', T(s * 0.68, 1.35, 0), 0.4, 2.2);
+        b.add(cyl(0.07, 0.07, 1.5, 6), '#5a3e28', T(0, 1.75, 0, 0, 0, Math.PI / 2));
+        grad(b, box(1.0, 0.08, 1.7), '#5a3a2e', '#8a5a44', T(-0.35, 2.3, 0, 0, 0, 0.62), 2.0, 2.6); grad(b, box(1.0, 0.08, 1.7), '#5a3a2e', '#8a5a44', T(0.35, 2.3, 0, 0, 0, -0.62), 2.0, 2.6);
+        b.add(cyl(0.16, 0.13, 0.26, 7), '#6a4a30', T(0.5, 0.95, 0.55)); b.add(cyl(0.165, 0.165, 0.03, 7), '#3a3038', T(0.5, 1.05, 0.55));
+        grad(b, dod(0.4), '#2f6a32', '#6aa848', T(-0.7, 0.15, 0.5, 0, 0, 0, [1.3, 0.6, 1]), 0, 0.4);
+        break;
+      }
     }
     return b.build();
   });

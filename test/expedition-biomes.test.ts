@@ -23,13 +23,25 @@ function budget(root: THREE.Object3D) {
   return { calls, tris };
 }
 const IDS = Object.keys(BIOMES) as BiomeId[];
+/** the 31.10 live terrains (Тыквенное поле, Кладбище, Руины, Мельница, Сухое дерево, Заброшенная деревня) */
+const NEW: BiomeId[] = ['pumpkin', 'graveyard', 'ruins', 'mill', 'deadtree', 'village'];
+/** world positions of every instance of the named instanced meshes (props, set pieces, sails) */
+function instances(root: THREE.Object3D, pick: (name: string) => boolean): { name: string; x: number; z: number }[] {
+  const out: { name: string; x: number; z: number }[] = [], m = new THREE.Matrix4(), p = new THREE.Vector3();
+  root.updateMatrixWorld(true);
+  root.traverse((o: any) => {
+    if (!o.isInstancedMesh || !pick(o.name)) return;
+    for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, m); m.premultiply(o.matrixWorld); p.setFromMatrixPosition(m); out.push({ name: o.name, x: p.x, z: p.z }); }
+  });
+  return out;
+}
 
 describe('expedition terrain biomes', () => {
   it('every biome builds in both modes within budget and disposes cleanly', () => {
     const mats = new ExpMats();
     const worst = { calls: 0, tris: 0 };
     for (const id of IDS) for (const mode of ['path', 'clearing'] as const) for (const night of [false, true]) {
-      if (night && id !== 'meadow' && id !== 'forest') continue;
+      if (night && id !== 'meadow' && id !== 'forest' && !NEW.includes(id)) continue;
       const scene = new THREE.Scene();
       const t = new Terrain(mats, id, mode, { night, seed: 11, quality: 2 });
       scene.add(t.root); t.apply(scene);
@@ -52,6 +64,54 @@ describe('expedition terrain biomes', () => {
     const tri = (q: number) => { const t = new Terrain(mats, 'forest', 'path', { seed: 5, quality: q }); const b = budget(t.root); t.dispose(); return b.tris; };
     expect(tri(0)).toBeLessThan(tri(2));
     expect(tri(3)).toBeGreaterThanOrEqual(tri(2));
+    mats.dispose(); disposeArt();
+  });
+
+  it('31.10 biomes: lighter at q0, richer at q3, a clear arena and a clear road', () => {
+    const mats = new ExpMats();
+    for (const id of NEW) {
+      const tri = (q: number, mode: 'path' | 'clearing') => { const t = new Terrain(mats, id, mode, { seed: 5, quality: q }); const b = budget(t.root); t.dispose(); return b; };
+      for (const mode of ['path', 'clearing'] as const) {
+        const q0 = tri(0, mode), q2 = tri(2, mode), q3 = tri(3, mode);
+        expect(q0.tris, `${id}/${mode} q0 < q2`).toBeLessThan(q2.tris * 0.8);
+        expect(q3.tris, `${id}/${mode} q3 ≥ q2`).toBeGreaterThanOrEqual(q2.tris);
+        expect(q0.calls, `${id}/${mode} q0 calls`).toBeLessThanOrEqual(q2.calls);
+      }
+      // arena: nothing that stands up within the fighting ring (paving lies flat by design)
+      const arena = new Terrain(mats, id, 'clearing', { seed: 9, quality: 3 });
+      for (const p of instances(arena.root, (n) => n.startsWith('exp-prop-') || n === 'exp-landmark' || n === 'exp-sails')) {
+        const small = /exp-prop-(grass|pebbles|flower|moss|dry|scree|vine|pumpkin|wheat|fern|bones|mushroom|shrub)$/.test(p.name);
+        expect(Math.hypot(p.x, p.z * 1.15), `${id} arena ${p.name} at ${p.x.toFixed(1)},${p.z.toFixed(1)}`).toBeGreaterThanOrEqual(small ? 7.9 : 8.9);   // fg dressing ≥ 9 m, set pieces ≥ 11.5 m
+      }
+      arena.dispose();
+      // road: set pieces and tall props keep off the path (the paving is the road itself)
+      const road = new Terrain(mats, id, 'path', { seed: 9, quality: 3 });
+      for (const p of instances(road.root, (n) => n === 'exp-landmark' || n === 'exp-sails' || /exp-prop-(scarecrow|corn|column|wall|hut|dead|tree|cross|tomb|lantern|hay)$/.test(n))) {
+        expect(Math.abs(p.z), `${id} road ${p.name} at ${p.x.toFixed(1)},${p.z.toFixed(1)}`).toBeGreaterThan(2.6);
+      }
+      road.dispose();
+    }
+    mats.dispose(); disposeArt();
+  });
+
+  it('the mill turns its sails (no allocation per frame) and the moonlit graveyard keeps its own sky', () => {
+    const mats = new ExpMats();
+    for (const mode of ['path', 'clearing'] as const) {
+      const t = new Terrain(mats, 'mill', mode, { seed: 3, quality: 2 });
+      let sails: THREE.InstancedMesh | null = null;
+      t.root.traverse((o: any) => { if (o.name === 'exp-sails') sails = o; });
+      expect(sails, `${mode} sails`).not.toBeNull();
+      const a = new THREE.Matrix4(), b = new THREE.Matrix4();
+      t.update(1); sails!.getMatrixAt(0, a); t.update(2.5); sails!.getMatrixAt(0, b);
+      expect(a.equals(b)).toBe(false);
+      expect(sails!.count).toBe(mode === 'path' ? 3 : 1);
+      t.dispose();
+    }
+    const scene = new THREE.Scene(), g = new Terrain(mats, 'graveyard', 'path', { seed: 3, quality: 2 });
+    g.apply(scene);
+    expect(mats.sky.uniforms.uMoon.value).toBe(1);
+    expect(mats.sky.uniforms.uStars.value).toBeGreaterThan(0.5);
+    g.dispose();
     mats.dispose(); disposeArt();
   });
 

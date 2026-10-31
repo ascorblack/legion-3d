@@ -35,7 +35,8 @@ const BOTS = +(opt.bots || 20);
 const CUT = opt.cut || 'promo';
 const NAME = opt.name || (opt.test ? 'test' : CUT === 'promo' ? 'legion-3d-review' : `legion-3d-${CUT}`);
 const FR = join(OUT, CUT === 'promo' ? 'frames' : `frames-${CUT}`);
-const AUDIO = CUT !== 'promo' && !opt['no-audio'];
+// lore: picture only — the narrator + music are mixed afterwards (scripts/video/lore-mix.py)
+const AUDIO = CUT !== 'promo' && CUT !== 'lore' && !opt['no-audio'];
 const ENC = opt.encoder || 'libx264';
 const LIMIT = opt.frames ? +opt.frames : Infinity;
 const ARGS = GPU
@@ -67,7 +68,9 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const LS = { 'l3d.quality': '3', 'l3d.cam': 'fp', 'l3d.post': '1', 'l3d.whatsnew.enabled': '0',
   ...(CUT === 'gameplay' || CUT === 'edit' ? { 'l3d.vol.master': '1', 'l3d.vol.amb': '1', 'l3d.vol.sfx': '1', 'l3d.vol.ui': '1', 'l3d.event.mode': 'on', 'l3d.combat': 'on', 'l3d.combat.hint': '1' } : {}),
   // edit cut: no first-time hint toasts over the shots
-  ...(CUT === 'edit' ? { 'l3d.fun.flight.hint': '1', 'l3d.fun.bench.hint': '1' } : {}) };
+  ...(CUT === 'edit' ? { 'l3d.fun.flight.hint': '1', 'l3d.fun.bench.hint': '1' } : {}),
+  // lore: nameplates limited to 0 in the page (lore.ts; 'off' would hide the bubbles too), debug mode allowed (?debug=1 pages: the test dimension), no hint toasts
+  ...(CUT === 'lore' ? { 'l3d.names': 'all', 'l3d.debug': 'on', 'l3d.fun.flight.hint': '1', 'l3d.fun.bench.hint': '1', 'l3d.combat.hint': '1' } : {}) };
 const CFG = CUT === 'gameplay' || CUT === 'edit' ? { seed: 20261026, audio: true, lock: true } : { seed: 20261026 };
 const INIT = `try{for(const [k,v] of Object.entries(${JSON.stringify(LS)}))localStorage.setItem(k,v);}catch(e){}\nwindow.__VT_CFG=${JSON.stringify(CFG)};\n` + bundle;
 let shared = null;   // persistent context (--profile)

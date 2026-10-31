@@ -12,7 +12,11 @@ const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
 const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
-const SHOTS = opt.set === '060' ? [
+const SHOTS = opt.set === '064' ? [
+  ['expedition', 'demo=travel&ter=' + encodeURIComponent('Тыквенное поле'), 'pumpkin', 9000, 'clean'],
+  ['expedition', 'demo=travel&ter=' + encodeURIComponent('Кладбище'), 'graveyard', 9000, 'clean'],
+  ['expedition', 'demo=travel&ter=' + encodeURIComponent('Мельница'), 'mill', 9000, 'clean'],
+] : opt.set === '060' ? [
   ['game', 'hwc=off&bots=6', 'city-spawn', 14000, at(2460, 1010, 'tp', 0, -0.12)],
   ['game', 'hwc=off&bots=6', 'city-lower', 14000, at(1400, 1480, 'tp', 0.2, -0.02)],
   ['game', 'hwc=off&bots=4', 'city-shopfront', 14000, at(4700, 990, 'tp', 0.1, -0.2)],

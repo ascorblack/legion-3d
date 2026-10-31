@@ -11,8 +11,10 @@ import { type G, rateAt } from './kit';
 import { SEGMENTS as PROMO, type Segment, FPS } from '../shots';
 import { GAMEPLAY } from '../gameplay';
 import { EDIT } from '../edit';
+import { LORE } from '../lore';
+import { EXPMOVIE } from '../expmovie';
 
-const SEGMENTS: Segment[] = [...PROMO, ...GAMEPLAY, ...EDIT];
+const SEGMENTS: Segment[] = [...PROMO, ...GAMEPLAY, ...EDIT, ...LORE, ...EXPMOVIE];
 import { setupDemo } from './demo';
 
 type Status = 'idle' | 'setup' | 'ready' | string;

@@ -530,6 +530,7 @@ class Lair extends Base implements SetPiece {
 
 /* ------------------------------------------------------------------ loot */
 
+
 class Loot extends Base implements SetPiece {
   party = { cx: 0, cz: 0, r: 3.0 };
   focus = { x: 0, y: 1.6, z: 0, d: 11, pitch: 0.34, yaw: 0.15 };
@@ -552,7 +553,12 @@ class Loot extends Base implements SetPiece {
     m.scale(_s16).setPosition(0, 1.7 + Math.sin(t * 2) * 0.15, 0);
     this.item.setMatrixAt(0, m); this.item.instanceMatrix.needsUpdate = true;
     const L = s.loot;
-    if (this.relabel) this.sign.set(L?.name || 'Добыча', L ? `голосов: ${L.votes}${s.until ? ' · ' + this.env.secLeft(s.until) + ' с' : ''}` : '', '#ffc94d');
+    if (this.relabel) {
+      // live 31.10: the leaders of the vote and the share of «случайно» (loot.top / loot.rnd), the rarity colour
+      const lead = L && L.top.length ? L.top.slice(0, 2).map((t) => `${t.me ? 'ты' : t.name} ${t.votes}`).join(' · ') : '';
+      const sub = L ? [`голосов: ${L.votes}`, lead, L.rnd > 0 ? `случайно ${Math.round(L.rnd)}` : '', s.until ? this.env.secLeft(s.until) + ' с' : ''].filter(Boolean).join(' · ') : '';
+      this.sign.set(L?.name || 'Добыча', sub, RARITY_COL[L?.rarity || ''] || '#ffc94d');
+    }
     this.env.decals.add(0, 0.01, 0, 2.2, '#ffd34d', 0.7, 0.4, 3);
     this.fxT += dt;
     if (this.fxT > 0.1) { this.fxT = 0; const fx = this.env.fx, a = fx.rnd() * 6.28; fx.emit(1, Math.cos(a) * 0.6, 1.4, Math.sin(a) * 0.6, Math.cos(a) * 0.4, 0.8, Math.sin(a) * 0.4, 1.2, 0.16, 0.05, 1, 0.85, 0.3, 1, -0.5, 0.5, false, a, 3); }

@@ -120,7 +120,9 @@ export class Crowd {
       a.tx = s.x; a.tz = s.z; a.tface = s.face;
       if (o.instant) { a.x = s.x; a.z = s.z; a.face = s.face; }
       // nameplates: detailed avatars always have one; instanced cats get one while under the cap (party order)
-      if (!a.label && (m.me || i < this.labelCap)) { a.label = new Label(m.me ? 'me' : 'name', 384, 80, m.me ? 0.32 : 0.22); this.root.add(a.label.obj); }
+      // filler cats (m.ghost: the site gave only a head count) never get a plate — no invented names
+      if (a.label && m.ghost && !m.me) { a.label.dispose(); a.label = null; }
+      if (!a.label && (m.me || (!m.ghost && i < this.labelCap))) { a.label = new Label(m.me ? 'me' : 'name', 384, 80, m.me ? 0.32 : 0.22); this.root.add(a.label.obj); }
       else if (a.label && !a.av && !m.me && i >= this.labelCap) { a.label.dispose(); a.label = null; }
       const nm = short(m.name || m.login);
       if (a.label) a.label.set(m.me ? `ТЫ · ${nm}` : nm);
@@ -138,7 +140,7 @@ export class Crowd {
       let app = this.o.appOf(m.login);
       if (!app) app = appearanceFrom(m.login, { n: m.name, g: gearFor(m.role), role: m.role }, (this.o.style || 'cats') as any);
       try { a.av = this.o.kit.create(app); this.root.add(a.av.root); } catch (e) { console.warn('[l3d] expedition avatar', e); a.av = null; }
-      if (a.av) {
+      if (a.av && (m.me || !m.ghost)) {
         a.label = new Label(m.me ? 'me' : 'name', 384, 80, m.me ? 0.32 : 0.22);
         this.root.add(a.label.obj);
       }

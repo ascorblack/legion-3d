@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import type { BiomeId } from './adapter';
 import { propGeo, GB, T, type PropKind } from './art';
 import type { ExpMats } from './mats';
-import { tunnelGeo, chamberGeo, ridgeGeo, hash2, blobShadowMesh, type ShellCfg } from './biome-art';
+import { tunnelGeo, chamberGeo, ridgeGeo, hash2, blobShadowMesh, rowPoints, type ShellCfg } from './biome-art';
 
 export const P = 48;           // repeat period along x (m)
 const SPAN = 1.5 * P;          // ground spans x ∈ [−SPAN, SPAN]
@@ -39,6 +39,12 @@ export interface BiomeSpec {
   far: number;
   /** shell kind for enclosed / canyon biomes */
   shell?: 'cave' | 'mine' | 'dungeon' | 'gorge';
+  /** a moon disc in the day sky at sunDir (moonlit biomes keep their own palette instead of the generic night) */
+  moon?: number;
+  /** motes drifting over the ground: count at q2, rgb (embers, wisps, fireflies) */
+  fly?: [number, number, number, number];
+  /** ground mist: big soft low glows, count at q2 + colour (q0: none) */
+  mist?: [number, string];
 }
 const DAY: [string, string, string] = ['#2a74e6', '#86c4ff', '#dcefff'];
 const WARM: [number, number, number] = [1.1, 1.04, 0.84], LUSH: [number, number, number] = [0.86, 1.0, 0.9], NEUT: [number, number, number] = [1, 1, 1];
@@ -101,19 +107,60 @@ export const BIOMES: Record<BiomeId, BiomeSpec> = {
       ['scree', 0, 10, 1], ['scree', 1, 5, 1], ['shrub', 0, 9, 1], ['shrub', 1, 5, 1], ['dry', 1, 12, 1], ['bones', 0, 2, 1], ['ribs', 0, 1, 1], ['sandrock', 0, 3, 1], ['sandrock', 1, 2, 1], ['cactus', 0, 2, 1], ['agave', 0, 3, 1]],
     water: 'none', walls: 'none', sunDir: [-0.3, 0.42, -0.86], sunI: 1.3, sunCol: '#fff0c8', cloud: 0.15, cloudCol: '#fff8ec', rim: '#cfe8ff', rimK: 0.9, mode: 2, tA: [1.0, 0.94, 0.86], tB: [0.88, 0.84, 0.82], spk: ['#c48a54', 0.6],
     ridge: { kind: 'mesa', far: '#b0806c', near: '#a8644a', h: 22 }, far: 6.5 },
+  // 31.10 (live main channel): the Halloween expedition map. Pumpkin field — Halloween dusk (violet sky, an orange sun on the
+  // horizon), jack-o'-lanterns and ember motes; graveyard — moonlit night with ground mist and grave lights.
+  pumpkin: { ru: 'Тыквенное поле', sky: ['#22164a', '#8a3a78', '#ff9452'], fog: '#5e4466', fogNear: 36, fogFar: 104, stars: 0.55, ground: ['#3e5226', '#56662c'], path: '#6a4c36', amp: 0.35, hemi: ['#ffd0a0', '#4a2a4a', 2.5], sun: ['#ffa060', 2.4],
+    props: [['pebbles', 1, 14], ['grass', 2, 56], ['grass', 3, 40], ['vine', 0, 5], ['pumpkin', 0, 5], ['pumpkin', 1, 4], ['pumpkin', 2, 5], ['corn', 0, 6], ['scarecrow', 0, 1], ['dead', 0, 3], ['tree', 2, 4], ['bush', 3, 6], ['fence', 1, 5], ['stump', 0, 2],
+      ['pumpkin', 0, 4, 1], ['pumpkin', 1, 4, 1], ['pumpkin', 2, 6, 1], ['vine', 0, 3, 1]],
+    water: 'none', walls: 'none', sunDir: [0.35, 0.07, -0.93], sunI: 1.5, sunCol: '#ff7a2a', cloud: 0.45, cloudCol: '#c86a8a', rim: '#ff8a4a', rimK: 0.55, mode: 0, tA: [1.02, 0.96, 0.82], tB: [0.8, 0.84, 0.74], spk: ['#c8702a', 0.35],
+    ridge: { kind: 'hills', far: '#5a3a6a', near: '#3e3448', h: 12 }, far: 3, fly: [14, 1.0, 0.42, 0.08] },
+  graveyard: { ru: 'Кладбище', sky: ['#0e1030', '#2c2c5a', '#5a5478'], fog: '#3a3c62', fogNear: 20, fogFar: 76, stars: 0.9, ground: ['#34503a', '#4a6446'], path: '#6a6458', amp: 0.5, hemi: ['#a8b4ff', '#2a2840', 2.8], sun: ['#c0c8ff', 2.0],
+    props: [['pebbles', 3, 34], ['grass', 3, 90], ['grass', 2, 30], ['tomb', 0, 9], ['tomb', 1, 7], ['cross', 0, 10], ['cross', 1, 9], ['dead', 0, 10], ['lantern', 0, 6], ['bush', 3, 6], ['moss', 0, 6], ['bones', 0, 2], ['stump', 0, 2], ['rock', 2, 4],
+      ['cross', 1, 3, 1], ['tomb', 1, 2, 1], ['bones', 0, 2, 1]],
+    water: 'none', walls: 'none', sunDir: [-0.42, 0.2, -0.88], sunI: 0, sunCol: '#dfe4ff', cloud: 0.35, cloudCol: '#5a5a8a', rim: '#8aa0ff', rimK: 0.6, mode: 0, tA: [0.82, 0.9, 1.0], tB: [0.7, 0.8, 0.9], spk: ['#8a8aa8', 0.4],
+    ridge: { kind: 'pines', far: '#262a48', near: '#1c2236', h: 12 }, far: 3, moon: 1, fly: [18, 0.45, 1.0, 0.75], mist: [30, '#5a6488'] },
+  ruins: { ru: 'Руины', sky: ['#3a78d0', '#a8c8e4', '#f0dcc0'], fog: '#d0d0c4', fogNear: 40, fogFar: 112, stars: 0, ground: ['#5a9a40', '#80b050'], path: '#c8b48a', amp: 0.8, hemi: ['#fff4e0', '#6a6a4a', 2.6], sun: ['#ffe8c0', 2.4],
+    props: [['pebbles', 2, 36], ['grass', 0, 120], ['grass', 2, 40], ['flower', 1, 12], ['flower', 3, 8], ['fern', 0, 10], ['moss', 0, 8], ['bush', 1, 8], ['tree', 0, 4], ['birch', 0, 2], ['column', 0, 6], ['column', 1, 4], ['column', 2, 4], ['wall', 0, 4], ['wall', 1, 3], ['rubble', 0, 8],
+      ['rubble', 0, 4, 1], ['column', 1, 1, 1]],
+    water: 'none', walls: 'none', sunDir: [0.4, 0.25, -0.88], sunI: 1.1, sunCol: '#ffd8a0', cloud: 0.45, cloudCol: '#ffffff', rim: '#ffe0b0', rimK: 0.35, mode: 0, tA: WARM, tB: [0.86, 0.94, 0.8], spk: ['#e8dcc0', 0.6],
+    ridge: { kind: 'hills', far: '#8a9ab8', near: '#6a8a60', h: 15 }, far: 4 },
+  mill: { ru: 'Мельница', sky: ['#3a74d0', '#a8cce8', '#ffe2b0'], fog: '#e8c8a8', fogNear: 34, fogFar: 105, stars: 0, ground: ['#7aa840', '#a8c050'], path: '#c8a070', amp: 0.45, hemi: ['#fff0d8', '#7a6a4a', 2.6], sun: ['#ffd8a0', 2.5],
+    props: [['pebbles', 1, 30], ['grass', 0, 90], ['grass', 2, 40], ['wheat', 0, 8], ['wheat', 1, 6], ['flower', 1, 12], ['flower', 0, 8], ['hay', 0, 5], ['fence', 0, 5], ['tree', 0, 3], ['bush', 0, 6], ['scarecrow', 1, 1], ['barrel', 0, 2], ['crate', 0, 2],
+      ['wheat', 0, 6, 1], ['hay', 0, 1, 1]],
+    water: 'none', walls: 'none', sunDir: [0.3, 0.18, -0.93], sunI: 1.25, sunCol: '#ffc070', cloud: 0.35, cloudCol: '#ffffff', rim: '#ffd090', rimK: 0.45, mode: 0, tA: [1.12, 1.04, 0.8], tB: [0.96, 0.98, 0.78], spk: ['#ffe890', 0.7],
+    ridge: { kind: 'hills', far: '#a88aa0', near: '#8a9a60', h: 13 }, far: 3 },
+  deadtree: { ru: 'Сухое дерево', sky: ['#2a2448', '#7a5a7a', '#d8a080'], fog: '#7a5e72', fogNear: 30, fogFar: 96, stars: 0.3, ground: ['#5e5236', '#7a6a44'], path: '#9a8060', amp: 0.7, hemi: ['#ffd8c8', '#4a3a3a', 2.5], sun: ['#ffb890', 2.2],
+    props: [['pebbles', 1, 30], ['dry', 0, 26], ['grass', 2, 30], ['shrub', 0, 10], ['dead', 0, 3], ['rock', 1, 8], ['boulder', 1, 2], ['scree', 1, 10], ['bones', 0, 3], ['stump', 0, 3], ['tumble', 0, 3], ['fence', 1, 2],
+      ['dry', 0, 10, 1], ['scree', 1, 6, 1], ['bones', 0, 1, 1]],
+    water: 'none', walls: 'none', sunDir: [-0.25, 0.12, -0.96], sunI: 1.2, sunCol: '#ff9a6a', cloud: 0.6, cloudCol: '#b08090', rim: '#ffa080', rimK: 0.5, mode: 0, tA: [0.98, 0.9, 0.82], tB: [0.84, 0.8, 0.78], spk: ['#a89070', 0.35],
+    ridge: { kind: 'hills', far: '#5a4a6a', near: '#5a4a48', h: 14 }, far: 4, fly: [10, 0.6, 0.85, 1.0], mist: [10, '#6a5070'] },
+  village: { ru: 'Заброшенная деревня', sky: ['#3a4a6a', '#8a9aa8', '#c8c0b0'], fog: '#9aa0a0', fogNear: 22, fogFar: 82, stars: 0, ground: ['#4a7a3a', '#62904a'], path: '#8a7a5a', amp: 0.6, hemi: ['#f0f0e0', '#4a4a3a', 2.5], sun: ['#ffe8d0', 2.1],
+    props: [['pebbles', 0, 30], ['grass', 3, 120], ['grass', 0, 50], ['fern', 0, 16], ['bush', 3, 9], ['bush', 1, 5], ['tree', 3, 3], ['dead', 0, 3], ['fence', 1, 8], ['moss', 0, 8], ['stump', 0, 3], ['barrel', 0, 3], ['crate', 0, 3], ['fallen', 0, 2], ['flower', 3, 8],
+      ['fence', 1, 3, 1], ['grass', 3, 20, 1], ['bush', 3, 3, 1], ['fern', 0, 6, 1], ['fallen', 0, 1, 1]],
+    water: 'none', walls: 'none', sunDir: [-0.35, 0.22, -0.9], sunI: 0.6, sunCol: '#ffe0c0', cloud: 0.75, cloudCol: '#c0c4c8', rim: '#c8d0e0', rimK: 0.3, mode: 0, tA: [0.92, 1.0, 0.84], tB: [0.76, 0.88, 0.78], spk: ['#8a9a60', 0.5],
+    ridge: { kind: 'pines', far: '#4a5a6a', near: '#3a5048', h: 13 }, far: 4 },
 };
 
 function rng(seed: number) { let a = seed >>> 0 || 1; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const K = (2 * Math.PI) / P;
 
 export type TerrainMode = 'path' | 'clearing';
-const TALL = new Set<PropKind>(['tree', 'pine', 'snowpine', 'birch', 'willow', 'cliff', 'mound', 'pillar', 'spire', 'support', 'ruin', 'boulder', 'menhir', 'dolmen', 'dead']);
+const TALL = new Set<PropKind>(['tree', 'pine', 'snowpine', 'birch', 'willow', 'cliff', 'mound', 'pillar', 'spire', 'support', 'ruin', 'boulder', 'menhir', 'dolmen', 'dead',
+  'scarecrow', 'corn', 'column', 'wall', 'hut']);
+/** small ground props (scaled 0.8–1.5, may come close to the road) */
+const SMALL = new Set<PropKind>(['scree', 'shrub', 'ribs', 'grass', 'pebbles', 'dry', 'snowtuft', 'flower', 'lily', 'fern', 'moss', 'mushroom', 'agave', 'pumpkin', 'vine', 'wheat']);
+/** set dressing that may frame the arena a little closer than the 13 m of the rest (ruins, graves, village debris) */
+const NEAR = new Set<PropKind>(['column', 'wall', 'rubble', 'cross', 'tomb', 'lantern', 'barrel', 'crate']);
+/** props that turn their front (+z) to the camera, ± a little (faces, doors, inscriptions) */
+const FACING = new Set<PropKind>(['scarecrow', 'cross', 'lantern', 'hut']);
 const GROVE = new Set<PropKind>(['tree', 'pine', 'snowpine', 'birch', 'willow', 'bush', 'berry', 'fern', 'mushroom', 'moss', 'stump', 'fallen', 'boulder']);
 const SHADOW_R: Partial<Record<PropKind, number>> = { tree: 1.15, pine: 1.0, snowpine: 1.0, birch: 0.8, willow: 1.4, bush: 0.65, berry: 0.55, rock: 0.62, boulder: 1.3, pillar: 0.55, dead: 0.5, stone: 0.5, menhir: 0.6, cactus: 0.4, ruin: 1.8, spire: 1.7,
-  fallen: 0.9, sandrock: 0.85, arch: 2.6, slab: 0.8, stump: 0.45, tomb: 0.5, barrel: 0.45, crate: 0.5, mushroom: 0.28, drift: 0.9, ice: 0.5, agave: 0.5, dolmen: 1.5, brazier: 0.4 };
+  fallen: 0.9, sandrock: 0.85, arch: 2.6, slab: 0.8, stump: 0.45, tomb: 0.5, barrel: 0.45, crate: 0.5, mushroom: 0.28, drift: 0.9, ice: 0.5, agave: 0.5, dolmen: 1.5, brazier: 0.4,
+  pumpkin: 0.42, corn: 0.55, scarecrow: 0.45, cross: 0.35, lantern: 0.25, column: 0.6, wall: 1.5, rubble: 0.7, hay: 0.8, hut: 2.3 };
 const GLOW: Partial<Record<PropKind, (pal: number) => [number, number, number, number, number, number, number]>> = {   // y, size, r, g, b, flicker, speed
   torch: () => [1.72, 2.6, 1.0, 0.55, 0.2, 0.22, 9], brazier: () => [1.5, 3.4, 1.0, 0.55, 0.18, 0.2, 8], support: () => [2.62, 2.2, 1.0, 0.7, 0.3, 0.1, 5],
   crystal: (pal) => [0.55, 2.4, ...([[0.25, 0.8, 1.0], [1.0, 0.3, 0.9], [0.4, 1.0, 0.4], [1.0, 0.8, 0.3]][pal % 4] as [number, number, number]), 0.12, 2.2],
+  pumpkin: (pal) => (pal % 3 === 2 ? [0.42, 2.6, 1.0, 0.5, 0.1, 0.28, 7] : [0, 0, 0, 0, 0, 0, 0]), lantern: () => [0.96, 1.9, 1.0, 0.72, 0.32, 0.2, 6],
   mushroom: (pal) => (pal >= 2 ? [0.3, 1.0, ...([[0.6, 0.3, 1.0], [0.2, 0.9, 0.8]][pal - 2] as [number, number, number]).map((v) => v * 0.8) as [number, number, number], 0.2, 1.5] : [0, 0, 0, 0, 0, 0, 0]),
 };
 
@@ -134,6 +181,9 @@ export class Terrain {
   private halos: number[] = [];   // x,y,z,size,r,g,b,flicker,speed
   private shadowList: number[] = [];   // x,z,radius
   private beams: THREE.InstancedMesh | null = null;
+  /** windmill sails (mill): turned about each hub's facing axis in update() */
+  private sails: { im: THREE.InstancedMesh; hubs: Float32Array; yaw: THREE.Quaternion[]; sc: number[]; speed: number } | null = null;
+  private readonly _m4 = new THREE.Matrix4(); private readonly _q4 = new THREE.Quaternion(); private readonly _q5 = new THREE.Quaternion(); private readonly _v4 = new THREE.Vector3(); private readonly _s4 = new THREE.Vector3();
   /** a river along x behind the action (river, falls, the bridge arena) */
   private get parallel(): boolean { const w = this.spec.water; return w === 'river' || w === 'falls' || (w === 'bridge' && this.mode === 'clearing'); }
   private get closed(): boolean { return !!this.spec.shell && this.spec.shell !== 'gorge'; }
@@ -183,7 +233,7 @@ export class Terrain {
   apply(scene: THREE.Scene): void {
     const S = this.spec, m = this.mats.sky.uniforms, n = this.night;
     if (n) { m.uTop.value.set('#0a0a26'); m.uMid.value.set('#241e4c'); m.uLow.value.set('#4a3a5c'); m.uStars.value = 1; m.uSun.value = 0; m.uMoon.value = 1; m.uCloud.value = 0.25; m.uCloudCol.value.set('#4a4a7a'); m.uSunCol.value.set('#c8d0ff'); }
-    else { m.uTop.value.set(S.sky[0]); m.uMid.value.set(S.sky[1]); m.uLow.value.set(S.sky[2]); m.uStars.value = S.stars; m.uSun.value = S.sunI; m.uMoon.value = 0; m.uCloud.value = S.cloud; m.uCloudCol.value.set(S.cloudCol); m.uSunCol.value.set(S.sunCol); }
+    else { m.uTop.value.set(S.sky[0]); m.uMid.value.set(S.sky[1]); m.uLow.value.set(S.sky[2]); m.uStars.value = S.stars; m.uSun.value = S.sunI; m.uMoon.value = S.moon ?? 0; m.uCloud.value = S.cloud; m.uCloudCol.value.set(S.cloudCol); m.uSunCol.value.set(S.sunCol); }
     m.uSunDir.value.set(S.sunDir[0], S.sunDir[1], S.sunDir[2]).normalize();
     const fog = n ? '#2a2450' : S.fog;
     scene.background = new THREE.Color(fog);
@@ -536,6 +586,128 @@ export class Terrain {
         this.disposables.push(bb);
       }
     }
+    /* ---- 31.10 biomes: planted rows and set pieces (always behind the action: |z| > 6 on the road, outside the arena) ---- */
+    const path = this.mode === 'path';
+    const qk = [0.45, 0.75, 1, 1.25][Math.max(0, Math.min(3, this.q))];
+    const face = (x: number, z: number) => Math.atan2(-x, -z);   // turn a +z front toward the arena centre
+    const field = (kind: PropKind, pal: number, zs: number[], step: number, keep: number, sc: [number, number], shadow = 0) => {
+      const pts = rowPoints(zs, step, Math.min(1, keep * qk), seed * 3 + pal * 13 + zs.length);
+      const ms: THREE.Matrix4[] = [];
+      for (let i = 0; i < pts.length; i += 3) for (const dx of [-P, 0, P]) {
+        const x = pts[i] + dx, z = pts[i + 1], r = pts[i + 2];
+        if (x < -SPAN || x > SPAN || (!path && Math.hypot(x, z * 1.15) < 16)) continue;
+        const s = sc[0] + (sc[1] - sc[0]) * r;
+        ms.push(T(x, this.heightAt(x, z) - 0.04, z, 0, r * 6.283, 0, s));
+        if (shadow && this.q > 0) this.shadowList.push(x, z, shadow * s);
+      }
+      if (ms.length) inst(propGeo(kind, pal), ms, this.scrollRoot);
+    };
+    /** set pieces: [x, z, ry, scale] — on the road every period (k = −1..1), in the arena once */
+    const piece = (geo: THREE.BufferGeometry, at: readonly (readonly [number, number, number, number])[], shadow = 0, sink = 0.1) => {
+      const ms: THREE.Matrix4[] = [];
+      for (const [x0, z, ry, sc] of at) for (const k of path ? [-1, 0, 1] : [0]) {
+        const x = x0 + k * P;
+        ms.push(T(x, this.heightAt(x, z) - sink, z, 0, ry, 0, sc));
+        if (shadow) this.shadowList.push(x, z, shadow * sc);
+      }
+      if (ms.length) inst(geo, ms, path ? this.scrollRoot : this.root);
+      return ms;
+    };
+    const fwd = (x: number, z: number, ry: number, d: number): [number, number] => [x + Math.sin(ry) * d, z + Math.cos(ry) * d];
+    if (this.biome === 'pumpkin') {
+      const zs = path ? [-5.6, -8.2, -10.8, -13.4, -16] : [-14, -16.6, -19.2, -21.8, -24.4];
+      // tilled ridges under the rows (6 m pieces follow the ground), then vines and pumpkins on them
+      const fm: THREE.Matrix4[] = [];
+      for (const z of zs) for (let x = -SPAN + 3; x < SPAN; x += 6) { if (!path && Math.hypot(x, z * 1.15) < 16) continue; fm.push(T(x, this.heightAt(x, z) - 0.02, z, 0, 0, Math.atan2(this.heightAt(x + 3, z) - this.heightAt(x - 3, z), 6))); }
+      if (fm.length) inst(propGeo('furrow', 0), fm, this.scrollRoot);
+      field('vine', 0, zs.map((z) => z + 0.35), 3.0, 0.3, [0.9, 1.3]);
+      field('pumpkin', 0, zs, 2.6, 0.38, [0.85, 1.35], 0.42);
+      field('pumpkin', 1, zs.map((z) => z - 0.4), 3.4, 0.3, [0.9, 1.3]);
+      const sx: [number, number, number, number][] = path ? [[-4, -7, 0.65, 1.5], [20, -9.5, 0.5, 1.35]] : [[-13, -15.5, face(-13, -15.5), 1.5], [14.5, -19, face(14.5, -19), 1.35]];
+      piece(propGeo('scarecrow', 0), sx, 0.5, 0.05);
+      const cx: [number, number, number, number][] = path ? [[15, -9.5, 0.4, 1.1], [19, -10.5, 1.3, 0.95]] : [[16, -14, 0.3, 1.1], [19.5, -12.2, 1.4, 0.95]];
+      piece(propGeo('corn', 0), cx, 0.55, 0.05);
+    }
+    if (this.biome === 'graveyard') {
+      const fence = propGeo('ironfence', 0), ms: THREE.Matrix4[] = [];
+      if (path) {
+        for (let i = -30; i <= 30; i++) {
+          const x = i * 2.4; if (Math.abs(x) > SPAN) continue;
+          if (hash2(mod(i, 20), 3, seed) < 0.16) continue;   // fallen sections (periodic: 20 sections per period)
+          ms.push(T(x, this.heightAt(x, -6.9) - 0.06, -6.9, 0, 0, (hash2(mod(i, 20), 5, seed) - 0.5) * 0.06));
+        }
+      } else {
+        const R0 = 17.6, dt = 2.4 / R0;
+        for (let t = Math.PI + 0.3; t < 2 * Math.PI - 0.3; t += dt) {
+          const x = Math.cos(t) * R0, z = Math.sin(t) * R0 * 0.92, tx = -Math.sin(t), tz = Math.cos(t) * 0.92;
+          if (hash2(Math.round(t * 10), 3, seed) < 0.14) continue;
+          ms.push(T(x, this.heightAt(x, z) - 0.06, z, 0, Math.atan2(-tz, tx), (hash2(Math.round(t * 10), 5, seed) - 0.5) * 0.06));
+        }
+      }
+      if (ms.length) inst(fence, ms, this.scrollRoot);
+      const at: [number, number, number, number][] = path ? [[-12, -17, 0.15, 1]] : [[7, -25.5, face(7, -25.5), 1.1]];
+      piece(propGeo('crypt', 0), at, 3.0);
+      for (const [x0, z0, ry, sc] of at) for (const k of path ? [-1, 0, 1] : [0]) {
+        const [hx, hz] = fwd(x0 + k * P, z0, ry, 1.75 * sc);
+        this.halos.push(hx, 3.05 * sc, hz, 1.8, 0.55, 0.4, 1.0, 0.15, 1.6);
+      }
+    }
+    if (this.biome === 'ruins') {
+      const at: [number, number, number, number][] = path ? [[-9, -13.5, 0.35, 1.15]] : [[2, -21, face(2, -21), 1.35], [-19, -9, face(-19, -9), 1.1]];
+      const ms = piece(propGeo('colonnade', 0), at, 0, 0.15);
+      // the old paved way / the paved floor of the arena: worn flagstones with gaps and grass between
+      const fl: THREE.Matrix4[] = [];
+      if (path) for (let i = 0; i < 40; i++) for (const z of [-1.2, 0, 1.2]) {
+        const x = -P / 2 + (i + 0.5) * (P / 40); if (hash2(i, z * 3 + 7, seed) < 0.22) continue;
+        for (const dx of [-P, 0, P]) { const xx = x + dx; if (Math.abs(xx) > SPAN) continue; const zc = z + Math.sin(xx * K * 2) * 0.4; fl.push(T(xx, this.heightAt(xx, zc) + 0.015, zc, 0, (hash2(i, z, seed) - 0.5) * 0.3, 0, 0.9 + hash2(i, z + 9, seed) * 0.25)); }
+      }
+      else for (let rr = 8.5; rr < 15; rr += 1.25) for (let a = 0, na = Math.max(6, Math.round(rr * 2 * Math.PI / 1.25)); a < na; a++) {
+        const th = (a + (rr % 2) * 0.5) / na * Math.PI * 2, x = Math.cos(th) * rr, z = Math.sin(th) * rr * 0.87;
+        if (hash2(a, Math.round(rr * 4), seed) < 0.16 + rr * 0.025) continue;
+        fl.push(T(x, this.heightAt(x, z) + 0.015, z, 0, th + (hash2(a, rr, seed) - 0.5) * 0.3, 0, 0.9 + hash2(a, rr + 3, seed) * 0.25));
+      }
+      if (fl.length) inst(propGeo('flagstone', 0), fl, this.scrollRoot).name = 'exp-paving';
+      for (const m of ms) { const p = new THREE.Vector3().setFromMatrixPosition(m); for (const dx of [-4, 0, 4]) this.shadowList.push(p.x + dx, p.z, 2.4); }
+    }
+    if (this.biome === 'mill') {
+      const zs = path ? [-6.4, -7.6, -8.8, -10.0, -11.2, -12.4] : [-14.5, -15.7, -16.9, -18.1, -19.3];
+      field('wheat', 0, zs, 1.2, 0.8, [0.9, 1.25]);
+      const at: [number, number, number, number][] = path ? [[-6, -19, 0.45, 1.0]] : [[-12, -24, face(-12, -24), 1.2]];
+      const ms = piece(propGeo('windmill', 0), at, 2.4, 0.15);
+      piece(propGeo('hay', 0), path ? [[-1.5, -14.2, 0.3, 1], [0.2, -15.6, 1.2, 0.9]] : [[-7.5, -21, 0.4, 1], [-6, -22.6, 1.3, 0.9]], 0.8, 0.02);
+      // a rail fence between the road and the field (a few rails missing)
+      const fz = path ? -5.0 : 0, fm: THREE.Matrix4[] = [];
+      if (path) for (let i = 0; i < 26; i++) { if (hash2(i, 41, seed) < 0.28) continue; const x = -P / 2 + (i + 0.5) * (P / 26); for (const dx of [-P, 0, P]) { const xx = x + dx; if (Math.abs(xx) > SPAN) continue; fm.push(T(xx, this.heightAt(xx, fz) - 0.03, fz, 0, 0, (hash2(i, 43, seed) - 0.5) * 0.06)); } }
+      if (fm.length) inst(propGeo('fence', 0), fm, this.scrollRoot);
+      const hubs = new Float32Array(ms.length * 3), yaw: THREE.Quaternion[] = [], sc: number[] = [];
+      ms.forEach((m, i) => {
+        const p = new THREE.Vector3().setFromMatrixPosition(m), a = at[Math.floor(i / (path ? 3 : 1))];
+        const [hx, hz] = fwd(p.x, p.z, a[2], 1.72 * a[3]);
+        hubs[i * 3] = hx; hubs[i * 3 + 1] = p.y + 6.75 * a[3]; hubs[i * 3 + 2] = hz;
+        yaw.push(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a[2])); sc.push(a[3]);
+      });
+      const im = new THREE.InstancedMesh(propGeo('sails', 0), this.mats.tint, ms.length);
+      im.frustumCulled = false; im.name = 'exp-sails';
+      this.disposables.push(im); (path ? this.scrollRoot : this.root).add(im);
+      const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this.sails = { im, hubs, yaw, sc, speed: reduce ? 0.12 : 0.55 };
+      this.update(0);
+    }
+    if (this.biome === 'deadtree') {
+      const at: [number, number, number, number][] = path ? [[-4, -11, 0.5, 1.3]] : [[-5, -19.5, face(-5, -19.5), 1.6]];
+      piece(propGeo('bigtree', 0), at, 3.2, 0.2);
+      for (const [x0, z0, ry, sc] of at) for (const k of path ? [-1, 0, 1] : [0]) {
+        const [hx, hz] = fwd(x0 + k * P, z0, ry, 0.8 * sc);
+        this.halos.push(hx, 1.86 * sc, hz, 0.7 * sc, 0.4, 0.8, 0.35, 0.3, 1.1);
+      }
+    }
+    if (this.biome === 'village') {
+      const huts: [number, number, number, number, number][] = path
+        ? [[-15, -12.5, 0.25, 1, 0], [1, -17.5, -0.12, 1.1, 1], [16, -11.5, -0.35, 1, 2], [27, -19, 0.2, 1.05, 0]]
+        : [[-15, -13, 0, 1.35, 0], [-3, -20.5, 0, 1.4, 1], [11.5, -18.5, 0, 1.35, 0], [19, -7.5, 0, 1.3, 2], [-21, -3, 0, 1.2, 1]];
+      for (let pal = 0; pal < 3; pal++) piece(propGeo('hut', pal), huts.filter((h) => h[4] === pal).map(([x, z, ry, s]) => [x, z, path ? ry : face(x, z), s] as const), 2.3, 0.08);
+      piece(propGeo('well', 0), path ? [[-5.5, -9.2, 0.4, 1.1]] : [[5, -14, face(5, -14), 1.25]], 0.9, 0.05);
+    }
     void R;
   }
 
@@ -555,7 +727,8 @@ export class Terrain {
     for (const [kind, pal, count0, fgF] of S.props) { const key = kind + ':' + pal; const g = groups.get(key) || { kind, pal, ents: [] }; g.ents.push([count0, !!fgF]); groups.set(key, g); }
     for (const { kind, pal, ents } of groups.values()) {
       const big = kind === 'mound' || kind === 'cliff';
-      const small = kind === 'scree' || kind === 'shrub' || kind === 'ribs' || kind === 'grass' || kind === 'pebbles' || kind === 'dry' || kind === 'snowtuft' || kind === 'flower' || kind === 'lily' || kind === 'fern' || kind === 'moss' || kind === 'mushroom' || kind === 'agave';
+      const small = SMALL.has(kind);
+      const facing = FACING.has(kind) || (kind === 'pumpkin' && pal % 3 === 2);
       const pts: number[] = [];
       for (const [count0, fg] of ents) {
       const count = pts.length / 3 + Math.round(count0 * qk * (kind === 'grass' ? (this.q <= 1 ? 0.5 : 1) : 1) * (fg && this.mode === 'clearing' ? 1.35 : 1));
@@ -572,7 +745,7 @@ export class Terrain {
         const az = Math.abs(z);
         const minZ = fg ? 3.2 : small ? 2.6 : big ? 9 : kind === 'pillar' || kind === 'brazier' ? 7 : 5;
         if (this.mode === 'path' && az < minZ) continue;
-        if (this.mode === 'clearing' && Math.hypot(x, z * 1.15) < (small ? 8 : big ? 17 : fg ? 9 : 13)) continue;
+        if (this.mode === 'clearing' && Math.hypot(x, z * 1.15) < (small ? 8 : big ? 17 : fg ? 9 : NEAR.has(kind) ? 11.5 : 13)) continue;
         if (fg && !small && kind !== 'bones' && kind !== 'tumble' && Math.abs(this.mode === 'path' ? z : x) < (this.mode === 'path' ? 6.5 : 7)) continue;   // tall foreground dressing only at the frame edges
         if (!fg && TALL.has(kind) && z > 2.5 && z < 20 && Math.abs(x) < (this.mode === 'path' ? P : 18)) continue;   // camera side stays clear
         if (!fg && !small && !TALL.has(kind) && z > 4 && z < 10 && Math.abs(x) < (this.mode === 'path' ? P : 12) && kind !== 'rock') continue;
@@ -603,7 +776,7 @@ export class Terrain {
       for (let i = 0; i < n; i++) {
         const x = pts[i * 3], z = pts[i * 3 + 1], r = pts[i * 3 + 2];
         const sc = (small ? 0.8 + r * 0.7 : 0.75 + r * 0.6) * (big ? 1 + r * 0.5 : 1) * (kind === 'tree' || kind === 'pine' || kind === 'snowpine' ? 1.1 : 1);
-        q.setFromAxisAngle(up, kind === 'support' ? 0 : r * 6.283);
+        q.setFromAxisAngle(up, kind === 'support' ? 0 : facing ? (this.mode === 'path' ? 0.7 : 0) + (r - 0.5) * 1.0 : r * 6.283);
         s.set(sc, sc * (kind === 'tree' || kind === 'pine' || kind === 'snowpine' ? 0.85 + r * 0.5 : 1), sc);
         for (const dx of [-P, 0, P]) {
           const xx = x + dx;
@@ -638,13 +811,23 @@ export class Terrain {
   /** Glow halos: torches, braziers, crystals, lanterns, fireflies (one instanced additive draw). */
   private haloMesh(seed: number) {
     const R = rng(seed * 13 + 1), S = this.spec;
-    const fly = (this.night ? 40 : this.biome === 'forest' ? 16 : this.biome === 'swamp' ? 26 : S.shell === 'cave' ? 14 : 0) * (this.q <= 0 ? 0 : this.q === 1 ? 0.6 : 1);
+    const fly = (this.night ? 40 : S.fly ? S.fly[0] : this.biome === 'forest' ? 16 : this.biome === 'swamp' ? 26 : S.shell === 'cave' ? 14 : 0) * (this.q <= 0 ? 0 : this.q === 1 ? 0.6 : 1);
     for (let i = 0; i < fly; i++) {
       const x = R() * P - P / 2, z = (R() * 2 - 1) * 14;
       if (this.mode === 'clearing' && Math.hypot(x, z) < 4) continue;
       const sw = S.water === 'swamp';
-      const col = S.shell === 'cave' ? [0.5, 0.7, 1.0] : sw ? [0.6, 1.0, 0.5] : [1.0, 0.9, 0.4];
+      const col = S.fly && !this.night ? [S.fly[1], S.fly[2], S.fly[3]] : S.shell === 'cave' ? [0.5, 0.7, 1.0] : sw ? [0.6, 1.0, 0.5] : [1.0, 0.9, 0.4];
       for (const dx of [-P, 0, P]) this.halos.push(x + dx, this.heightAt(x + dx, z) + 0.5 + R() * 1.8, z, 0.35 + R() * 0.2, col[0] * 1.2, col[1] * 1.2, col[2] * 1.2, 0.6, 1.5 + R() * 2);
+    }
+    // ground mist (graveyard, dead tree): wide low glows; a negative flicker marks them for the soft, coreless halo shading
+    if (S.mist && this.q > 0) {
+      const mc = new THREE.Color(S.mist[1]), nm = Math.round(S.mist[0] * (this.q === 1 ? 0.6 : 1));
+      for (let i = 0; i < nm; i++) {
+        const x = R() * P - P / 2, z = (R() * 2 - 1) * 22, sz = 3.5 + R() * 3;
+        if (this.mode === 'clearing' && Math.hypot(x, z) < 7) continue;
+        if (this.mode === 'path' && Math.abs(z) < 2.5) continue;
+        for (const dx of [-P, 0, P]) this.halos.push(x + dx, this.heightAt(x + dx, z) + 0.25 + R() * 0.3, z, sz, mc.r, mc.g, mc.b, -0.08, 0.25 + R() * 0.3);
+      }
     }
     const H = this.halos, n = Math.min(H.length / 9, 330);
     if (!n) return;
@@ -696,16 +879,26 @@ export class Terrain {
   scroll(offset: number): void { this.scrollRoot.position.x = -mod(offset, P); }
 
   update(t: number): void {
+    const W = this.sails;
+    if (W) {
+      for (let i = 0; i < W.sc.length; i++) {
+        this._q5.setFromAxisAngle(ZAX, t * W.speed + i * 0.7); this._q4.multiplyQuaternions(W.yaw[i], this._q5);
+        this._v4.set(W.hubs[i * 3], W.hubs[i * 3 + 1], W.hubs[i * 3 + 2]); this._s4.setScalar(W.sc[i]);
+        this._m4.compose(this._v4, this._q4, this._s4); W.im.setMatrixAt(i, this._m4);
+      }
+      W.im.instanceMatrix.needsUpdate = true;
+    }
     if (this.fill) this.fill.intensity = (this.night ? 30 : 22) * (0.9 + 0.1 * Math.sin(t * 9) * Math.sin(t * 5.3));
     if (this.waterMesh) this.waterMesh.position.y = (this.spec.water === 'swamp' ? -0.18 : -0.25) + Math.sin(t * 1.2) * 0.02;
   }
 
   dispose(): void {
     for (const d of this.disposables) d.dispose();
-    this.disposables = [];
+    this.disposables = []; this.sails = null;
     this.root.removeFromParent();
   }
 }
 
 const mod = (a: number, b: number) => ((a % b) + b) % b;
+const ZAX = new THREE.Vector3(0, 0, 1);
 function smooth(a: number, b: number, x: number): number { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }

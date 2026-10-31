@@ -40,7 +40,7 @@ let n = 0, lastQ = null, onSince = 0, offAt = 0, shots = 0;
 await p.exposeFunction('__qrec', (kind, data) => {
   n++;
   appendFileSync(ev, JSON.stringify({ t: Date.now(), kind, data }) + '\n');
-  if (kind === 'q') { const on = !!(data && data.on); if (on && !onSince) { onSince = Date.now(); console.log(ts(), 'EXPEDITION ON'); } if (!on && onSince && !offAt) { offAt = Date.now(); console.log(ts(), 'EXPEDITION OFF'); } lastQ = data; }
+  if (kind === 'q') { const on = !!(data && data.on); if (on && (!onSince || offAt)) { onSince = Date.now(); offAt = 0; console.log(ts(), 'EXPEDITION ON'); } if (!on && onSince && !offAt) { offAt = Date.now(); console.log(ts(), 'EXPEDITION OFF'); } lastQ = data; }
 });
 await p.addInitScript(() => {
   const hook = () => {

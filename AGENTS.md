@@ -59,6 +59,9 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
 - After a site update run `npm run drift` (docs/EXTENDING.md) — it lists new/removed ids and what we do not support.
 - Skills, achievements, wardrobe, rating and news menus show a short native summary plus the site's own panel.
 - If the site leaves the City tab by itself (an expedition starts), 3D mode does not react yet.
+- Expedition town stop (q.town): the expedition HUD offers the site's «Войти в город «…»» (src/net/city-tab.ts
+  enterQuestTown presses the site's own button); a shown City panel (#tab-city.on) counts as open even while the tab
+  button is still aria-disabled, so F8 inside the district town boots the town. Filler cats (only `n` known) have no names.
 
 ## Release screenshots
 Every release ships screenshots of what it adds, in full quality: rendered on a real GPU at the highest quality level

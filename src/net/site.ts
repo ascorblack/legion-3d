@@ -10,6 +10,7 @@ import { SX, SZ } from '../world/coords';
 import type { Bus } from '../bridge/bridge';
 import { setFetchTee } from './fetch-tee';
 import { siteMineOpen, cityLive, cityReplayAllowed } from './site-mine';
+import { cityTab } from './city-tab';
 import { createGoSender } from '../flight/sendpoint';
 import CONTRACT from '../data/site-contract.json';
 import { runtimeContract, describeFails, type ContractCheck } from './contract';
@@ -253,6 +254,9 @@ export function siteGuard(phase: 'page' | 'city'): { breaks: string[]; degrades:
 export async function replayCityEnter(cityBtn: HTMLButtonElement, B: Bus): Promise<void> {
   // only from the City scene itself: never inside the site's mine (it would wake the City under it), an expedition, another tab
   if (!cityReplayAllowed()) return;
+  // a party member inside the quest's district town (app.js openTown → townEntry): another tab would end that entry
+  // (tab(id ≠ 'city') → townEntry = 0) and the City would lock again — keep the City as it is
+  { const q = B.last['sse:q'] as { on?: boolean; party?: string } | undefined; if (q && q.on && q.party === 'in') return; }
   const other = document.querySelector<HTMLButtonElement>('.tabs button[data-tab="hero"]:not([hidden])')
     || Array.from(document.querySelectorAll<HTMLButtonElement>('.tabs button[data-tab]:not([hidden])')).find((b) => b !== cityBtn && b.getAttribute('aria-disabled') !== 'true');
   if (!other || other.getAttribute('aria-disabled') === 'true') return;
@@ -307,7 +311,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   say('Открываем город…');
   const cityBtn = await waitFor(() => document.querySelector<HTMLButtonElement>('.tabs button[data-tab="city"]:not([hidden])'), 8000);
   if (!cityBtn) return { error: 'site_changed' };
-  if (cityBtn.getAttribute('aria-disabled') === 'true') return { error: 'city_locked' };
+  // locked = aria-disabled while the City panel is NOT shown (cityTab: the quest's «Войти в город» opens it for a party member)
+  if (cityTab() === 'locked') return { error: 'city_locked' };
   // F8 inside the site's own mine: its City sleeps under it (city.js sleep). Touch nothing of the City — no tab click, no
   // enter replay, no state read; the 3D mine opens over it (src/features/mine-hold.ts) and the City wakes when the site leaves the mine
   const inMine = siteMineOpen();

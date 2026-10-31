@@ -18,7 +18,7 @@ import type { AvatarKit } from '../contracts/modules';
 import { DelayBuffer, delayS, secondsLeft, clampAdj, ADJ_KEY, isQuestPayload, type QuestPayload } from '../quest/model';
 import { adapt, Roster, type SceneState } from './adapter';
 import { ExpeditionScene } from './scene';
-import { ExpeditionHud } from './hud';
+import { ExpeditionHud, HINT_DEFAULT } from './hud';
 
 export { adapt, Roster, biomeOf, foeArt } from './adapter';
 export type { SceneState, SceneKind } from './adapter';
@@ -48,6 +48,8 @@ export class ExpeditionView {
   private state: SceneState | null = null;
   private pickT = 0;
   private bad = 0;
+  private town: { name: string; go: () => void } | null = null;
+  private hintHtml: string | undefined;
   constructor(private host: ViewHost) {}
 
   private now(): number { return this.host.now ? this.host.now() : Date.now(); }
@@ -78,10 +80,24 @@ export class ExpeditionView {
     this.scene = sc;
     target.add(sc.root);
     if ((target as THREE.Scene).isScene) sc.attach(target as THREE.Scene);
-    this.hud = new ExpeditionHud(this.host.uiRoot, this.host.hint, this.host.hintBottom);
+    this.hud = new ExpeditionHud(this.host.uiRoot, this.hintHtml ?? this.host.hint, this.host.hintBottom);
+    if (this.town) this.hud.setTown(this.town.name, this.town.go);
     this.pickT = 1;   // pick at once
     this.state = null;
     return sc;
+  }
+
+  /** The party stands in a district town the hero may enter (src/net/city-tab.ts questTown): the HUD shows the site's
+   *  «Войти в город «name»» button; `go` runs only on the player's click. null hides it. Survives open/close. */
+  setTown(t: { name: string; go: () => void } | null): void {
+    this.town = t;
+    this.hud?.setTown(t ? t.name : null, t ? t.go : null);
+  }
+  /** Replace the controls hint (kept across open/close; undefined = the host's default). */
+  setHint(html: string | undefined): void {
+    if (html === this.hintHtml) return;
+    this.hintHtml = html;
+    this.hud?.setHint(html ?? this.host.hint ?? HINT_DEFAULT);
   }
 
   close(): void {
