@@ -190,6 +190,8 @@ button { font: inherit; color: inherit; }
 /* ============================================================= menu shell */
 .menu { position: absolute; inset: 0; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .16s, visibility 0s .16s; z-index: 10; }
 .menu.on { opacity: 1; visibility: visible; transition: opacity .16s; }
+/* closed = inert immediately, not after the fade: a pending transition must never leave a click-catching layer over the canvas */
+.menu:not(.on), .menu:not(.on) * { pointer-events: none !important; }
 .menu .veil { position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(ellipse 80% 75% at 50% 45%, transparent 40%, rgba(10,6,14,.72)), linear-gradient(rgba(14,10,20,.55), rgba(14,10,20,.15) 18%, rgba(14,10,20,.15) 82%, rgba(14,10,20,.7)); }
 .menu.dim .veil { background: radial-gradient(ellipse 70% 70% at 50% 50%, rgba(18,12,24,.45), rgba(8,5,12,.85)); backdrop-filter: blur(4px); }

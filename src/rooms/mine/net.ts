@@ -134,7 +134,21 @@ export class MineClient {
   tip(text: string, bad = false): void { this.emit({ type: 'tip', text, bad }); }
   /** A live channel is up when a 'mine' event arrived recently (the server sends views every few seconds). */
   live(): boolean { return this.now() - this.lastSse < 20000; }
-  private hidden(): boolean { try { return !!(this.o.hidden && this.o.hidden()); } catch { return false; } }
+  private hidden(): boolean { if (this.held) return true; try { return !!(this.o.hidden && this.o.hidden()); } catch { return false; } }
+  /** The 3D mine is held behind the classic site (F8): no polls, pings or live-event work until hold(false). */
+  held = false;
+  /**
+   * F8 out of / back into the 3D mine (src/features/mine-hold.ts). Holding sends nothing (presence stays — no leave).
+   * Back: `reenter` = the site's own mine entered meanwhile (it took the presence over: «Копать здесь») → one enter, as the
+   * site's «Копать здесь» does; otherwise one full state read (the site's return from a hidden tab does the same).
+   */
+  hold(on: boolean, reenter = false): void {
+    if (this.closed || on === this.held) return;
+    this.held = on;
+    if (on) { if (this.goT) { this.T.clearTimeout(this.goT); this.goT = 0; } return; }
+    if (reenter && this.pos) void this.enter(this.pos, true);
+    else if (this.entered) void this.poll(true);
+  }
   private heroMe(): MineMe | null { try { const h = this.o.hero && this.o.hero(); return (h && h.mn && (h.mn[this.c] || h.mn[this.cb])) || null; } catch { return null; } }
 
   /* ---------------------------------------------------------------- presence */
@@ -175,7 +189,7 @@ export class MineClient {
   }
   /** Live channel event 'mine': new view (st) and/or presence (a, m, g), counters, chat. */
   onEvent(d: MinePayload): void {
-    if (this.closed || !d) return;
+    if (this.closed || this.held || !d) return;
     if (d.chatRoom === 'mine') { if (this.chat.on) this.chatIn({ chat: d.chat, c: (d as any).c, chatDel: (d as any).chatDel, chatMe: (d as any).chatMe }); return; }
     if (d.c && d.c !== this.c) return;
     if (d.here != null) { this.model.hereOf(d); this.emit({ type: 'here' }); if (!d.st && !d.a && !d.m && !d.g && d.n == null) return; }
@@ -506,14 +520,15 @@ export class MineClient {
   /** Looks of diggers we know nothing about (asked with the next poll). */
   lookOf(l: string): LookRec | null { return this.model.lookOf(l); }
 
-  /** Leave the mine: POST /api/mine/leave?c= {} and stop timers/subscriptions. */
-  close(): void {
+  /** Leave the mine: POST /api/mine/leave?c= {} and stop timers/subscriptions. `leave` = false: the site's own mine client
+   *  holds this presence now and sends the leave itself (src/features/mine-hold.ts) — stop without a request. */
+  close(leave = true): void {
     if (this.closed) return;
     if (this.goT) { this.T.clearTimeout(this.goT); this.goT = 0; }
     this.closed = true;
     this.T.clearInterval(this.pollT); this.T.clearInterval(this.pingT); this.T.clearInterval(this.goneT);
     for (const u of this.unsubs) { try { u(); } catch { /* */ } }
     this.unsubs = []; this.subs.clear();
-    if (this.entered) { try { void this.o.api('/api/mine/leave' + this.q(), {}); } catch { /* */ } }
+    if (this.entered && leave) { try { void this.o.api('/api/mine/leave' + this.q(), {}); } catch { /* */ } }
   }
 }

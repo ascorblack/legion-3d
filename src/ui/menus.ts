@@ -76,6 +76,7 @@ export class Menus {
     try { const v = localStorage.getItem('l3d.menuTab'); if (v && c.tabs.get(v)?.group === 'char') this.lastChar = v; } catch { /* */ }
     this.mapView = new MapView(c, c.map);
     this.el = h('div', 'menu');
+    this.setInert(true);
     this.veil = h('div', 'veil'); this.head = h('div', 'head'); this.body = h('div', 'body'); this.foot = h('div', 'foot'); this.tip = h('div', 'tip');
     this.closeBtn = h('button', 'close', '✕'); this.closeBtn.setAttribute('aria-label', 'Закрыть (Esc)'); (this.closeBtn as HTMLButtonElement).type = 'button'; this.closeBtn.dataset.act = 'close';
     // orbit menus: the character stands in the left part of the screen; a hint tells how to turn it (drag/wheel go to the canvas)
@@ -144,6 +145,7 @@ export class Menus {
     this.hideTip();
     if (id !== prev) { this.moveGate = true; this.tipMuted = null; }
     this.el.classList.toggle('on', !!id);
+    this.setInert(!id);
     this.c.ui.classList.toggle('inmenu', !!id);
     const orb = this.isOrbit(id);
     this.c.ui.classList.toggle('inorbit', orb);
@@ -153,12 +155,19 @@ export class Menus {
       this.orbHintT = window.setTimeout(() => this.orbHint.classList.add('dim'), 6000);
     }
     if (prev === 'map' && id !== 'map') this.mapView.detach();
-    if (!id) { this.unmountCustom(); this.body.textContent = ''; return; }
+    if (!id) { this.veil.style.pointerEvents = 'none'; this.unmountCustom(); this.body.textContent = ''; return; }
     const tab = this.c.tabs.get(id);
     if (tab && tab.group === 'char' && !tab.def) { this.lastChar = id; try { localStorage.setItem('l3d.menuTab', id); } catch { /* */ } }
     if (id !== prev) { this.gPick = null; if (id === 'log') this.loadJournal(false); if (id === 'stats' && !this.jList) this.loadJournal(false); }
     if (id === 'pause') this.pauseIdx = 0;
     this.render();
+  }
+
+  /** A closed menu must not catch a single click, even while its CSS fade is still pending (slow WebGL frames delay transitions). */
+  private setInert(on: boolean) {
+    const el = this.el;
+    if (on) { el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); el.style.pointerEvents = 'none'; }
+    else { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); el.style.pointerEvents = ''; }
   }
 
   /** Re-render the current page (hero changed, etc). Keeps scroll positions. */

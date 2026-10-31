@@ -7,8 +7,10 @@
  *                                        the fair; no `.cy` while a town is being prepared («Город строится…»);
  *   3. the town picker: `.cy-tp [data-town][aria-current="true"]` (only after it was opened);
  *   4. sessionStorage `lgCityTown`     — city.js townSet(): the last chosen non-fair town;
- *   5. the hero (`/api/me`, SSE `me`) — hm.id (district-draw: the channel's home district opens directly),
- *                                        hm.camp / cp (start camp «Перепутье»).
+ *   5. the hero (`/api/me`, SSE `me`) — hm.id (district-draw: the channel's home district opens directly; since 30.10 (E2)
+ *                                        the server says 'camp' there for a channel in the Prologue — city.js homePick),
+ *                                        hm.camp / cp (start camp «Перепутье» is open);
+ *   6. a prisoner of the channel's jail (/api/me `jail`, 30.10) is always on the fair, by the cage.
  */
 export const CAMP = 'camp';
 export const FAIR = 'fair';
@@ -21,13 +23,18 @@ export interface TownSignals {
   picker?: string | null;
   session?: string | null;
   hero?: HeroTownFlags | null;
+  /** The hero is a prisoner (/api/me `jail`): city.js keeps him on the fair (TOWN = fair). */
+  jailed?: boolean;
 }
-export type TownSource = 'where' | 'dom' | 'picker' | 'session' | 'hero' | 'default';
+export type TownSource = 'where' | 'dom' | 'picker' | 'session' | 'hero' | 'jail' | 'default';
 
-/** city.js fairGone(): the channel drew its home district — fair and camp are closed for it. */
+/** city.js fairGone(): the channel drew its home district — fair and camp are closed for it. Since 30.10 (E2) hm.camp no
+ *  longer keeps them open: the server puts the camp into hm.id ('camp') itself. */
 export const fairGone = (h?: HeroTownFlags | null): boolean => {
-  const hm = h?.hm; return !!(hm && hm.id && !hm.camp && hm.id !== FAIR && hm.id !== CAMP);
+  const hm = h?.hm; return !!(hm && hm.id && hm.id !== FAIR && hm.id !== CAMP);
 };
+/** city.js homePick(hm): the town the channel's stage opens (hm.id as is), or null. */
+export const homePick = (h?: HeroTownFlags | null): string | null => (h?.hm && h.hm.id ? String(h.hm.id) : null);
 /** city.js cpOn(): the camp is open for this hero. */
 export const campOpen = (h?: HeroTownFlags | null): boolean => !!(h && (h.cp || (h.hm && h.hm.camp))) && !fairGone(h);
 
@@ -37,13 +44,15 @@ const clean = (v: unknown): string | null => (typeof v === 'string' && /^[\w-]{1
 export function detectTown(s: TownSignals): { id: string; via: TownSource } {
   const w = clean(s.where); if (w) return { id: w, via: 'where' };
   if (s.dom !== undefined && s.dom !== null) return { id: clean(s.dom) || FAIR, via: 'dom' };
+  // city.js open() 30.10: a prisoner is only on the fair, by the cage
+  if (s.jailed) return { id: FAIR, via: 'jail' };
   const p = clean(s.picker); if (p) return { id: p, via: 'picker' };
   const h = s.hero || null;
-  // city.js open(): a home district (hm.id, not camp) replaces fair/camp; hm.camp opens the camp unless a town was chosen
+  // city.js open(): a home district (homePick, not camp) replaces fair/camp; homePick 'camp' opens the camp unless a town was chosen
   if (fairGone(h)) return { id: String(h!.hm!.id), via: 'hero' };
   const ss = clean(s.session);
   if (ss && ss !== FAIR && (ss === CAMP ? campOpen(h) : !h || !!h.tw)) return { id: ss, via: 'session' };
-  if (h?.hm?.camp && campOpen(h)) return { id: CAMP, via: 'hero' };
+  if (homePick(h) === CAMP && campOpen(h)) return { id: CAMP, via: 'hero' };
   return { id: FAIR, via: 'default' };
 }
 

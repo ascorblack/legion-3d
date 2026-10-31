@@ -1,11 +1,11 @@
 /**
  * Mine set pieces (visual uplift round 2), baked into the cave's RoomKit batch (no draw calls of their own):
  *  - timberPost: a chamfered mine prop with a cap block, iron bands and a stone footing (q0: the plain post);
- *  - liftRig: the lift of the hall in full — a headframe over the cage up into the rock, a pulley wheel with spokes,
- *    hoist ropes, a counterweight on its own rope, barred cage walls with a gate, a lantern on the cage, crates and a
- *    coil of rope round it;
+ *  - liftCage: the lift in full — platform, frame, a headframe over the cage up into the rock, a sheave wheel with
+ *    spokes, plumb hoist ropes, a counterweight on its own guide rails behind the cage, barred walls with a closed gate,
+ *    a lantern in the cage (liftPlan says where each part goes);
  *  - crateStack, ropeCoil, oreSacks: clutter for the lift hall and the entrance.
- * Collision is the caller's (the lift is one solid already); everything here stays inside the given footprint or hugs it.
+ * Collision is the caller's (the lift and its counterweight column are solids); everything here stays inside the given footprint or hugs it.
  */
 import * as THREE from 'three';
 import type { RoomKit } from '../common/kit';
@@ -56,52 +56,148 @@ export function oreSacks(K: RoomKit, x: number, z: number, n: number, ore: strin
   }
 }
 
+/** The lift's footprint (room metres): the cage over [x0,x1]×[z0,z1], its centre. */
+export interface LiftRect { x0: number; x1: number; z0: number; z1: number; cx: number; cz: number }
+
+/** Cage frame heights (m): the platform's top, the top frame (posts end at FRAME_TOP − 0.02). */
+export const LIFT_FLOOR = 0.18, LIFT_TOP = 3.02;
+/** The counterweight hangs this far behind the cage's back wall (outside the cage, on its own guide rails). */
+export const CW_BACK = 0.35;
+
 /**
- * The lift in full: cage over [x0,x1]×[z0,z1] (platform at 0.18 m, frame to 3 m — the caller built posts and the platform),
- * the headframe up to the ceiling, the pulley, ropes, counterweight, cage bars and gate (the open side = `front`: +1 = z1, −1 = z0).
+ * Where the lift's parts go (pure; liftCage and the tests use it). `front`: the open side (+1 = z1, −1 = z0). The
+ * headframe stands centred over the cage (legs and cross-head at cz); one big sheave (radius `r`, in the YZ plane at
+ * x = cx, centre `wz` half way between the cage's centre and the counterweight) hangs from two sheave beams that run
+ * from the cross-head back to the counterweight's guide rails; its two tangents drop plumb — at `cz` to the cage's yoke
+ * and at `bz` (behind the back wall) to the counterweight.
  */
-export function liftRig(K: RoomKit, L: { x0: number; x1: number; z0: number; z1: number; cx: number; cz: number }, ceil: number, front: 1 | -1, q: number, cage = true): void {
-  if (q <= 0) return;
-  const top = 3.02, hy = Math.min(ceil - 0.35, 4.6);
-  // headframe: two A-legs from the cage's top frame up to a cross-head under the rock, braced
-  for (const x of [L.x0 - 0.05, L.x1 + 0.05]) {
-    K.bevel('wood', WOOD, x - 0.1, x + 0.1, top, hy, L.cz - 0.1, L.cz + 0.1, 0.025);
-    for (const sz of [-1, 1]) K.rbox('wood', WOOD, x, (top + hy) / 2, L.cz + sz * 0.42, 0.09, hy - top + 0.2, 0.09, 0, sz * -0.42);
-  }
-  K.bevel('wood', WOOD_L, L.x0 - 0.2, L.x1 + 0.2, hy, hy + 0.24, L.cz - 0.16, L.cz + 0.16, 0.03);
-  K.box('wood', WOOD, L.cx - 0.12, L.cx + 0.12, hy + 0.24, ceil + 0.2, L.cz - 0.12, L.cz + 0.12);   // into the rock
-  // pulley: a wheel with spokes and a hub on an axle through the cross-head
-  const py = hy - 0.42, pr = 0.42;
-  _q.setFromEuler(_e.set(0, Math.PI / 2, 0));
-  K.geo('metal', TORUS, _m.compose(_p.set(L.cx, py, L.cz), _q, _s.set(pr * 2, pr * 2, 1.4)), IRON_L);
-  for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; K.geo('metal', CYL, _m.compose(_p.set(L.cx, py + Math.sin(a) * pr * 0.5, L.cz + Math.cos(a) * pr * 0.5), _q.setFromEuler(_e.set(a + Math.PI / 2, 0, 0)), _s.set(0.04, pr, 0.04)), IRON); }
-  K.geo('metal', CYL, _m.compose(_p.set(L.cx, py, L.cz), _q.setFromEuler(_e.set(0, 0, Math.PI / 2)), _s.set(0.14, 0.5, 0.14)), '#c9a04a');
-  for (const sx of [-1, 1]) K.box('metal', IRON, L.cx + sx * 0.2 - 0.03, L.cx + sx * 0.2 + 0.03, py - 0.06, hy, L.cz - 0.06, L.cz + 0.06);
-  // hoist ropes from the wheel down to the cage's yoke; the counterweight rope on the far side of the wheel
-  K.box('wood', WOOD_L, L.cx - 0.6, L.cx + 0.6, top + 0.02, top + 0.14, L.cz - 0.06, L.cz + 0.06);   // yoke
-  for (const dz of [-0.04, 0.04]) K.box('canvas', ROPE, L.cx - 0.016, L.cx + 0.016, top + 0.14, py, L.cz - pr + dz - 0.016, L.cz - pr + dz + 0.016);
-  const cwz = L.cz + pr, cwy = 1.4;
-  K.box('canvas', ROPE, L.cx - 0.016, L.cx + 0.016, cwy + 0.5, py, cwz - 0.016, cwz + 0.016);
-  K.bevel('metal', IRON_L, L.cx - 0.22, L.cx + 0.22, cwy - 0.25, cwy + 0.5, cwz - 0.12, cwz + 0.12, 0.02);
-  // cage walls: vertical bars on the three closed sides, a rail, a hinged gate (half open) on the front
-  const bars = (ax: number, az: number, bx: number, bz: number) => {
-    const len = Math.hypot(bx - ax, bz - az), n = Math.max(2, Math.round(len / 0.32));
-    for (let k = 1; k < n; k++) { const t = k / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t; K.box('metal', IRON_L, x - 0.022, x + 0.022, 0.18, 2.2, z - 0.022, z + 0.022); }
-    K.rbox('metal', IRON_L, (ax + bx) / 2, 1.1, (az + bz) / 2, Math.abs(bx - ax) + 0.04, 0.04, Math.abs(bz - az) + 0.04);
-    K.rbox('metal', IRON_L, (ax + bx) / 2, 2.2, (az + bz) / 2, Math.abs(bx - ax) + 0.04, 0.05, Math.abs(bz - az) + 0.04);
-  };
+export function liftPlan(L: LiftRect, ceil: number, front: 1 | -1, cw = true) {
   const back = front > 0 ? L.z0 : L.z1, fz = front > 0 ? L.z1 : L.z0;
-  if (cage) { bars(L.x0, back, L.x1, back); bars(L.x0, L.z0, L.x0, L.z1); bars(L.x1, L.z0, L.x1, L.z1); }
-  // the gate: a frame of flat iron folded half open on the front, a lantern hanging inside the cage
-  const gw = (L.x1 - L.x0) * 0.5, ang = front * 0.9;
-  if (cage) for (const [hx, sgn] of [[L.x0, 1], [L.x1, -1]] as const) {
-    const cx = hx + sgn * Math.cos(ang) * gw / 2, cz = fz + Math.sin(ang) * gw / 2 * sgn * front;
-    K.rbox('metal', IRON_L, cx, 1.0, cz, gw, 0.05, 0.03, -sgn * ang * front);
-    K.rbox('metal', IRON_L, cx, 0.35, cz, gw, 0.05, 0.03, -sgn * ang * front);
-    K.rbox('metal', IRON_L, cx, 1.65, cz, gw, 0.05, 0.03, -sgn * ang * front);
+  const hy = Math.min(ceil - 0.35, 4.6);        // the cross-head's underside
+  // with a counterweight: its line `bz` outside the back wall, the sheave spans cz…bz; without (the classic lift, open
+  // on all sides — a weight behind would show through it): a winding drum (r 0.25) whose front tangent is at cz
+  const bz = cw ? back - front * CW_BACK : L.cz - front * 0.5;
+  const wz = (L.cz + bz) / 2, r = Math.abs(L.cz - bz) / 2;
+  const py = hy - 0.12 - r;                     // the wheel's axle (its top just under the cross-head)
+  return { back, fz, bz, wz, r, hy, py, top: LIFT_TOP, cw };
+}
+
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+/** A square beam w × w from a to b (a brace): a unit box turned so its Y axis runs along the segment, pivot in the middle. */
+function beam(K: RoomKit, mat: 'wood' | 'metal', col: string, ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number): void {
+  _a.set(ax, ay, az); _b.set(bx, by, bz); _d.subVectors(_b, _a);
+  const len = _d.length(); if (len < 1e-4) return;
+  _q.setFromUnitVectors(_up, _d.multiplyScalar(1 / len));
+  K.geo(mat, BOX1, _m.compose(_p.addVectors(_a, _b).multiplyScalar(0.5), _q, _s.set(w, len, w)), col);
+}
+const BOX1 = new THREE.BoxGeometry(1, 1, 1);
+
+/**
+ * The lift in full, one straight solid piece (0.6.2 rebuild — the 0.6.0 one had its gate leaves turned about the wrong
+ * pivot, the sheave's spokes mirrored, braces tilted about the wrong axis and the counterweight hanging INSIDE the cage):
+ *  - all qualities: the plank platform, four corner posts up to a top frame, a back rail; with `cage` (the big floor's
+ *    lift) the counterweight on its own two guide rails behind the back wall (a solid: the caller makes it one) — the
+ *    classic lift is open on all sides, a weight behind it would show through, so it winds its rope on a drum instead;
+ *    q0: the ropes go plainly up into the rock;
+ *  - q1+: the headframe — two legs over the side frames, braced, a cross-head under the rock and a post into it — with
+ *    one sheave wheel (rim, radial spokes, hub on an axle, hangers; classic: the drum) whose ropes drop plumb to the
+ *    cage's yoke and to the counterweight; with `cage` barred walls on the three closed sides — evenly spaced
+ *    vertical bars from the platform to the top frame, between the posts, with two rails — and a closed two-leaf gate on
+ *    the open side, inside the frame; a lantern hanging in the cage.
+ * Everything but the braces and the sheave is axis-aligned; everything stays in the cage's footprint, the headframe
+ * above it and the counterweight column behind it (test/mine-lift.test.ts).
+ */
+export function liftCage(K: RoomKit, L: LiftRect, ceil: number, front: 1 | -1, q: number, cage = true): void {
+  const P = liftPlan(L, ceil, front, cage), top = P.top;
+  // platform, corner posts, top frame (the classic lift stands by the spawn: slim, no bars — thick posts to the ceiling
+  // framed the third-person view like a doorway)
+  K.box('wood', WOOD_L, L.x0, L.x1, 0, LIFT_FLOOR, L.z0, L.z1);
+  for (const [x, z] of [[L.x0, L.z0], [L.x1, L.z0], [L.x0, L.z1], [L.x1, L.z1]]) K.box('wood', WOOD, x - 0.07, x + 0.07, 0, top - 0.02, z - 0.07, z + 0.07);
+  for (const z of [L.z0, L.z1]) K.box('wood', WOOD, L.x0 + 0.07, L.x1 - 0.07, top - 0.12, top, z - 0.07, z + 0.07);
+  for (const x of [L.x0, L.x1]) K.box('wood', WOOD, x - 0.07, x + 0.07, top - 0.12, top, L.z0 + 0.07, L.z1 - 0.07);
+  // the back rail (waist high, between the back posts) — the barred cage only: on the open classic lift it read as a stray pole
+  if (cage) K.box('metal', '#3a3448', L.x0 + 0.07, L.x1 - 0.07, 1.0, 1.06, P.back - 0.04, P.back + 0.04);
+  const bz = P.bz, gx = 0.27, cwy = 1.9, cw = cage;
+  if (cw) {
+    // the counterweight column behind the back wall: two guide rails from a footing up to the cross-head, the weight between
+    K.box('stone', '#5a5260', L.cx - gx - 0.1, L.cx + gx + 0.1, 0, 0.1, bz - 0.12, bz + 0.12);
+    for (const sx of [-1, 1]) K.box('metal', IRON, L.cx + sx * gx - 0.025, L.cx + sx * gx + 0.025, 0.1, P.hy, bz - 0.03, bz + 0.03);
+    K.box('metal', IRON_L, L.cx - 0.22, L.cx + 0.22, cwy - 0.35, cwy + 0.35, bz - 0.11, bz + 0.11);
+    K.box('metal', IRON, L.cx - gx - 0.02, L.cx + gx + 0.02, cwy + 0.35, cwy + 0.4, bz - 0.05, bz + 0.05);   // the shoe on the rails
   }
-  const lx = L.cx, lz = back + front * 0.25;
-  K.box('metal', IRON, lx - 0.008, lx + 0.008, 2.55, top, lz - 0.008, lz + 0.008);
+  if (q <= 0) {
+    // the cheap lift: the hoist rope (and the counterweight's) straight up into the rock
+    K.box('metal', ROPE, L.cx - 0.015, L.cx + 0.015, top, ceil, L.cz - 0.015, L.cz + 0.015);
+    if (cw) K.box('metal', ROPE, L.cx - 0.015, L.cx + 0.015, cwy + 0.4, ceil, bz - 0.015, bz + 0.015);
+    return;
+  }
+  const hy = P.hy, wz = P.wz, r = P.r, py = P.py, cz = L.cz;
+  // headframe: a leg up from the middle of each side frame, an A of two braces from the frame's corners, the cross-head,
+  // a post into the rock
+  for (const x of [L.x0, L.x1]) {
+    K.bevel('wood', WOOD, x - 0.1, x + 0.1, top, hy, cz - 0.1, cz + 0.1, 0.025);
+    for (const z of [L.z0 + 0.12, L.z1 - 0.12]) beam(K, 'wood', WOOD, x, top + 0.03, z, x, hy - 0.3, cz + Math.sign(z - cz) * 0.1, 0.09);
+  }
+  K.bevel('wood', WOOD_L, L.x0 - 0.2, L.x1 + 0.2, hy, hy + 0.24, cz - 0.16, cz + 0.16, 0.03);
+  K.box('wood', WOOD, L.cx - 0.12, L.cx + 0.12, hy + 0.24, ceil + 0.2, cz - 0.12, cz + 0.12);
+  // two wheel beams from the cross-head back over the wheel (with a counterweight: on to its guide rails, tied across there)
+  const far = cw ? bz : wz - front * (r + 0.08);
+  const z0b = Math.min(cz - 0.16, far - 0.05), z1b = Math.max(cz + 0.16, far + 0.05);
+  for (const sx of [-1, 1]) K.box('wood', WOOD_L, L.cx + sx * 0.2 - 0.06, L.cx + sx * 0.2 + 0.06, hy, hy + 0.16, z0b, z1b);
+  if (cw) K.box('metal', IRON, L.cx - gx - 0.03, L.cx + gx + 0.03, hy - 0.08, hy, bz - 0.05, bz + 0.05);
+  if (cw) {
+    // the sheave: rim (TORUS, ring in the YZ plane), six radial spokes, a hub on an axle along X
+    _q.setFromEuler(_e.set(0, Math.PI / 2, 0));
+    K.geo('metal', TORUS, _m.compose(_p.set(L.cx, py, wz), _q, _s.set(r * 2, r * 2, 1.4)), IRON_L);
+    for (let k = 0; k < 6; k++) {
+      const a = k * Math.PI / 3;   // spoke direction (0, sin a, cos a): CYL's Y axis turned about X by π/2 − a
+      K.geo('metal', CYL, _m.compose(_p.set(L.cx, py + Math.sin(a) * r * 0.5, wz + Math.cos(a) * r * 0.5), _q.setFromEuler(_e.set(Math.PI / 2 - a, 0, 0)), _s.set(0.04, r, 0.04)), IRON);
+    }
+  } else {
+    // the winding drum: a barrel of rope along X with two iron flanges
+    _q.setFromEuler(_e.set(0, 0, Math.PI / 2));
+    K.geo('canvas', CYL, _m.compose(_p.set(L.cx, py, wz), _q, _s.set(r * 2, 0.26, r * 2)), ROPE);
+    for (const sx of [-1, 1]) K.geo('metal', CYL, _m.compose(_p.set(L.cx + sx * 0.14, py, wz), _q, _s.set(r * 2 + 0.12, 0.03, r * 2 + 0.12)), IRON);
+  }
+  K.geo('metal', CYL, _m.compose(_p.set(L.cx, py, wz), _q.setFromEuler(_e.set(0, 0, Math.PI / 2)), _s.set(0.1, 0.34, 0.1)), '#c9a04a');   // axle
+  for (const sx of [-1, 1]) K.box('metal', IRON, L.cx + sx * 0.17 - 0.03, L.cx + sx * 0.17 + 0.03, py - 0.06, hy, wz - 0.05, wz + 0.05);   // hangers
+  // the yoke on the cage's top frame and the plumb ropes off the wheel's tangents (cage: cz, counterweight: bz)
+  K.box('wood', WOOD_L, L.cx - 0.6, L.cx + 0.6, top, top + 0.12, L.cz - 0.06, L.cz + 0.06);
+  K.box('metal', IRON, L.cx - 0.05, L.cx + 0.05, top + 0.12, top + 0.22, L.cz - 0.05, L.cz + 0.05);
+  K.box('canvas', ROPE, L.cx - 0.025, L.cx + 0.025, top + 0.22, py, L.cz - 0.025, L.cz + 0.025);
+  if (cw) K.box('canvas', ROPE, L.cx - 0.025, L.cx + 0.025, cwy + 0.4, py, bz - 0.025, bz + 0.025);
+  if (!cage) return;
+  // barred walls on the three closed sides: vertical bars in the frame's plane, evenly spaced between the posts, from the
+  // platform to the top frame; a kick rail and a mid rail
+  const BAR = 0.022, y0 = LIFT_FLOOR, y1 = top - 0.12;
+  const wall = (ax: number, az: number, bx: number, bz2: number) => {
+    const alongX = Math.abs(bx - ax) > Math.abs(bz2 - az);
+    const a = (alongX ? Math.min(ax, bx) : Math.min(az, bz2)) + 0.07, b = (alongX ? Math.max(ax, bx) : Math.max(az, bz2)) - 0.07;
+    const n = Math.max(2, Math.round((b - a) / 0.24));
+    for (let k = 1; k < n; k++) {
+      const t = a + (b - a) * k / n;
+      if (alongX) K.box('metal', IRON_L, t - BAR, t + BAR, y0, y1, az - BAR, az + BAR);
+      else K.box('metal', IRON_L, ax - BAR, ax + BAR, y0, y1, t - BAR, t + BAR);
+    }
+    for (const [ry0, ry1] of [[0.3, 0.36], [1.25, 1.31]]) {
+      if (alongX) K.box('metal', IRON, a, b, ry0, ry1, az - 0.035, az + 0.035);
+      else K.box('metal', IRON, ax - 0.035, ax + 0.035, ry0, ry1, a, b);
+    }
+  };
+  wall(L.x0, P.back, L.x1, P.back); wall(L.x0, L.z0, L.x0, L.z1); wall(L.x1, L.z0, L.x1, L.z1);
+  // the gate: two closed leaves inside the frame on the open side, each a flat-iron frame with vertical bars, meeting in
+  // the middle (a latch there); 2.2 m high like a real cage gate
+  const gz = P.fz - front * 0.04, gy0 = LIFT_FLOOR + 0.02, gy1 = 2.2, xa = L.x0 + 0.07, xb = L.x1 - 0.07, xm = (xa + xb) / 2;
+  for (const [l0, l1] of [[xa, xm - 0.01], [xm + 0.01, xb]]) {
+    for (const x of [l0, l1]) K.box('metal', IRON, x === l0 ? l0 : l1 - 0.05, x === l0 ? l0 + 0.05 : l1, gy0, gy1, gz - 0.02, gz + 0.02);
+    for (const y of [gy0, 1.15, gy1 - 0.05]) K.box('metal', IRON, l0 + 0.05, l1 - 0.05, y, y + 0.05, gz - 0.02, gz + 0.02);
+    const n = Math.max(2, Math.round((l1 - l0) / 0.2));
+    for (let k = 1; k < n; k++) { const x = l0 + (l1 - l0) * k / n; K.box('metal', IRON_L, x - 0.015, x + 0.015, gy0 + 0.05, gy1 - 0.05, gz - 0.012, gz + 0.012); }
+  }
+  K.box('metal', '#c9a04a', xm - 0.05, xm + 0.05, 1.08, 1.24, gz - front * 0.01 - 0.025, gz - front * 0.01 + 0.025);   // latch
+  // a lantern hanging in the cage, by the back wall
+  const lx = L.cx, lz = P.back + front * 0.25;
+  K.box('metal', IRON, lx - 0.008, lx + 0.008, 2.55, top - 0.12, lz - 0.008, lz + 0.008);
   K.box('emit', '#ffd27a', lx - 0.07, lx + 0.07, 2.3, 2.55, lz - 0.07, lz + 0.07);
   K.cone('metal', IRON, lx, 2.55, lz, 0.11, 0.08, true);
   K.glow(lx, 2.42, lz, 1.0, '#ffb35c', 0.8);

@@ -1,6 +1,7 @@
 /**
  * Shop stock: types of `GET /api/city/stock`, which goods a building sells, and the site's purchase rules
- * (port of city.js stockOf / goodsOf / coinsFor / lockedHere / buyAsk, 23–25.10). Pure module: no DOM, no three.
+ * (port of city.js stockOf / goodsOf / coinsFor / lockedHere / buyAsk, 23–25.10; since 31.10 they live in the site's
+ * /site/cityshop.js, moved unchanged — site-contract «shop rules» watches them there). Pure module: no DOM, no three.
  *
  * Money: `coins` are bronze (1 silver = 100, 1 gold = 10 000). `price` is in channel points (on stream only).
  * A hero with `cs` buys for coins at any time (POST /api/cityBuy {item, price, town?}); without `cs` the goods are

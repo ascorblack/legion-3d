@@ -339,10 +339,11 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
       } else { const wh = input.consumeWheel(); if (wh && state.menu) rig.zoom(wh); }
       // 2. player
       if (!gameplay) input.consumeJump();   // no buffered jump after closing a menu
-      const moved = ctl.update(dt, gameplay ? input : NO_INPUT as any, rig.yaw);
+      // a prisoner (site 30.10, src/features/jail.ts) stands in the cage: no walking, nothing sent
+      const moved = ctl.update(dt, gameplay && !state.jailed ? input : NO_INPUT as any, rig.yaw);
       if (!state.inRoom) {
         me.x = ctl.x; me.y = ctl.y;
-        if (moved && t - sentAt > 0.1) { site.moveTo(ctl.x, ctl.y); sentAt = t; }
+        if (moved && !state.jailed && t - sentAt > 0.1) { site.moveTo(ctl.x, ctl.y); sentAt = t; }
       }
       me.speed = ctl.speed;
       me.face = state.mode === 'fp' && !state.menu && !rooms.stage ? rig.yaw : ctl.face;

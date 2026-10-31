@@ -14,7 +14,8 @@
       "magic",
       "mine",
       "mineboard",
-      "storage"
+      "storage",
+      "jail"
     ],
     "rooms": {
       "forge": "shop3d",
@@ -29,7 +30,8 @@
       "gate": "hybrid",
       "anvil": "hybrid",
       "mine": "mine3d",
-      "mineboard": "site"
+      "mineboard": "site",
+      "jail": "site"
     }
   },
   "roomKinds": [

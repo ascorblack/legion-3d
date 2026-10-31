@@ -21,6 +21,8 @@ import CSS from './main.css';
 import { setHtml } from '../core/html';
 import { autoStart3d, LS_AUTO, SS_NOGL } from '../bridge/start';
 import { setFetchTee } from '../net/fetch-tee';
+import { siteMineOpen, mineReqLog, mineSwitching } from '../net/site-mine';
+import { createF8Gate } from './f8';
 
 const W = window as any;
 
@@ -47,7 +49,10 @@ function launcher() {
   b.onclick = () => toggle();
   document.body.appendChild(b);
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'F8') { e.preventDefault(); e.stopPropagation(); toggle(); }
+    if (e.code !== 'F8') return;
+    e.preventDefault(); e.stopPropagation();
+    if (!f8Gate(e.repeat, performance.now(), booting || mineSwitching())) return;
+    toggle();
   }, true);
   W.addEventListener('l3d:classic', (e: CustomEvent) => { if (game && e.detail?.on) game.classicPanel(); });
   W.addEventListener(RETURN_EVENT, () => { void returnToCity(); });
@@ -55,11 +60,14 @@ function launcher() {
   W.addEventListener('l3d:contextrestored', () => gpuNotice(false));
   // what opens on entering the channel page (Настройки → Прочее → «При входе открывать»): '2d' (default) — the
   // classic site, 3D by the button / F8; '3d' — always 3D; 'last' — the mode used last time (F8 remembers it)
+  mineReqLog();   // which floor the site's own mine shows (resource timing, read-only): F8 in the 2D mine opens the same floor in 3D
   if (autoStart3d(window)) {
-    setFetchTee(true);   // the City's first answers (enter: chat, moderator role, ignore list) are caught from the start; toggle() takes it off if 3D does not come up
+    if (!siteMineOpen()) setFetchTee(true);   // the City's first answers (enter: chat, moderator role, ignore list) are caught from the start; toggle() takes it off if 3D does not come up
     setTimeout(() => { if (!game && !booting) toggle(); }, 600);
   }
 }
+
+const f8Gate = createF8Gate();
 
 /** Leave the expedition-only game and boot the city in place (the site's City tab is open again). */
 async function returnToCity() {
@@ -87,7 +95,9 @@ async function toggle() {
     return;
   }
   booting = true;
-  setFetchTee(true);   // 3D is coming up: tee the City's first answers (taken off again below if it does not come up)
+  // 3D is coming up: tee the City's first answers (taken off again below if it does not come up). Not while the site's own
+  // mine is open: its telemetry looks at window.fetch, and the City sleeps under it anyway (nothing to catch)
+  if (!siteMineOpen()) setFetchTee(true);
   document.getElementById('l3d-launch')?.classList.add('hide');
   const splash = showSplash('Собираем город…');
   let site: SiteSession | null = null;

@@ -13,7 +13,7 @@ export function mountUpdateToast(root: HTMLElement, latest: string, url: string,
   el.append(a, x); root.append(el);
   let done = false;
   const timer = window.setTimeout(() => close(), ttlMs);
-  const onPhoto = (e: Event) => { el.style.display = (e as CustomEvent<{ on: boolean }>).detail?.on ? 'none' : ''; };
+  const onPhoto = (e: Event) => { el.style.display = (e as CustomEvent<{ on: boolean }>).detail?.on ? 'none' : 'flex'; };   // 'flex', not '': '' would drop the display:flex of cssText
   window.addEventListener('l3d:photo', onPhoto);
   function dispose() { if (done) return; done = true; window.clearTimeout(timer); window.removeEventListener('l3d:photo', onPhoto); el.remove(); }
   function close() { if (done) return; dispose(); onClose(); }

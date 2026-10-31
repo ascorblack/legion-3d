@@ -7,6 +7,7 @@
  * card says «пиши в чат стрима» with the commands as copyable chips. No request is ever built here.
  */
 import type { Store, Actions, QuestView } from '../contracts';
+import { onPageKeys } from '../engine/input';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
 import { bossName, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
 import { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, type SiteControls, type SiteBtn } from './siteui';
@@ -356,7 +357,7 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     if (hot.length) { const b = hot[i]; if (!b) return; e.preventDefault(); pressKey(b.key, b.label); return; }
     const o = voteHot[i]; if (!o) return; e.preventDefault(); pressKey(`qv:${o.vid}:${o.n}`, `${o.n}. ${o.label}`);
   };
-  window.addEventListener('keydown', onKey);
+  const offKey = onPageKeys('keydown', onKey);   // before the input's site key shield stops it
 
   const baseCmd = (r: string) => { try { return W.LGGameData?.baseCmd?.(r) || 'удар'; } catch { return 'удар'; } };
   const adj = () => { try { return Math.max(-10, Math.min(30, +(localStorage.getItem(ADJ_KEY) || 0) || 0)); } catch { return 0; } };
@@ -479,5 +480,5 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     lock.hidden = v3d || !(shown && (shown as any).on && (shown as any).party === 'in');
   };
   const iv = window.setInterval(tick, 250); tick();
-  return { el: box, dispose() { clearInterval(iv); clearTimeout(armT); unsub(); window.removeEventListener('l3d:expedition', onV3d); window.removeEventListener('keydown', onKey); document.removeEventListener('click', onSiteTab, true); box.remove(); } };
+  return { el: box, dispose() { clearInterval(iv); clearTimeout(armT); unsub(); window.removeEventListener('l3d:expedition', onV3d); offKey(); document.removeEventListener('click', onSiteTab, true); box.remove(); } };
 };

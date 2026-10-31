@@ -9,6 +9,7 @@ import { createStore, type StoreWriter } from '../store/store';
 import { SX, SZ } from '../world/coords';
 import type { Bus } from '../bridge/bridge';
 import { setFetchTee } from './fetch-tee';
+import { siteMineOpen, cityLive, cityReplayAllowed } from './site-mine';
 import { createGoSender } from '../flight/sendpoint';
 import CONTRACT from '../data/site-contract.json';
 import { runtimeContract, describeFails, type ContractCheck } from './contract';
@@ -16,6 +17,7 @@ import { reportDrift } from '../core/drift';
 import { npcPlaces, makeOpts } from '../events/halloween/hwnpc';
 import { CAMP, campScene, detectTown, readTownSignals, townMeta, villageScene, type CampScene, type HeroTownFlags } from './town';
 import { readSitePals } from '../world/palette';
+import { createJailHub, jailFromMe, jailList, jailSeats, jailGeoOf, type JailHub } from './jail';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
 const W = (typeof window !== 'undefined' ? window : globalThis) as any;   // importable in node tests (pure helpers below)
@@ -84,8 +86,8 @@ export function restyleApps(list: Iterable<{ login: string; app: Appearance; raw
 
 /* ------------------------------------------------------------------ layout */
 /** Current town id of the site's City (src/net/town.ts: DOM, picker, sessionStorage, hero flags). */
-export function currentTown(hero: Hero | null): { id: string; via: string } {
-  return detectTown(readTownSignals(W, document, hero as HeroTownFlags | null));
+export function currentTown(hero: Hero | null, jailed = false): { id: string; via: string } {
+  return detectTown({ ...readTownSignals(W, document, hero as HeroTownFlags | null), jailed });
 }
 /** Districts list (GET /api/city/towns — the same read the site's own town picker does), cached for a minute. */
 let townsCache: { at: number; list: any[] } | null = null;
@@ -98,7 +100,7 @@ async function townsList(force = false): Promise<any[]> {
 }
 /** Town layout the 3D world can be built from, or null (not available yet / not this town). `townMetaOf` = an entry of
  *  /api/city/towns for district towns. */
-function buildLayout(hero: Hero | null, town: string, townMetaOf: any): CityLayout | null {
+function buildLayout(hero: Hero | null, town: string, townMetaOf: any, jl = false): CityLayout | null {
   const M = W.LGCityMap, D = W.MDDoodle; if (!M || !D) return null;
   if (town === CAMP) return buildCampLayout(hero);
   if (town !== 'fair') return townMetaOf ? buildTownLayout(hero, town, townMetaOf) : null;
@@ -108,7 +110,10 @@ function buildLayout(hero: Hero | null, town: string, townMetaOf: any): CityLayo
   const MS = ms && !!L.magic;
   // HW-NPC (site 28.10): with the Halloween look the site's walk grid also has the NPCs' obstacles (city.js hwNpc → S.mk({ hwObst, hwB })).
   // The grid is swapped in place (hwNpcGrid) — no world rebuild when the night starts / ends.
-  const mk = (hw: boolean) => M.make((L.obstacles || []).filter((o: any) => !o.divider), { magic: MS, magicObst: L.magic && L.magic.obstacle, mine: mn, ...(hw ? makeOpts(npcPlaces(W)) : {}) });
+  // 30.10 (тюрьма): with the jail open (me.jl / me.jail) the site's grid has the jail building + cage (JAIL_OBST) and the moved
+  // bench (lowJail), city.js mk({ jail: jlOn() }); an older citymap.js has no lowJail and ignores the flag
+  const JL = jl && typeof M.lowJail === 'function';
+  const mk = (hw: boolean) => M.make((L.obstacles || []).filter((o: any) => !o.divider), { magic: MS, magicObst: L.magic && L.magic.obstacle, mine: mn, ...(JL ? { jail: true } : {}), ...(hw ? makeOpts(npcPlaces(W)) : {}) });
   const hold = { on: hwNpcOn(hero), map: null as any };
   try { hold.map = mk(hold.on); } catch { hold.on = false; hold.map = mk(false); }
   const map = hold.map;
@@ -118,7 +123,7 @@ function buildLayout(hero: Hero | null, town: string, townMetaOf: any): CityLayo
     const A = W.LGCityArt;
     if (A) {
       art.quarterSvg = A.quarter(st, M.QW, { auction: !!(hero && hero.au) }).svg;
-      art.lowerSvg = A.lower(st, M, { storage: !!(hero && hero.sg), mine: mn }).svg;
+      art.lowerSvg = A.lower(st, M, { storage: !!(hero && hero.sg), mine: mn, ...(JL ? { jail: true } : {}) }).svg;
     }
     art.fairSvg = L.scene({ city: true, ...(MS ? { magic: true, magicName: String(hero!.ms) } : {}) });
     art.fairX = M.QW + 8;
@@ -131,7 +136,7 @@ function buildLayout(hero: Hero | null, town: string, townMetaOf: any): CityLayo
   }));
   const out: CityLayout = {
     id: 'fair', styleId: st, W: map.W, H: map.H, QW: map.QW, area: map.AREA,
-    obstacles: (map.OBST as any[]).filter((o) => !o.hwnpc) as Obstacle[], buildings, low: M.LOW,
+    obstacles: (map.OBST as any[]).filter((o) => !o.hwnpc) as Obstacle[], buildings, low: JL ? safe(() => M.lowJail(), M.LOW) : M.LOW,
     sky: skyM ? skyM[1] : undefined, art,
     free: (x, y) => hold.map.free(x, y), nearest: (x, y) => hold.map.nearest(x, y), path: (a, b) => hold.map.path(a, b),
   };
@@ -246,6 +251,8 @@ export function siteGuard(phase: 'page' | 'city'): { breaks: string[]; degrades:
  *  Do what a user does: another tab, then the City tab again; the site leaves and enters the City by itself (under our
  *  splash) and the tee catches the answer. No request of ours, nothing is replayed. */
 export async function replayCityEnter(cityBtn: HTMLButtonElement, B: Bus): Promise<void> {
+  // only from the City scene itself: never inside the site's mine (it would wake the City under it), an expedition, another tab
+  if (!cityReplayAllowed()) return;
   const other = document.querySelector<HTMLButtonElement>('.tabs button[data-tab="hero"]:not([hidden])')
     || Array.from(document.querySelectorAll<HTMLButtonElement>('.tabs button[data-tab]:not([hidden])')).find((b) => b !== cityBtn && b.getAttribute('aria-disabled') !== 'true');
   if (!other || other.getAttribute('aria-disabled') === 'true') return;
@@ -262,7 +269,37 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   const me = await api<any>('/api/me');
   if (!me || !me.user) return { error: 'no_login', loginUrl: String(W.LG_LOGIN || '/auth/twitch/login') };
   if (!me.hero) return { error: 'no_hero' };
-  if (!me.hero.cy) return { error: 'site_changed' };
+  // the City is open for the hero (cy), or the hero is a prisoner (30.10: app.js cityVis — ME.hero.cy || ME.jail)
+  if (!me.hero.cy && !me.jail) return { error: 'site_changed' };
+  const jail: JailHub = createJailHub(jailFromMe(me));
+  // prisoners in the cage (city.js jailDraw): walkers of their own on the seats, not from the City's presence; a login in
+  // the cage ignores presence moves (the site draws it on its seat only)
+  const jailSims = new Set<string>();
+  const jailMe = String(me.user.login).toLowerCase();
+  function syncJail(): void {
+    const sims0 = store.walkers as Map<string, Sim>;
+    const st = jail.get(), L = mapRef;
+    const J = st.on && L && L.id === 'fair' ? jailGeoOf(L.buildings.find((b) => b.jail || b.id === 'jail'), L.low) : null;
+    const keep = new Set<string>();
+    let changed = false;
+    if (J && L!.buildings.some((b) => b.id === 'jail')) {
+      for (const s0 of jailSeats(st, J, jailMe)) {
+        if (s0.self || !s0.entry) continue;
+        const e = s0.entry, l = s0.login;
+        keep.add(l);
+        const key = lookKeyOf(e);
+        let w = sims0.get(l);
+        if (!w || !jailSims.has(l) || w.lookKey !== key) {
+          w = { login: l, app: appearanceFn(l, e, lookStyle(e.lk, styleId())), x: s0.x, y: s0.y, face: 0, speed: 0, alpha: 1, path: null, lag: 0, raw: e, vx: 0, vy: 0, lookKey: key };
+          sims0.set(l, w); jailSims.add(l); changed = true;
+        }
+        w.x = s0.x; w.y = s0.y; w.path = null; w.speed = 0; w.alpha = 1;
+        w.face = Math.PI + (s0.flip < 0 ? 0.45 : -0.45);   // facing the street, odd seats turned the other way (city.js face ±1)
+      }
+    }
+    for (const l of [...jailSims]) if (!keep.has(l)) { jailSims.delete(l); sims0.delete(l); changed = true; }
+    if (changed) store.emit('walkers');
+  }
   const store = createStore();
   store.setHero(me.hero);
 
@@ -271,11 +308,14 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   const cityBtn = await waitFor(() => document.querySelector<HTMLButtonElement>('.tabs button[data-tab="city"]:not([hidden])'), 8000);
   if (!cityBtn) return { error: 'site_changed' };
   if (cityBtn.getAttribute('aria-disabled') === 'true') return { error: 'city_locked' };
-  if (!document.querySelector('#tab-city.on')) cityBtn.click();
-  else if (B && !B.last['city:enter']) await replayCityEnter(cityBtn, B);
-  const ok = await waitFor(() => W.LGCity && W.LGCityMap && W.MDDoodle && W.LGCity.debug && W.LGCity.debug(), 30000, 200);
+  // F8 inside the site's own mine: its City sleeps under it (city.js sleep). Touch nothing of the City — no tab click, no
+  // enter replay, no state read; the 3D mine opens over it (src/features/mine-hold.ts) and the City wakes when the site leaves the mine
+  const inMine = siteMineOpen();
+  if (!inMine && !document.querySelector('#tab-city.on')) cityBtn.click();
+  else if (!inMine && B && !B.last['city:enter'] && cityReplayAllowed()) await replayCityEnter(cityBtn, B);
+  const ok = await waitFor(() => W.LGCity && W.LGCityMap && W.MDDoodle && (inMine || (W.LGCity.debug && W.LGCity.debug())), 30000, 200);
   if (!ok) return { error: document.querySelector('#tab-city.on') ? 'site_changed' : 'city_locked' };
-  { const g = siteGuard('city'); if (g.breaks.length) return { error: 'site_changed', missing: g.breaks }; }
+  { const g = siteGuard(inMine ? 'page' : 'city'); if (g.breaks.length) return { error: 'site_changed', missing: g.breaks }; }
 
   // Hide the 2D layer, keep interiors. Others hidden in the site client = it stops drawing them (we draw them).
   const style = document.createElement('style'); style.id = 'l3d-hide'; style.textContent = HIDE_CSS; document.head.appendChild(style);
@@ -295,8 +335,9 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   const townRetry: Record<string, number> = {};
   const refreshLayout = () => {
     const h = store.hero;
-    const t = currentTown(h); townNow = t.id; townVia = t.via;
-    const key = `${t.id}|${!!h?.ms}|${!!(h?.mn && Object.keys(h.mn as object).length)}|${!!h?.au}|${!!h?.sg}|${styleId()}`;
+    const t = currentTown(h, !!jail.get().me); townNow = t.id; townVia = t.via;
+    const jl = jail.get().on;
+    const key = `${t.id}|${!!h?.ms}|${!!(h?.mn && Object.keys(h.mn as object).length)}|${!!h?.au}|${!!h?.sg}|${jl}|${styleId()}`;
     if (key === layoutKey) return;
     if (t.id !== 'fair' && t.id !== CAMP) {
       // district town: its entry of /api/city/towns (GET, the same read as the site's town picker) → towngen.js
@@ -304,7 +345,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
       townWant = key;
       void townsList(true).then((list) => {
         townWant = '';
-        if (currentTown(store.hero).id !== t.id) return;   // switched again meanwhile
+        if (currentTown(store.hero, !!jail.get().me).id !== t.id) return;   // switched again meanwhile
         const meta = list.find((x) => x && x.id === t.id);
         const L = meta && buildLayout(store.hero, t.id, meta);
         if (!L) {
@@ -317,8 +358,9 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
       });
       return;
     }
-    const L = buildLayout(h, t.id, null); if (!L) return;   // camp: null until campmap.js is loaded (the City rebuilds → refresh)
+    const L = buildLayout(h, t.id, null, jl); if (!L) return;   // camp: null until campmap.js is loaded (the City rebuilds → refresh)
     layoutKey = key; store.setLayout(L); mapRef = L;
+    syncJail();
   };
   const refreshAll = () => { refreshLayout(); hwNpcGrid(mapRef, store.hero); };
   refreshLayout();
@@ -357,7 +399,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     } catch { w.x = tx; w.y = ty; w.path = null; }
   };
   const addOrUpdate = (e: any) => {
-    const l = String(e.l || '').toLowerCase(); if (!l || l === myLogin) return;
+    const l = String(e.l || '').toLowerCase(); if (!l || l === myLogin || jailSims.has(l)) return;
     let w = sims.get(l), fresh = false;
     if (!w) {
       const [nx, ny] = mapRef ? mapRef.nearest(+e.x || 0, +e.y || 0) : [+e.x || 0, +e.y || 0];
@@ -371,10 +413,10 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   };
   const applyBatch = (d: any) => {
     if (!d || typeof d !== 'object') return;
-    for (const l of d.g || []) { if (sims.delete(String(l).toLowerCase())) store.emit('walkers'); }
+    for (const l of d.g || []) { const k = String(l).toLowerCase(); if (!jailSims.has(k) && sims.delete(k)) store.emit('walkers'); }
     for (const e of d.a || []) addOrUpdate(e);
     for (const m of d.m || []) {
-      const w = sims.get(String(m[0]).toLowerCase()); if (!w) continue;
+      const k = String(m[0]).toLowerCase(), w = sims.get(k); if (!w || jailSims.has(k)) continue;
       follow(w, +m[1], +m[2], +m[3], +m[4], +m[5] || 0, false);
     }
     if (d.n != null) store.setOnline(+d.n + 1);
@@ -400,10 +442,11 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     if (Array.isArray(r.ign)) setIgn(r.ign);
     // the site rebuilt its City (tab switch, mine sleep/wake, visibility re-enter): its new instance draws others again
     if (!classic) enter3d();
-    sims.clear(); store.emit('walkers');
+    sims.clear(); jailSims.clear(); store.emit('walkers');
     if (Array.isArray(r.chat)) store.pushChat(r.chat.map(toChat));
     if (r.me && store.me) { store.me.x = +r.me.x; store.me.y = +r.me.y; }
     refreshAll();
+    syncJail();
     applyBatch({ ...r, chat: undefined });
   };
 
@@ -434,18 +477,33 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
       refreshAll();
     };
     unsubs.push(B.on('sse:me', onHero));
-    unsubs.push(B.on('me', onHero));
+    unsubs.push(B.on('me', (d: any) => {
+      // a full /api/me answer (the site re-reads it when this hero is jailed / released, app.js «jail» listener): jail + jl
+      if (d && d.user) { const was = jail.get(); jail.setMe(jailFromMe(d)); const now = jail.get(); if (was.on !== now.on || !was.me !== !now.me) refreshLayout(); }
+      onHero(d);
+    }));
+    // the cage's list: the SSE «jail» event and the City's own GET /api/jail (bridge tee 'jail:list')
+    const onJail = (d: unknown) => { const v = jailList(d); if (v) jail.setList(v); };
+    unsubs.push(B.on('sse:jail', onJail));
+    unsubs.push(B.on('jail:list', onJail));
     unsubs.push(B.on('hero:act', onHero));
     unsubs.push(B.on('sse:q', (q) => store.setQuest(q)));
     if (B.last['sse:q']) store.setQuest(B.last['sse:q']);
     if (B.last['city:enter']) onEnter(B.last['city:enter']);
   }
   // Fallback snapshot: the site holds walkers privately; peek() gives positions (no looks) — fetch state once for full data.
-  if (!sims.size) {
+  if (!sims.size && cityLive()) {   // not while the City sleeps under the site's mine (no presence there)
     const st = await api<any>('/api/city/state');
     if (st && st.ok) applyBatch(st);
   }
   if (me.ql) store.setQuest(me.ql);
+  unsubs.push(jail.on(() => syncJail()));
+  // who sits in the cage now: the same GET the site's City makes when it opens (city.js jailLoad) — once, the fair only
+  { // the City's own GET /api/jail (teed) when it opened under us, else the same GET once (city.js jailLoad) — the fair only
+    const seen = B ? jailList(B.last['jail:list']) : null;
+    if (seen) jail.setList(seen);
+    else if (jail.get().on && townNow === 'fair' && cityLive()) void api<any>('/api/jail').then((r) => { const v = jailList(r); if (v) jail.setList(v); });
+  }
 
   /* ---------------- own movement → site ---------------- */
   // throttled LGCity.go(); every point is projected onto the walk grid first (the 3D hero may stand on a roof or
@@ -469,8 +527,10 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   let ovAt = 0, ovVal: string | null = null;
   // The bridge's fetch tee (src/net/fetch-tee.ts) sits on window.fetch only in 3D mode and never over the site's own
   // mine screen: its dig telemetry compares window.fetch with the native/site one (see src/bridge/bridge.ts).
-  let teeOn = true;   // main.ts put it on before connectSite
-  const syncTee = () => { const want = !classic && ovVal !== 'mine'; if (want !== teeOn) { teeOn = want; setFetchTee(want); } };
+  // main.ts put it on before connectSite — unless the site's mine was open (then it stays off)
+  let teeOn = B && B.fetchTee ? safe(() => B.fetchTee!.installed(), true) : true;
+  // off while the site's mine is open at all (also held hidden under the 3D mine: its telemetry runs as long as it is open)
+  const syncTee = () => { const want = !classic && ovVal !== 'mine' && !siteMineOpen(); if (want !== teeOn) { teeOn = want; setFetchTee(want); } };
   const overlay = (): string | null => {
     const t = performance.now(); if (t - ovAt < 250) return ovVal; ovAt = t;
     ovVal = anyShown('.cy-room') ? 'room' : anyShown('.mn') ? 'mine' : anyShown('.tr-win') ? 'trade'
@@ -495,7 +555,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
       // back to the site's own quality: the user's forced level (localStorage lgCityQ, as city.js reads it) or auto
       safe(() => { const v = localStorage.getItem('lgCityQ'); W.LGCity.quality(/^[012]$/.test(v || '') ? +v! : null); }, undefined);
     } else {
-      if (!document.querySelector('#tab-city.on')) document.querySelector<HTMLButtonElement>('.tabs button[data-tab="city"]')?.click();
+      // not while the site's mine is open: the City tab click would wake the City under it (city enter inside the mine)
+      if (!document.querySelector('#tab-city.on') && !siteMineOpen()) document.querySelector<HTMLButtonElement>('.tabs button[data-tab="city"]')?.click();
       enter3d();
       // the hero may have walked in the 2D city meanwhile: continue from where the site has it
       const p = safe(() => W.LGCity.debug()?.me as [number, number] | undefined, undefined);
@@ -512,7 +573,13 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     get: (p) => api(p),
     post: (p, b) => api(p, b),
     // send the last position first (a delayed go would land after the panel opened and close it), then enter
-    openBuilding: (id) => { flush(); safe(() => W.LGCity.panel(id), undefined); ovAt = 0; },
+    openBuilding: (id) => {
+      flush();
+      // 30.10: the Jail cannot be entered — city.js goBuilding('jail') / LGCity.jailOpen() show its window (list and terms)
+      if (id === 'jail') safe(() => (typeof W.LGCity.jailOpen === 'function' ? W.LGCity.jailOpen() : W.LGCity.goBuilding?.('jail')), undefined);
+      else safe(() => W.LGCity.panel(id), undefined);
+      ovAt = 0;
+    },
     openSitePanel: (spec) => {
       const [tab, view] = String(spec).split(':');
       setClassic(true);
@@ -573,8 +640,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   document.addEventListener('visibilitychange', onVis);
 
   // `restyle` is an optional extra of the live session (src/features/restyle.ts calls it when present; fakes go without)
-  const session: SiteSession & { restyle(): boolean } = {
-    store: store as Store, actions, moveTo, pauseMoves, art, setClassic, tick, overlay, closeOverlay, restyle,
+  const session: SiteSession & { restyle(): boolean; jail: JailHub } = {
+    store: store as Store, actions, moveTo, pauseMoves, art, setClassic, tick, overlay, closeOverlay, restyle, jail,
     selfPos: () => (store.me ? [store.me.x, store.me.y] : null),
     dispose() {
       for (const u of unsubs) u();
@@ -592,7 +659,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
 /* ------------------------------------------------------------------ overlay detection */
 /** Site dialogs that may cover the game. Our own UI (#l3d-*) and the town picker inside the hidden 2D view are excluded below. */
 const DIALOGS = '.su-layer, dialog[open], [role="dialog"], [aria-modal="true"]';
-const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view, .fr-back';   // .fr-back: the site's friends window (29.10) over the live 3D
+// .fr-back: the site's friends window (29.10), .cy-jw: the Jail window (30.10) — both lifted over the live 3D (features friends / jail)
+const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view, .fr-back, .cy-jw';
 /** Really on screen: connected, not [hidden], rendered, not visibility:hidden (incl. inherited — e.g. our HIDE_CSS), has a box. */
 export function shown(e: Element | null): boolean {
   if (!e || !e.isConnected || (e as HTMLElement).hidden) return false;

@@ -18,6 +18,12 @@ export function doorInteractables(L: CityLayout, groundAt: (x: number, y: number
     const x = toX(b.door.x), zE = entranceZ(b), g = groundAt(b.door.x, b.door.y);
     const top = g + (b.soon ? Math.max(h, 3.4) : h);
     const hit = new THREE.Box3(new THREE.Vector3(x - hw, g, zE - 0.45), new THREE.Vector3(x + hw, top, zE + 0.3));
+    // 30.10 «Тюрьма и клетка»: nobody enters — the house, the cage and the prisoners in it all open the site's Jail window
+    if (b.jail || b.id === 'jail') {
+      hit.min.x = toX(b.hit[0]) + 0.1; hit.max.x = toX(b.hit[1]);
+      hit.max.y = g + 2.3; hit.max.z = toZ(b.hit[3]) + 0.3;
+      return { id: 'door:' + b.id, label: `${b.title}: кто в клетке`, icon: b.icon, hit, reach: 3.0, use: () => { onDoor()?.(b.id); } };
+    }
     // the door point itself must be within proximity reach even if it is far in front of the facade
     const dz = toZ(b.door.y) - (zE + 0.3);
     const it: Interactable = {

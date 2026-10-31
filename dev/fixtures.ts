@@ -113,3 +113,38 @@ export function villageFixtureLayout(styleId = 'cats'): CityLayout {
   };
   return L as CityLayout;
 }
+
+/**
+ * The fair with the channel's jail open (site 30.10, citymap.js LOW.jail / JAIL_OBST / lowJail; numbers only, the 3D
+ * model is ours): the jail building + cage on the lower street right of the mine, their obstacles in the walk grid, the
+ * two benches that stood there moved right. `?jail=1|me` in dist-dev/game.html.
+ */
+export const JAIL_LOW = {
+  x0: 1540, x1: 1800, base: 1342, c0: 1830, c1: 2240, fy: 1352, door: [1985, 2055] as [number, number],
+  seats: [[1890, 1262], [1980, 1262], [2070, 1262], [2160, 1262], [1935, 1318], [2025, 1318], [2115, 1318], [2195, 1318]] as [number, number][],
+};
+export const JAIL_BUILDING = { id: 'jail', title: 'Тюрьма', sub: 'заключённые канала', icon: '⛓', jail: true, hit: [1540, 2240, 1060, 1352], door: { x: 1670, y: 1376 } } as unknown as Building;
+export function withJail(L: CityLayout): CityLayout {
+  const J = JAIL_LOW, top = L.low?.edge?.[1] ?? 1124;
+  const rects: [number, number, number, number][] = [[J.x0, top, J.x1, J.base], [J.c0 - 6, top, J.c1 + 6, J.fy + 4]];
+  const MOVE: Record<string, [number, number]> = { '1600,1290': [2330, 1300], '2100,1310': [2560, 1310] };
+  const benchAt = (o: Obstacle) => ('b' in o ? MOVE[`${o.b[0] + 80},${o.b[1] + 26}`] : undefined);
+  const inR = (x: number, y: number) => rects.some(([a, b, c, d]) => x >= a && x <= c && y >= b && y <= d);
+  const moved = L.obstacles.map((o) => { const to = benchAt(o); return to ? { b: [to[0] - 80, to[1] - 26, to[0] + 80, to[1] + 6] } as Obstacle : o; });
+  const benches = (L.low?.benches || []).map(([x, y]) => MOVE[`${x},${y}`] ?? [x, y]) as [number, number][];
+  const newBench = Object.values(MOVE).map(([bx, by]) => [bx - 80, by - 26, bx + 80, by + 6]);
+  const blocked = (x: number, y: number) => inR(x, y) || newBench.some(([a, b, c, d]) => x >= a && x <= c && y >= b && y <= d);
+  const free0 = L.free, near0 = L.nearest;
+  const free = (x: number, y: number) => free0(x, y) && !blocked(x, y);
+  const nearest = (x: number, y: number): [number, number] => {
+    if (free(x, y)) return [x, y];
+    for (let d = 8; d < 600; d += 8) for (const [dx, dy] of [[0, d], [d, 0], [-d, 0], [0, -d], [d, d], [-d, d]]) if (free(x + dx, y + dy)) return [x + dx, y + dy];
+    return near0(x, y);
+  };
+  return {
+    ...L, buildings: [...L.buildings, { ...JAIL_BUILDING, door: { ...JAIL_BUILDING.door } }],
+    obstacles: [...moved, ...rects.map((b) => ({ b }) as Obstacle)],
+    low: { ...L.low!, benches, jail: { ...J, door: [...J.door] as [number, number], seats: J.seats.map((s) => [...s] as [number, number]) } },
+    free, nearest,
+  };
+}

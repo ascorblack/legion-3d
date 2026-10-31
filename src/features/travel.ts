@@ -65,6 +65,7 @@ export default coreFeature({
     };
     const lock = (): string | null => {
       if (busy) return 'Дорога уже идёт…';
+      if (ctx.state.jailed) return 'Ты в тюрьме канала: дороги нет, пока не выпустят.';   // site 30.10: a prisoner has only the City
       if (typeof W.LGCity?.town !== 'function') return 'Сайт изменился: быстрый переход недоступен. Открой город на классическом сайте (F8).';
       if ((ctx.rooms as { kind?: string | null }).kind) return 'Сначала выйди из здания — тогда можно отправляться.';
       return null;

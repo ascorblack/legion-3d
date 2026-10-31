@@ -79,7 +79,7 @@ export default coreFeature({
           const ol = region ? doorOutline(root, region, id) : null;
           if (ol) offs.push(ol.dispose);
           offs.push(ctx.interact.add({
-            ...wi, id: 'door:' + id, ...(ol ? { outline: ol.get } : {}), label: b ? doorLabel(b.title, soon, wi.icon ?? b.icon) : wi.label,
+            ...wi, id: 'door:' + id, ...(ol ? { outline: ol.get } : {}), label: b && !(b.jail || b.id === 'jail') ? doorLabel(b.title, soon, wi.icon ?? b.icon) : wi.label,   // the Jail is not entered: its own label
             icon: wi.icon ?? b?.icon, title: b?.title ?? wi.label, soon,
             enabled: () => enabled() && (!wi.enabled || wi.enabled()),
             use: () => { void ctx.rooms.enter(id); },

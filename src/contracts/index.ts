@@ -103,6 +103,17 @@ export interface Building {
   hit: [number, number, number, number];   // x0, x1, y0 (top of the art), y1 (bottom of the art)
   door: { x: number; y: number };          // walkable point in front of the entrance
   soon?: boolean; fair?: boolean; mine?: boolean; magic?: boolean;
+  /** «Тюрьма и клетка» (site 30.10, citymap.js BUILDINGS jail): you cannot enter it — E opens the site's Jail window. */
+  jail?: boolean;
+}
+
+/** The jail on the lower street (site citymap.js LOW.jail, 30.10): building x0…x1 down to `base`, cage c0…c1 from the
+ *  retaining wall to the bar line `fy`, the cage door opening `door` (x0, x1) in the bars, 8 seats [x, y] for prisoners. */
+export interface JailGeo {
+  x0: number; x1: number; base: number;
+  c0: number; c1: number; fy: number;
+  door: [number, number];
+  seats: [number, number][];
 }
 
 /** Lower street of the fair city (LGCityMap.LOW). */
@@ -112,6 +123,7 @@ export interface LowerStreet {
   benches?: [number, number][]; beds?: [number, number][]; decor?: [number, number][];
   lamps?: [number, number][]; statue?: [number, number];
   storage?: { x0: number; x1: number; base: number }; mine?: { x0: number; x1: number; base: number };
+  jail?: JailGeo;
   [k: string]: unknown;
 }
 

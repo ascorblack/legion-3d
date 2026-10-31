@@ -23,8 +23,10 @@ import { SITE_CHAT_CSS } from './styles';
 import { ModUi, Moderator, canMod, menuItems, roleIco, type ModApi, type ModLine, type UiItem, type ModOp } from './chat-mod';
 import type { ModalInput } from '../core/modal';
 import { setHtml } from '../core/html';
-import { DmBridge, dmApi, friendsApi, nickMenuItems } from './dm';
-import { CO_BOX_SEL, OneMine, chatOneApi, isQuiet } from './chatone';
+import { DmBridge, dmApi, dmOneOn, friendsApi, nickMenuItems } from './dm';
+import { CO_BOX_SEL, OneMine, chatOneApi, chatOneOn, isQuiet } from './chatone';
+import { ChatFocusGuard, evTarget, gameOwnsInput } from './chatfocus';
+import { deepActive } from '../engine/input';
 export { chatOneOn } from './chatone';
 
 /* ================================================================ pure logic (site-chat.js parity, tested) */
@@ -263,6 +265,8 @@ const KEEP = 80;           // per tab (site CHAT_N)
 const IDLE_MS = 9000;      // dock: no new lines for this long → faded
 const DOCK_SEL = CO_BOX_SEL;   // the City's chat, or the single chat window (site «chatone») in the City's slot / our mine host / its own float
 const DOC = typeof document !== 'undefined' ? document : null;
+/** An IME composition is running (Esc then cancels it; Enter commits it): KeyboardEvent.isComposing, or keyCode 229. */
+export const composing = (e: KeyboardEvent): boolean => !!e.isComposing || e.keyCode === 229;
 
 export class Chat {
   /** Fallback panel (inside the HUD). Hidden while the site's chat is docked. */
@@ -276,6 +280,8 @@ export class Chat {
   private seen = new Set<string>();
   private rendered = new Map<string, HTMLElement>();
   private focused = false; private sending = false;
+  /** Only the player puts the keyboard into the chat (src/ui/chatfocus.ts). */
+  private guard = new ChatFocusGuard();
   private fadeT = 0;
   private flagsKey = '';
   // dock
@@ -351,21 +357,21 @@ export class Chat {
       }
     });
     this.log.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
-    // open while anything in the panel has focus (the input, or a tab button in read-only Достижения)
-    this.el.addEventListener('focusin', () => { if (!this.focused) this.onFocus(true); });
+    // open while anything in the panel has focus (the input, or a tab button in read-only Достижения) — when the player put it there
+    this.el.addEventListener('focusin', () => { if (!this.focused && !this.refuse()) this.onFocus(true); });
     this.el.addEventListener('focusout', () => setTimeout(() => {
       const a = this.c.shadow.activeElement;
       if (this.focused && !this.modUi.open && !(a && this.el.contains(a))) this.onFocus(false);
     }, 0));
     this.el.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || composing(e)) return;   // Esc during IME composition only cancels the composition
       e.preventDefault(); e.stopPropagation();
       (this.c.shadow.activeElement as HTMLElement | null)?.blur?.();
     });
     this.input.addEventListener('input', () => { const n = this.input.value.length; this.cnt.textContent = n > 150 ? `${n}/200` : ''; });
     this.input.addEventListener('keydown', (e) => {
       e.stopPropagation();   // game keys must not fire while typing
-      if (e.key === 'Escape') { e.preventDefault(); this.input.blur(); }
+      if (e.key === 'Escape') { if (!composing(e)) { e.preventDefault(); this.input.blur(); } }
       else if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); void this.send(); }
     });
     this.input.addEventListener('keyup', (e) => e.stopPropagation());
@@ -374,9 +380,10 @@ export class Chat {
     this.modUi = new ModUi(() => this.c.host.input as unknown as ModalInput);
     this.dm = new DmBridge({
       toast: (t) => this.c.toast(t),
-      floatFocus: (on) => this.gameplayFor(on),
+      floatFocus: (on) => this.gameplayFor(on, 'dm'),
       show: () => { if (this.mine?.selected) { this.mine.deselect(); this.dockMineView(); } },   // «Написать» in the mine tab → «Личные» is seen
       me: () => this.me(),
+      one: () => dmOneOn(this.c.host.store.hero as { c1?: unknown; cc?: unknown; mc?: unknown } | null) || chatOneOn(),
     });
     this.modUi.onChange = (open) => {
       if (open || !this.focused) return;
@@ -405,9 +412,38 @@ export class Chat {
       this.offs.push(B.on('city:enter', enter), B.on('sse:city', live), B.on('city:state', (d) => { if (d && d.ok) live(d); }));
       if (B.last && B.last['city:enter']) enter(B.last['city:enter']);
     }
+    // the player's own ways into the chat: a click / tap on it, Tab navigation (window capture: before any handler)
+    if (typeof window !== 'undefined') {
+      const onPtr = (e: Event) => { if (this.inChatEl(evTarget(e))) this.guard.intent(); };
+      const onTab = (e: KeyboardEvent) => { if (e.key === 'Tab') this.guard.intent(); };
+      window.addEventListener('pointerdown', onPtr, true); window.addEventListener('mousedown', onPtr, true);
+      window.addEventListener('keydown', onTab, true);
+      this.offs.push(() => { window.removeEventListener('pointerdown', onPtr, true); window.removeEventListener('mousedown', onPtr, true); window.removeEventListener('keydown', onTab, true); });
+    }
     this.renderTabs();
     mineSubs.add(() => this.mineSync());
     this.mineSync();
+  }
+
+  /** x is a part of the chat: our panel, the docked site box (or its float / our mine host), its nick menu, our moderation popup. */
+  private inChatEl(x: Element | null): boolean {
+    if (!x) return false;
+    if (this.el.contains(x)) return true;
+    const b = this.box;
+    return !!((b && b.contains(x)) || x.closest?.('.cy-nm, .co-float, .l3d-co-host') || x.id === ModUi.HOST_ID);
+  }
+
+  /**
+   * Focus just came into the chat: undo it when the game owns the input and the player did not ask for the chat (the
+   * site's tab switch on a re-dock, a site window giving the focus back on close). True = refused (focus is back on the game).
+   */
+  private refuse(): boolean {
+    const inp = this.c.host.input as { gameplay: boolean; focusGame?: () => void };
+    if (this.guard.allow(gameOwnsInput(inp, !!this.c.opened(), DOC))) return false;
+    const a = deepActive() as HTMLElement | null;
+    try { a?.blur?.(); } catch { /* */ }
+    try { inp.focusGame?.(); } catch { /* */ }
+    return true;
   }
 
   /* ------------------------------------------------------------ moderation (src/ui/chat-mod.ts) */
@@ -497,6 +533,8 @@ export class Chat {
   get typing() { return (this.box ? this.dockFocus : this.focused) || this.dm.floatFocused || this.modUi.open; }
 
   focus(prefill?: string) {
+    this.guard.intent();   // the player's T / Enter / '/' (or a click on a tab / nick): the focus that follows is theirs
+    try { (this.c.host.input as { allowFocus?: () => void }).allowFocus?.(); } catch { /* */ }   // and the input's focus safety net agrees
     try { document.exitPointerLock?.(); } catch { /* ignore */ }
     if (this.box) { this.dockFocusIn(prefill); return; }
     if (!this.flags().on && this.dm.focusFloat()) return;   // no chat: the small DM window of the site
@@ -580,10 +618,22 @@ export class Chat {
     if (on) { this.fade(true); this.log.scrollTop = this.log.scrollHeight; }
   }
 
-  private gameplayFor(on: boolean) {
-    const inp = this.c.host.input;
-    if (on) inp.setGameplay(false);
+  /**
+   * The chat (or the site's DM window: id 'dm') has / gave back the keyboard. With the engine's input this is a HOLD
+   * (src/engine/input.ts hold): gameplay is derived there, so nobody else (the overlay poll, classic resume, a closing
+   * menu) can switch it on from under a focused chat; old inputs get setGameplay as before.
+   */
+  private gameplayFor(on: boolean, id = 'chat') {
+    const inp = this.c.host.input as typeof this.c.host.input & { focusGame?: () => void; hold?: (id: string, on: boolean) => void };
+    if (typeof inp.hold === 'function') inp.hold(id, on);
+    else if (on) inp.setGameplay(false);
     else if (!this.c.opened()) inp.setGameplay(true);
+    if (!on && !this.c.opened()) {
+      // Esc / a sent line / a click elsewhere: the keyboard goes back to the game (the canvas), not to <body> — a field
+      // left focused would swallow keys, and a site window closing later would hand the focus back into it
+      const a = DOC ? deepActive(DOC) : null;
+      if (!a || a === DOC?.body || a === DOC?.documentElement) { try { inp.focusGame?.(); } catch { /* */ } }
+    }
     try { window.dispatchEvent(new CustomEvent('l3d:chat', { detail: { focus: on } })); } catch { /* */ }
   }
 
@@ -716,7 +766,11 @@ export class Chat {
     this.el.style.display = 'none';
     if (this.focused) this.input.blur();
     const inChat = (x: Element | null) => !!x && (b.contains(x) || !!x.closest?.('.cy-nm') || x.id === ModUi.HOST_ID);
-    const onIn = () => { if (!this.dockFocus && !isQuiet() && DOC!.documentElement.classList.contains('l3d-on')) { this.dockFocus = true; this.gameplayFor(true); this.lastAct = Date.now(); this.setIdle(false); } };
+    const onIn = () => {
+      if (this.dockFocus || isQuiet() || !DOC!.documentElement.classList.contains('l3d-on')) return;
+      if (this.refuse()) return;   // the site focused its field behind the game (tab switch on a re-dock, a window's focus restore)
+      this.dockFocus = true; this.gameplayFor(true); this.lastAct = Date.now(); this.setIdle(false);
+    };
     const onOut = () => {
       // the site re-renders its list (a focused nick may vanish) and opens the nick menu outside the box: decide later
       setTimeout(() => {
@@ -729,6 +783,7 @@ export class Chat {
       if (!DOC!.documentElement.classList.contains('l3d-on')) return;
       const t = e.target as HTMLElement;
       if (e.key === 'Escape') {
+        if (composing(e)) { e.stopPropagation(); return; }   // IME: Esc cancels the composition — the chat stays open (the site must not fold it either)
         // 3D: Esc just leaves the chat (the site would also fold it)
         e.preventDefault(); e.stopPropagation();
         (document.activeElement as HTMLElement | null)?.blur?.();
@@ -1070,6 +1125,11 @@ export class Chat {
       if (!this.box) { const b = this.findBox(); if (b) this.dock(b); }
       if (this.box && this.mine) this.dockMineAttach();
       if (this.box) this.setIdle(!this.dockFocus && Date.now() - this.lastAct > IDLE_MS);
+      // safety net: «typing» while the focus is no longer in the chat (the site re-rendered the focused field away — no
+      // focusout comes then) would keep gameplay off for good: the camera dead under a locked pointer
+      const a = DOC ? deepActive(DOC) : null;
+      if (this.box && this.dockFocus && !this.inChatEl(a)) { this.dockFocus = false; this.lastAct = Date.now(); this.gameplayFor(false); }
+      if (!this.box && this.focused && !this.modUi.open && !(a && this.el.contains(a))) this.onFocus(false);
     }
     if (!this.box) {
       this.fadeT += dt;

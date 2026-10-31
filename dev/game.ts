@@ -7,7 +7,8 @@ import type { SiteSession } from '../src/contracts/modules';
 import { createStore } from '../src/store/store';
 import { appearanceFrom } from '../src/avatar';
 import { startGame } from '../src/content/game';
-import { fixtureLayout, campFixtureLayout, villageFixtureLayout } from './fixtures';
+import { fixtureLayout, campFixtureLayout, villageFixtureLayout, withJail } from './fixtures';
+import { createJailHub, jailSeats, jailDay, type JailEntry } from '../src/net/jail';
 import { SX, SZ } from '../src/world/coords';
 import me from '../test/fixtures/me.json';
 import session from '../test/fixtures/city-session.json';
@@ -28,7 +29,9 @@ import { QUEST_MOCKS } from '../src/debug/questMocks';
 // (test/fixtures/village-map.json); otherwise the fair
 const TOWN = new URLSearchParams(location.search).get('town');
 const MAGIC = new URLSearchParams(location.search).get('magic') === '1';   // ?magic=1: the camp's magic shop (hero.ms)
-const layout = TOWN === 'camp' ? campFixtureLayout('cats', MAGIC) : TOWN === 'village' ? villageFixtureLayout() : fixtureLayout();
+// ?jail=1: the channel's jail is open (6 prisoners in the cage, «+5»); ?jail=me: and the hero is one of them (site 30.10)
+const JAIL = new URLSearchParams(location.search).get('jail');
+const layout = TOWN === 'camp' ? campFixtureLayout('cats', MAGIC) : TOWN === 'village' ? villageFixtureLayout() : JAIL ? withJail(fixtureLayout()) : fixtureLayout();
 // ?sky=dusk: an evening sky for photos (the site's own style sky otherwise)
 if (new URLSearchParams(location.search).get('sky') === 'dusk') layout.sky = 'linear-gradient(#1b1640 0%, #3e2f6e 38%, #9a5a86 72%, #f0a070 100%)';
 const SPAWN: [number, number] = (layout as any).spawn || [layout.QW + 660, 1010];
@@ -112,6 +115,27 @@ actions.get = ((g) => (p: string) => (isMine(p) ? mine().api(p) : g(p)))(actions
 actions.post = ((g) => (p: string, b?: unknown) => (isMine(p) ? mine().api(p, b) : g(p, b)))(actions.post) as Actions['post'];
 let toastDemo = (t: string) => console.log(t);
 
+/* ---- ?sitemine=1: the site's own 2D mine is open when 3D starts (F8 in the 2D mine; src/features/mine-hold.ts) ----
+   A stand-in for mine.js: a full-screen `.mn` screen with the «open in another tab» panel, LGMine {on, close, exit}.
+   window.__mineLog: every mine request of the 3D client + what the stand-in did (site:enter = its «Копать здесь», site:exit). */
+if (new URLSearchParams(location.search).get('sitemine') === '1') {
+  const log: string[] = ((window as any).__mineLog = []);
+  const el = document.createElement('div'); el.className = 'mn'; el.setAttribute('role', 'dialog');
+  el.style.cssText = 'position:fixed;inset:0;z-index:150;background:#2b2233;color:#ffe9a8;font:700 28px sans-serif;display:grid;place-items:center';
+  el.innerHTML = '<p>2D-шахта сайта (заглушка)</p><div class="mn-other" hidden style="position:absolute;bottom:40px"><button type="button" data-mn-here>Копать здесь</button></div>';
+  document.body.appendChild(el);
+  const other = el.querySelector<HTMLElement>('.mn-other')!;
+  el.querySelector<HTMLButtonElement>('[data-mn-here]')!.onclick = () => { log.push('site:enter'); other.hidden = true; };
+  const LGMine = { on: true, close: () => { log.push('site:close'); LGMine.on = false; el.remove(); }, exit: () => { log.push('site:exit'); LGMine.on = false; el.remove(); } };
+  (window as any).LGMine = LGMine;
+  const g0 = actions.get, p0 = actions.post;
+  actions.get = ((p: string) => { if (isMine(p)) { log.push('3d:GET ' + p.replace(/&.*$/, '')); } return g0(p); }) as Actions['get'];
+  actions.post = ((p: string, b?: unknown) => {
+    if (isMine(p)) { log.push('3d:POST ' + p); if (/^\/api\/mine\/enter/.test(p) && LGMine.on) other.hidden = false; }   // the site's mine now says «другая вкладка»
+    return p0(p, b);
+  }) as Actions['post'];
+}
+
 /* ---- «Путешествие» (L): offline stand-ins for the site's town picker and streamer search ---- */
 // /api/city/towns, /api/mylist, /api/find and LGCity.town(id) — enough for the travel page and a real world swap (camp ⇄ fair ⇄ a town)
 {
@@ -169,8 +193,30 @@ if (new URLSearchParams(location.search).get('debug') === '1') { try { localStor
 } satisfies DemoData;
 (window as any).__l3dDebugMocks = { QUEST_MOCKS };   // dev/debug-check.mjs
 
-const site: SiteSession = {
-  store, actions,
+/* ---- the jail (?jail=1|me): the hub the site adapter keeps (src/net/jail.ts), prisoners on the seats, a stand-in Jail window ---- */
+const JLIST: JailEntry[] = Array.from({ length: 11 }, (_, i) => ({ l: `zek${i + 1}`, n: `Узник${i + 1}`, lv: 3 + i, lk: (raw[(i + 3) % raw.length] || {}).lk, g: (raw[(i + 3) % raw.length] || {}).g, u: i % 3 ? Date.now() + (i + 1) * 3.6e6 : null }));
+const jailHub = JAIL ? createJailHub({ on: true, me: JAIL === 'me' ? { reason: 'спам в чате', until: Date.now() + 3 * 3.6e6, untilText: 'до 31 октября, 15:00' } : null, list: JLIST.slice(0, 6), n: 11 }) : null;
+if (jailHub && layout.low?.jail) {
+  for (const s0 of jailSeats(jailHub.get(), layout.low.jail, hero.login)) {
+    if (s0.self || !s0.entry) continue;
+    const e = s0.entry;
+    store.upsertWalker({ login: e.l, app: appearanceFrom(e.l, { ...e, l: e.l }, STYLE), x: s0.x, y: s0.y, face: Math.PI + (s0.flip < 0 ? 0.45 : -0.45), speed: 0, alpha: 1 });
+  }
+  const ob = actions.openBuilding;
+  actions.openBuilding = (id) => {
+    if (id !== 'jail') return ob(id);
+    document.querySelector('.cy-jw')?.remove();
+    const w = document.createElement('div'); w.className = 'cy-jw'; w.setAttribute('role', 'dialog');
+    w.style.cssText = 'position:fixed;z-index:172;right:16px;top:64px;width:min(360px,calc(100% - 32px));max-height:calc(100% - 96px);overflow:auto;padding:12px 14px 14px;border-radius:14px;background:#2a2433;color:#f7eadf;border:2px solid #c9a33a;font:600 14px/1.35 Nunito,sans-serif';
+    const st = jailHub.get(), rows = [...(st.me ? [{ l: hero.login, n: hero.name + ' (ты)', u: st.me.until }] : []), ...st.list];
+    w.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><b style="font:400 18px 'Russo One',sans-serif;color:#ffd27a">Тюрьма канала</b><button type="button" data-jw-x aria-label="Закрыть" style="min-width:40px;min-height:40px;border:0;border-radius:10px;background:#ffffff14;color:inherit;font-size:22px">×</button></div><p>Сидят: ${rows.length}</p><ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">${rows.map((e) => `<li style="padding:8px 10px;border-radius:10px;background:#ffffff0d"><b>${e.n || e.l}</b><br><span style="opacity:.8;font-size:13px">${jailDay(e.u)}</span></li>`).join('')}</ul>`;
+    w.addEventListener('click', (ev) => { if ((ev.target as HTMLElement).closest('[data-jw-x]')) w.remove(); });
+    document.body.appendChild(w);
+  };
+}
+
+const site: SiteSession & { jail?: typeof jailHub } = {
+  store, actions, ...(jailHub ? { jail: jailHub } : {}),
   moveTo() { /* offline */ },
   art: () => null,
   setClassic() { /* offline */ },
@@ -194,6 +240,6 @@ const site: SiteSession = {
 startGame(site, (s) => console.log('[demo]', s)).then((g) => {
   const ui = (window as any).__l3dGame?.ui;
   if (ui) toastDemo = (t) => ui.toast(t);
-  (window as any).__demo = { g, store, bots, hero, hwc: (v: string) => { (hero as any).hwc = hwcOf(v); store.setHero(structuredClone(hero)); },
+  (window as any).__demo = { g, store, bots, hero, jail: jailHub, hwc: (v: string) => { (hero as any).hwc = hwcOf(v); store.setHero(structuredClone(hero)); },
     hwlv: (n: number) => { (hero as any).hw = { ...(hero as any).hw, p: n }; store.setHero(structuredClone(hero)); } };
 }).catch((e) => { console.error('demo failed', e); document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f88;position:fixed;top:0;left:0;z-index:999">${String(e?.stack || e)}</pre>`); });

@@ -11,6 +11,8 @@
  * Chat focus → window event 'l3d:chat' { focus: boolean }.
  */
 import type { MountUi, Ui, UiHost } from '../contracts/modules';
+import { onPageKeys } from '../engine/input';
+import { heldKey } from './repeat';
 import { CSS } from './styles';
 import { type Ctx, h, extras } from './ctx';
 import { Hud } from './hud';
@@ -197,6 +199,10 @@ export const mountUi = (root: HTMLElement, host: UiHost): GameUi => {
     const isTab = !!ot && ot.group !== 'system';
     let used = true;
     if (code === 'ShiftLeft' || code === 'ShiftRight') { menus.setShift(true); return; }
+    // a held key repeats: only the page's own navigation (arrows, PageUp…: menus.key) may repeat — a held toggle (I, B,
+    // Tab, F1–F3, H, Q / E between tabs, Esc) must not open the menu and close it again
+    if (heldKey(code, e.repeat, !!tabs.byCode(code)) === 'swallow') { e.preventDefault(); return; }
+    if (e.repeat) { if (menus.key(code, e)) e.preventDefault(); return; }   // only the page's own navigation repeats
     if (code === 'Escape') {
       menus.hideTip();   // hover tooltips are not modal: Esc closes the menu right away
       if (opened === 'settings' || opened === 'help') open('pause');
@@ -218,9 +224,8 @@ export const mountUi = (root: HTMLElement, host: UiHost): GameUi => {
     if (used || code === 'Tab' || code === 'F1' || code === 'F2' || code === 'F3') e.preventDefault();
   };
   const menuKeyUp = (e: KeyboardEvent) => { if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') menus.setShift(false); };
-  window.addEventListener('keydown', menuKey);
-  window.addEventListener('keyup', menuKeyUp);
-  unsubs.push(() => { window.removeEventListener('keydown', menuKey); window.removeEventListener('keyup', menuKeyUp); });
+  // at <html>, before the page's listeners: the input's site key shield stops our key events there (src/engine/input.ts)
+  unsubs.push(onPageKeys('keydown', menuKey), onPageKeys('keyup', menuKeyUp));
 
   /** Gameplay keys through Input.onKey. */
   unsubs.push(host.input.onKey((code, e) => {
@@ -229,18 +234,20 @@ export const mountUi = (root: HTMLElement, host: UiHost): GameUi => {
     if (r) handled = e;                         // whichever listener runs second must ignore this event
     return r;
   }));
+  /** T / Enter / '/': the chat takes the keyboard and frees the pointer — our own unlock, never the «Esc left the lock → Pause» case. */
+  function chatFocus(prefill?: string) { ownUnlockAt = performance.now(); chat.focus(prefill); }
   function gameKey(code: string, e: KeyboardEvent): boolean {
     if (chat.typing) return false;              // the chat input handles Enter/Escape itself
     if (e.ctrlKey || e.metaKey) return false;
     const play = host.input.gameplay;
     switch (code) {
       case 'Escape': if (play) { open('pause'); return true; } return false;
-      case 'Enter': case 'NumpadEnter': if (play) { e.preventDefault(); chat.focus(); return true; } return false;
+      case 'Enter': case 'NumpadEnter': if (play) { e.preventDefault(); chatFocus(); return true; } return false;
     }
     if (!play) return false;
     switch (code) {
-      case 'KeyT': e.preventDefault(); chat.focus(); return true;
-      case 'Slash': e.preventDefault(); chat.focus('/'); return true;
+      case 'KeyT': e.preventDefault(); chatFocus(); return true;
+      case 'Slash': e.preventDefault(); chatFocus('/'); return true;
       case 'Tab': e.preventDefault(); open(menus.resolve('character')); return true;
       case 'F1': case 'KeyH': e.preventDefault(); hud.showHints(); open('help'); return true;
       case 'F2': e.preventDefault(); setHud(!hudOn); return true;
@@ -274,7 +281,7 @@ export const mountUi = (root: HTMLElement, host: UiHost): GameUi => {
     settings,
     open,
     toast,
-    focusChat: () => { if (opened) open(null); chat.focus(); },
+    focusChat: () => { if (opened) open(null); chatFocus(); },
     setHudVisible: setHud,
     addTab: (id, def) => tabs.add(id, def),
     removeTab: (id) => { menus.tabRemoved(id); return tabs.remove(id); },

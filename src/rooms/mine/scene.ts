@@ -40,7 +40,7 @@ import { GEO1, type MineGeom } from './geo3';
 import { buildCave3, buildDig3, slots3, CEIL3, type Slot3 } from './cave3';
 import { hideOutline, showOutline } from '../../engine/outline';
 import { rockFace, rockCeiling, rockFloor, strataOf, hashStr, channelOfBase, groundHeight, RELIEF, type FloorOpts } from './rockface';
-import { timberPost, liftRig, crateStack, ropeCoil, dressCave, puddle, DAMP } from './props3';
+import { timberPost, liftCage, liftPlan, CW_BACK, crateStack, ropeCoil, dressCave, puddle, DAMP } from './props3';
 import { chipGeo, sack, layerPiece, lantern3d, rubble, outcrop, stalagmite, toolPile, crateOrBarrel, stalactiteCluster, remains, slab, shelf, crack, railTrack, pitPlanks, fy, type DressCol } from './dress3';
 import { buildAtmos, type Atmos } from '../common/atmos';
 import { AoField } from '../common/ao';
@@ -978,29 +978,25 @@ uniform vec3 uMwSky;`).replace('#include <emissivemap_fragment>', `#include <emi
     const xMax = v3 ? this.G.mx(this.G.hall[0] + this.G.hall[2]) : OUT_X;
     // lift «В ГОРОД»: a timber cage with a platform, ropes to the ceiling
     const L = this.footM('lift');
-    kit.box('wood', '#8a5a32', L.x0, L.x1, 0, 0.18, L.z0, L.z1);
-    // slim cage: corner posts up to a top frame at 3 m, only the hoist ropes go on to the ceiling (it stands right by
-    // the spawn — thick posts to the ceiling framed the third-person view like a doorway)
-    for (const [x, z] of [[L.x0, L.z0], [L.x1, L.z0], [L.x0, L.z1], [L.x1, L.z1]]) kit.box('wood', '#6e4626', x - 0.07, x + 0.07, 0, 3.0, z - 0.07, z + 0.07);
-    kit.box('wood', '#6e4626', L.x0, L.x1, 2.9, 3.02, L.z0 - 0.07, L.z0 + 0.07);
-    kit.box('wood', '#6e4626', L.x0, L.x1, 2.9, 3.02, L.z1 - 0.07, L.z1 + 0.07);
-    for (const x of [L.x0, L.x1]) kit.box('wood', '#6e4626', x - 0.07, x + 0.07, 2.9, 3.02, L.z0, L.z1);
-    kit.box('metal', '#3a3448', L.x0 + 0.3, L.x1 - 0.3, 1.0, 1.06, L.z1 - 0.05, L.z1 + 0.05);
-    for (const x of [L.cx - 0.5, L.cx + 0.5]) kit.box('metal', '#c8b890', x - 0.015, x + 0.015, 3.0, CEIL, L.cz - 0.015, L.cz + 0.015);
+    // the lift in full (props3.liftCage): platform, frame, counterweight on its guide rails behind the back wall at every
+    // quality; the headframe, sheave, plumb ropes, barred walls and the closed gate from q1 (big floor: bars and gate)
+    const fr: 1 | -1 = v3 ? 1 : -1, ceilL = v3 ? CEIL3 : CEIL;
+    liftCage(kit, L, ceilL, fr, this.quality, v3);
     kit.sign(lift, L.cx, 3.35, v3 ? L.z1 + 0.1 : L.z0 - 0.1, 2.0, v3 ? 0 : Math.PI, { bg: v3 ? '#2e5a2a' : '#3a2a5e', fg: v3 ? '#e8ffd8' : '#ffd23f' });
     if (!v3) kit.sign(lift, L.x1 + 0.1, 3.35, L.cz, 1.4, Math.PI / 2, { bg: '#3a2a5e', fg: '#ffd23f' });
     kit.light(L.cx, 2.4, L.z0 - 0.3, '#ffcf6a', 5, 8, 1.2); this.addPool(L.cx, 2.4, L.z0 - 0.3, 5.5, '#ffcf6a', 0.9);
-    // the lift in full (q1+): headframe, pulley, ropes, counterweight, barred cage, gate, a lantern; crates and rope by it
+    // q1+: the cage lantern's pool, crates and a coil of rope by it
     if (this.quality >= 1) {
-      const fr: 1 | -1 = v3 ? 1 : -1;
-      liftRig(kit, L, v3 ? CEIL3 : CEIL, fr, this.quality, v3);
       this.addPool(L.cx, 2.4, (fr > 0 ? L.z0 : L.z1) + fr * 0.25, 3.2, '#ffcf6a', 0.6);
-      // the big floor's lift hall: crates and a coil of rope behind the cage (the classic lift backs onto the camera's room)
-      if (v3) { const bz = L.z0 - 0.55; crateStack(kit, L.x0 + 0.35, bz, 0.2, 3, 2); ropeCoil(kit, L.x1 - 0.3, bz); }
+      // the big floor's lift hall: crates and a coil of rope behind the cage, clear of the counterweight column (cx ± 0.4)
+      // (the classic lift backs onto the camera's room)
+      if (v3) { const bz = L.z0 - CW_BACK - 0.45; crateStack(kit, L.x0 + 0.1, bz, 0.2, 2, 2); ropeCoil(kit, L.x1 - 0.3, L.z0 - 0.55); }
       kit.splash(L.cx, 0.2, L.cz + fr * (L.z1 - L.z0) * 0.5 + fr * 0.8, 3.0, 2.4, '#ffcf6a', 0.25, 0, -Math.PI / 2);
     }
-    this.setBox('lift', L.x0, 0, L.z0, L.x1, 2.6, L.z1);
+    // hit / outline volume: the whole cage (posts and the top frame included, so the aim outline shows the cage, not a part)
+    this.setBox('lift', L.x0 - 0.08, 0, L.z0 - 0.08, L.x1 + 0.08, 3.05, L.z1 + 0.08);
     kit.solid(L.x0, L.x1, L.z0, L.z1, Infinity);
+    if (v3) { const bz = liftPlan(L, ceilL, fr).bz; kit.solid(L.cx - 0.4, L.cx + 0.4, bz - 0.14, bz + 0.14, Infinity); }   // the counterweight column
     // minecart on the rails, full of ore — low (≈1 m) and at the lift end of its spot, so it never fills the view
     // from the spawn (players spawn right in front of it) or the third-person camera
     if (!v3) {

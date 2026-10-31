@@ -77,10 +77,50 @@ export function minePayload(src: OneMineSrc): { chat: unknown[]; c?: number; mod
   };
 }
 
-/** The mine room's hold on the single chat window: host, enter feed, docking (re-asserted when the site docks the City again). */
+type DockFn = ChatOneApi['dock'];
+/**
+ * Run the site's dock('city', root) without letting the City take the window: its place() keeps the LAST docked scene
+ * whose root is shown, and switches the tab when that scene changes («Шахта» → «Город», focusing the field). The City's
+ * root is hidden for that one synchronous call (no layout, no paint in between) so place() still picks our mine host,
+ * then the mine is docked again so it is the last one for every later place() of the site.
+ */
+export function dockCityUnder(orig: DockFn, api: ChatOneApi, root: Element, host: Element): void {
+  const el = root as HTMLElement, st = el.style;
+  const prev = st ? st.getPropertyValue('display') : '', pri = st ? st.getPropertyPriority('display') : '';
+  try { st?.setProperty('display', 'none', 'important'); orig.call(api, 'city', root); }
+  finally { if (st) { if (prev) st.setProperty('display', prev, pri); else st.removeProperty('display'); } }
+  orig.call(api, 'mine', host);
+}
+
+/**
+ * The mine room's hold on the single chat window: host, enter feed, docking. While it holds, the site's own
+ * dock('city', …) calls (its City runs under our 3D and re-docks after every «me»: heroChanged → chatInit) are routed
+ * through dockCityUnder — one owner of the tab (the 3D scene, on a real scene change only), no «Город» ⇄ «Шахта» fight
+ * and no focus thrown into the chat field. A tab the player picked stays.
+ */
 export class OneMine {
   private host: HTMLElement | null = null;
+  private orig: DockFn | null = null;
+  private wrapped: DockFn | null = null;
   constructor(private api: ChatOneApi, private src: OneMineSrc, private doc: Document, private css: () => void) {}
+
+  /** The site's dock, unwrapped. */
+  private dock(k: 'city' | 'mine', root: Element | null): void { (this.orig || this.api.dock).call(this.api, k, root); }
+
+  private hook(): void {
+    if (this.wrapped) return;
+    const api = this.api, orig = api.dock;
+    const w: DockFn = (k, root) => {
+      const host = this.host;
+      if (host && k === 'city' && root) { withoutFocus(this.doc, () => dockCityUnder(orig, api, root, host)); return; }
+      orig.call(api, k, root);
+    };
+    try { api.dock = w; this.orig = orig; this.wrapped = w; } catch { /* a frozen object: the tick re-docks as before */ }
+  }
+  private unhook(): void {
+    if (this.wrapped && this.api.dock === this.wrapped && this.orig) { try { this.api.dock = this.orig; } catch { /* */ } }
+    this.wrapped = null; this.orig = null;
+  }
 
   start(): void {
     if (this.host) return;
@@ -91,20 +131,23 @@ export class OneMine {
     host.dataset.chatTop = '120';
     this.doc.body.appendChild(host);
     try { this.api.enterFeed?.('mine', minePayload(this.src)); } catch (e) { console.warn('[legion-3d] chatone enterFeed', e); }
-    withoutFocus(this.doc, () => this.api.dock('mine', host));
+    this.hook();
+    withoutFocus(this.doc, () => this.dock('mine', host));
   }
 
   /** Twice a second (Chat.update): the City docked again (the site re-entered it) → the window must stay in the mine's host. */
   tick(): void {
     const host = this.host; if (!host || !this.api.on()) return;
     const box = this.doc.querySelector<HTMLElement>('.cy-chat[data-co-bound]');
-    if (box && box.parentNode !== host) withoutFocus(this.doc, () => this.api.dock('mine', host));
+    if (box && box.parentNode !== host) withoutFocus(this.doc, () => this.dock('mine', host));
   }
 
   stop(): void {
     const host = this.host; if (!host) return;
     this.host = null;
-    try { withoutFocus(this.doc, () => this.api.dock('mine', null)); } catch (e) { console.warn('[legion-3d] chatone undock', e); }
+    const orig = this.orig;
+    this.unhook();
+    try { withoutFocus(this.doc, () => (orig || this.api.dock).call(this.api, 'mine', null)); } catch (e) { console.warn('[legion-3d] chatone undock', e); }
     // the window moved back (City slot / float) in dock(null); anything the site left in the host goes with it
     host.remove();
   }

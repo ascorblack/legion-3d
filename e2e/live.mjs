@@ -14,6 +14,7 @@
 //   {"eval":"…","save":"file.json"}: also write the eval result to a file (raw captures go to .local/, never committed)
 //   --no-go-timing: do not inject the page-side /api/city/go timing wrapper (it is itself a foreign fetch wrapper: the site's
 //     telemetry would flag the harness, not the extension). Needed for {"pi":…} checks in 3D.
+//   --netlog: print every /api request in order (method, path, mine key c=) — the request list of a scenario
 //   --start=2d: the default start mode of the extension (classic site, 3D by F8 / the button) instead of '3d' (implies
 //     --no-go-timing). Nothing waits for the game then:
 //     use {"press":"F8"}, {"wait":ms}, {"pi":"label"}. {"pi":"label"} runs the site's own bot-telemetry probe (mine.js tlPi,
@@ -57,6 +58,11 @@ const errors = [];
 p.on('console', (m) => { const t = m.text(); if (m.type() === 'error' || m.type() === 'warning' || /legion-3d|\[l3d\]/.test(t)) { console.log(ts(), `[${m.type()}]`, t.slice(0, 400)); if (m.type() === 'error') errors.push(t); } });
 p.on('pageerror', (e) => { console.log(ts(), '[pageerror]', e.message, (e.stack || '').split('\n').slice(1, 4).join(' | ')); errors.push(e.message); });
 p.on('request', (r) => {
+  // --netlog: every /api request in order (method, path without the channel prefix, the mine key c=) — e.g. «no city enter in the mine»
+  if (opt.netlog && /\/api\//.test(r.url())) {
+    const u = new URL(r.url()), cq = u.searchParams.get('c');
+    console.log(ts(), 'NET', r.method(), u.pathname.replace(/^\/c\/[^/]+/, '') + (cq ? '?c=' + cq : ''));
+  }
   if (r.method() !== 'POST') return;
   const path = new URL(r.url()).pathname.replace(/^\/c\/[^/]+/, '');
   net.posts[path] = (net.posts[path] || 0) + 1;

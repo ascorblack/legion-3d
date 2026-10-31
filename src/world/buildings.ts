@@ -8,6 +8,7 @@ import {
   stripeColors, awning, shade,
 } from './kit';
 import { mine as lowMine, mineboard as lowMineboard, storage as lowStorage, lowEntranceZ } from './lowstreet';
+import { jail as buildJail } from './jail';
 
 export interface HouseOpts {
   wall?: 'brick' | 'plaster' | 'wood' | 'stone'; wallCol?: string; roofCol?: string; roof?: 'x' | 'z' | 'pyr' | 'flat';
@@ -583,6 +584,7 @@ export const BUILDING_MODELS: Record<string, BuildingModel> = {
   shop: { build: shop, front: 2.4, solidFront: 1.45, door: { hw: 1.3, h: 2.6 } }, magic: { build: magic },
   mine: { build: mine, door: { hw: 0.95, h: 2.3 } }, mineboard: { build: mineboard, door: { hw: 0.5, h: 2.1 } },
   storage: { build: storage, door: { hw: 0.85, h: 2.1 } },
+  jail: { build: (k, b) => buildJail(k, b), door: { hw: 0.5, h: 2.0 } },
 };
 const GENERIC: BuildingModel = { build: generic };
 const GENERIC_LOW: BuildingModel = { build: storage };

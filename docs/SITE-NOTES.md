@@ -17,6 +17,14 @@ so the extension must treat every internal API as unstable and degrade gracefull
   whole page load. The 3D mine uses our own client and never runs `tele()`. We do not touch `requestAnimationFrame` or `LGMine`.
   `EventSource` is replaced by the bridge (the live feed has no other source without a second connection); the telemetry does not look at it.
   Test: `test/fetch-telemetry.test.ts`, `e2e/fetch-tee.mjs`; refresh `test/fixtures/site-telemetry.js` when `tlPi` changes.
+- **F8 inside the mine (31.10, src/net/site-mine.ts, src/features/mine-hold.ts).** Opening the site's mine puts the City to sleep
+  (`LGCity.sleep()`: city leave, `LGCity.debug()` = null); its «В город» (`LGMine.exit()`) leaves the mine and wakes the City (city
+  enter); a City tab click while the mine is open wakes the City under it. One mine presence per page tab key: the client that entered
+  last owns it, the other shows `.mn-other` «Шахта открыта в другой вкладке» / «Копать здесь». The site's mine can only be opened from
+  the live City (`LGCity.panel('mine')`). So the extension keeps the site's mine open, hidden (`html.l3d-mnhold`, plus a hidden
+  `.mn-board-w` sentinel so its Esc handler does not close it), while the 3D mine runs; F8 shows it again and presses its own «Копать
+  здесь». Per switch: one mine enter (of whichever client takes over), no leave, no City request. The floor key the site's mine works
+  on is read from resource timing entries of its `/api/mine/state?c=` polls. The fetch tee stays off while the site's mine is open at all.
 - Strict CSP (`script-src 'self' 'nonce-…'`, `connect-src 'self'`). Extension content scripts are not
   subject to it; a MAIN-world content script declared in the manifest runs regardless.
 - Tabs (`<nav class="tabs">`, `button[data-tab]`): `quest` (Поход), `hero` (Персонаж), `city` (Город),
@@ -26,7 +34,24 @@ so the extension must treat every internal API as unstable and degrade gracefull
   `LGCityMap` (UMD, also loadable in Node), `LGCityArt`, `LGCity`, `LGChat`, `LGMine`, `LGQuest`,
   `LGTownGen` (district towns), `LGSiteUi`.
 - City files are lazy-loaded on first open of the City tab (`cityfair.js`, `citymap.js`, `cityart.js`,
-  `citygl.js` (Pixi), `itemgrid.js`, `site-chat.js`, `city.js`).
+  `citygl.js` (Pixi), `itemgrid.js`, `site-chat.js`, `citystore.js`, the building windows, `city.js`).
+- **Building windows (31.10).** The windows of the City's buildings are separate files: `/site/cityshop.js` (the shared shop code:
+  `STOCK`, the buy card `buyAsk`, `stockOf / goodsOf / coinsFor / lockedHere`, `/api/city/stock`, `/api/cityBuy`, `/api/buymat` →
+  `window.LGCityShop(C)`) and one `/site/b-<id>.js` per id of the page data `LG_CITYV.bl` (`forge tent shop magic hall board trainer`,
+  version `LG_CITYV.bw`; `b-board.js` has the board reading overlay `.cy-read`, `b-hall.js` `/api/mine/hall` + `/api/mineHall`) →
+  `window.LGCityBuildings[id](C, SH)`; `/site/citystore.js` is the Storage window. app.js builds the paths from the list, so
+  `scripts/drift.mjs` reads `LG_CITYV` from the page (`cityModuleUrls`). Behaviour unchanged; `LGCity.panel(id)` still opens them.
+- **Jail (30.10, flag legionary.jailPublic).** `/api/me` top level `jail = {reason, until, untilText}` (this hero is a prisoner) and
+  `jl` (the jail is open for this viewer); `GET /api/jail` → `{ok, list:[{l,n,lv,lk,g,gh,aw,u}], n, staff?, why?}`, SSE `jail` (same).
+  citymap.js `LOW.jail {x0,x1,base,c0,c1,fy,door,seats[8]}`, `lowJail()` (the two benches there moved right), `JAIL_OBST` (house and cage
+  solid from the wall to the base), building `{id:'jail', jail:true}` (not enterable). city.js: prisoners sit on the seats (own hero first),
+  «+N» over the cage, `LGCity.jailOpen()` = the Jail window `.cy-jw` (list, terms; reason only for staff). A prisoner: only the City tab
+  (app.js `tab()` forces it; `html.jailed` hides the rest), the `.jail-bar` status (reason, term), cannot walk or enter buildings,
+  always on the fair. 3D: src/world/jail.ts, src/net/jail.ts, src/features/jail.ts.
+- **Single chat (30.10).** app.js `oneIsOn = hero.c1 && (hero.cc || hero.mc) && LGChatOne`: then LGDm never shows its own window; its
+  `open()` asks the single chat to show «Личные» (and waits for it) only while nobody listens on LGDm — our DM bridge does not listen then.
+- **Camp (30.10 E2).** campmap.js moved to the «Пролог» module (same URL, same API). city.js `homePick(hm) = {id: hm.id}`: the server
+  puts `'camp'` into `hm.id` for a channel in the Prologue; `hm.camp` no longer keeps fair/camp open next to a district `hm.id`.
 
 ## Auth / user
 - Cookie `lsid` (httpOnly). `GET /api/me` → `{ ok, user:{login,name}, hero, roles, classes, ench, ql, now, … }`.

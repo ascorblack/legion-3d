@@ -38,6 +38,7 @@ import { liftPrompt, drillsOf, drillPrompt, followKey } from './fund';
 import { attachMineChat, chatOneOn } from '../../ui/chat';
 import type { Avatar } from '../../contracts/modules';
 import type { RoomCombat, RoomFighter } from '../../combat/room';
+import { siteMineOpen, holdSiteMine, heldSiteKey, exitSiteMine, cityLive, mineBase } from '../../net/site-mine';
 
 export { MineClient } from './net';
 export { MineModel } from './state';
@@ -56,6 +57,24 @@ export interface MineRoomOpts {
   /** Tab title / favicon / notification sink (tests; default: the document). */
   tabEnv?: TabEnv;
 }
+
+/** The mine key the next createMineRoom() opens instead of the city's own mine (F8 in the site's 2D mine: its floor,
+ *  src/features/mine-hold.ts). Taken by the next room; null = the layout's mine. */
+let PENDING_KEY: string | null = null;
+export function wantMineKey(k: string | null): void { PENDING_KEY = k; }
+/** Take (and clear) the key asked for by wantMineKey(). */
+export function takeMineKey(): string | null { const k = PENDING_KEY; PENDING_KEY = null; return k; }
+
+/**
+ * F8 handles of the 3D mine room (src/features/mine-hold.ts; duck-typed `hold` of its RoomScene):
+ *  - suspend(): 3D hidden behind the classic site — the client sends nothing (no polls, pings, no leave), no tab title;
+ *  - resume(key, reenter): back — another floor key (the site's mine rode meanwhile) → that floor (the site's own leave +
+ *    enter of a floor change); `reenter` (the site's mine took the presence: «Копать здесь») → one enter; else a state read;
+ *  - release(): the site's own mine left meanwhile (its «В город» already sent the leave and woke the City): the next
+ *    dispose sends nothing and closes nothing of the site;
+ *  - key(): the floor key on show.
+ */
+export interface MineHold { suspend(): void; resume(key: string | null, reenter: boolean): void; release(): void; key(): string; readonly held: boolean }
 
 /** Register the mine room kind. Returns the unregister function. */
 export function registerMine(rooms: Registry<RoomDef>): Unsub {
@@ -80,10 +99,13 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   const store = ctx.store, hero = store.hero as any;
   const login = String((store.me && store.me.login) || (hero && hero.login) || '').toLowerCase();
   let c = o.c;
+  if (!c) c = takeMineKey() || undefined;
   if (!c) { try { c = mineIdOf(ctx.layout().id); } catch { c = 'home'; } }
-  if (!o.client && hero && hero.mn && !hero.mn[c]) throw new Error('Эта шахта закрыта');
-  // one presence per tab: the site's own mine must not run at the same time
-  try { if (W.LGMine && W.LGMine.on) W.LGMine.close(); } catch { /* */ }
+  if (!o.client && hero && hero.mn && !hero.mn[c] && !hero.mn[mineBase(c)]) throw new Error('Эта шахта закрыта');
+  // the site's own mine open (F8 in its 2D mine): it stays open, hidden under the 3D one — closing it would leave the mine,
+  // and only the live City can open it again (a city enter inside the mine). Our enter takes the presence (one per page
+  // tab key: the site's mine shows «Шахта открыта в другой вкладке» until F8 gives it back — src/features/mine-hold.ts)
+  if (!o.client && siteMineOpen()) holdSiteMine(true);
   const api: MineApi = (p, b) => (b === undefined ? ctx.actions.get(p) : ctx.actions.post(p, b));
   const client = o.client || new MineClient({
     api, login, c, bus: (W.__L3D_BUS as MineBus) || null,
@@ -214,7 +236,8 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   };
   window.addEventListener('l3d:settings', onAfkSet);
   const tab = new TabSignals(o.tabEnv || domTabEnv());
-  const refreshTab = () => tab.update(M, Date.now(), afk.tab);
+  let held = false, released = false;   // F8: hidden behind the classic site / the site's mine left meanwhile (MineHold)
+  const refreshTab = () => tab.update(M, Date.now(), afk.tab && !held);
   const emitStatus = (inMine: boolean) => {
     try { window.dispatchEvent(new CustomEvent(MINE_STATUS_EVENT, { detail: mineStatus(c!, M, Date.now(), inMine) })); } catch { /* */ }
   };
@@ -243,6 +266,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   let edgeWarned = false, ringI = -1, ringX = 0, ringZ = 0;
   const isField = (t: EventTarget | null) => { const el = t as HTMLElement | null; return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable); };
   const onGuardKey = (e: KeyboardEvent) => {
+    if (held) return;   // the classic site's keys are not ours
     const now = performance.now();
     throttle.wake();
     if (e.type === 'keyup') { guard.keyUp(e.code, now); return; }
@@ -564,8 +588,21 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   };
   let sweepT = 0;
 
-  const roomScene: RoomScene & { combat: RoomCombat; afk: object; mine: () => object } = {
-    combat,
+  const hold: MineHold = {
+    get held() { return held; },
+    key: () => client.c,
+    suspend() { if (held) return; held = true; walk.cancel(); hud.close(); client.hold(true); refreshTab(); },
+    resume(key, reenter) {
+      if (!held) return;
+      held = false; refreshTab();
+      if (key && key !== client.c) { client.held = false; void switchFloor(key); }   // the site's mine is on another floor now
+      else client.hold(false, reenter);
+    },
+    release() { released = true; },
+  };
+
+  const roomScene: RoomScene & { combat: RoomCombat; afk: object; mine: () => object; hold: MineHold } = {
+    combat, hold,
     // dev / screenshot handles (not in the contract)
     afk: { guard, throttle, tab, ring, walk },
     /** Dev / e2e: a read-only look at the floor on show (no actions). */
@@ -599,7 +636,17 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       afterFns.length = 0; miners.clear();
       offFrame(); offEv(); offChatTab(); offKey(); for (const u of unsubs) u(); for (const s of stoneIts.values()) s.off(); stoneIts.clear();
       document.removeEventListener('keydown', onShiftE, true); walk.cancel();
-      client.close(); hud.dispose();
+      // leaving the 3D mine for good: with the site's mine held under it, the site's own «В город» (its mine leave + City
+      // wake); ours only when we stand on another floor than it. Released: the site already left — nothing to send.
+      if (released) client.close(false);
+      else if (!o.client && siteMineOpen()) { client.close(heldSiteKey() !== client.c); exitSiteMine(); }
+      else {
+        client.close();
+        holdSiteMine(false);
+        // the City still sleeps (it slept under the site's mine and nobody woke it): wake it as the site's «В город» does
+        if (!o.client && !cityLive() && document.querySelector('#tab-city.on')) { try { if (typeof W.LGCity?.wake === 'function') W.LGCity.wake(); } catch { /* */ } }
+      }
+      hud.dispose();
       if (vmHidden && core.vm) core.vm.setVisible(true);
       fpPick.removeFromParent(); tpPick.removeFromParent(); if (core.state) core.state.toolInHand = false;
       for (const m of pickMats) m.dispose(); (paw.material as THREE.Material).dispose(); paw.geometry.dispose();

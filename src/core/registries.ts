@@ -33,6 +33,8 @@ export const DEFAULT_BUILDINGS: Record<string, BuildingDef> = {
   anvil: { model: 'anvil', room: 'hybrid' },
   mine: { model: 'mine', room: 'mine3d' },
   mineboard: { model: 'mineboard', room: 'site' },
+  // 30.10: «Тюрьма и клетка» — cannot be entered; E shows the site's Jail window (who sits, until when)
+  jail: { model: 'jail', room: 'site' },
 };
 export const BUILDING_FALLBACK: BuildingDef = { room: 'site' };
 

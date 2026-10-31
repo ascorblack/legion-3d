@@ -19,7 +19,7 @@ import { canFly, FlightLogic, FLY } from '../flight/rules';
 import { FlightLook } from '../flight/visual';
 import { acquireFunFx } from '../combat/funfx';
 import type { CombatAvatar } from '../combat/ragdoll';
-import { isTyping, type InputEx } from '../engine/input';
+import { isTyping, onPageKeys, type InputEx } from '../engine/input';
 import { funToggle, reducedMotion, sfx } from '../social/toggle';
 import { lsStr, lsSet } from '../core/settings';
 import { coreFeature } from './types';
@@ -121,8 +121,7 @@ export default coreFeature({
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'KeyX') down = false; };
     const onBlur = () => { down = false; };
     const onPhoto = (e: Event) => { photo = !!(e as CustomEvent).detail?.on; };
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
+    const offKeys = [onPageKeys('keydown', onKeyDown), onPageKeys('keyup', onKeyUp)];   // before the input's site key shield stops them
     window.addEventListener('blur', onBlur);
     window.addEventListener('l3d:photo', onPhoto);
     // the help screen lists the key; X only does something while flying
@@ -176,8 +175,7 @@ export default coreFeature({
     return () => {
       offFrame(); offKey(); offWorld(); tg.dispose(); fun.release();
       inp.holdCtrl = false;
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      for (const f of offKeys) f();
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('l3d:photo', onPhoto);
       const ctl = ctx.controller(); if (ctl.flying) ctl.setFlight(null);

@@ -20,6 +20,8 @@ import { campThemeOf } from './camp-themes';
 import { villageOf, depthOf, buildDeepBuilding, buildVillageGround, buildCottages, placeVillageProps, villageBackdrop } from './village';
 import { cityWalls } from './terrain';
 import { ledgeDressing } from './ledge';
+import { JAIL_GEO } from './jail';
+import { jailGeoOf } from '../net/jail';
 
 /** A building; on a layout without the lower street (camp, district towns) the lower-street models (storage barn,
  *  mine…) get a virtual retaining wall 3 m behind their front, so they keep their depth instead of collapsing to 0. */
@@ -29,7 +31,7 @@ function buildOnFlat(k: Ctx, b: Building, spec: GroundSpec): void {
   k.wallZ = toZ(b.hit[3]) - 3.2;
   try { buildBuilding(k, b); } finally { k.wallZ = wz; }
 }
-const LOW_MODELS = new Set(['storage', 'mine', 'mineboard']);
+const LOW_MODELS = new Set(['storage', 'mine', 'mineboard', 'jail']);
 
 /** Off the fair, move upper building models back so their solid front stays behind the site's first walkable row in
  *  front of them (every go() point the site accepts must be reachable in 3D). */
@@ -64,6 +66,7 @@ export function buildStatic(k: Ctx, L: CityLayout, spec: GroundSpec, groundAt: (
   const P = k.pal;
   const camp = campOf(L);
   if (L.id !== 'fair') fitFronts(L);
+  for (const b of L.buildings) if (b.id === 'jail') { const J = jailGeoOf(b, L.low); if (J) JAIL_GEO.set(b, J); }   // LOW.jail → the jail builder
   if (camp) {
     // start camp «Перепутье»: grass, trails, palisades, forest; buildings as at the fair; tents, fire and props
     k.b.tag = 'terrain';

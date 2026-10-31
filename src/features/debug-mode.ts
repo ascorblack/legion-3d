@@ -6,6 +6,7 @@
  * Everything is client-only: nothing is sent to the site (src/debug/index.ts).
  */
 import { registerSettingRow, registerPauseItem, settingValue } from '../ui/settings-ext';
+import { heldKey } from '../ui/repeat';
 import { DebugMode } from '../debug';
 import { coreFeature } from './types';
 
@@ -28,9 +29,9 @@ export default coreFeature({
       dbg = d;
       ctx.dev.debugMode = d;
       offs = [
-        ctx.registries.keys.register('debug.panel', { code: 'F10', label: 'Панель отладки', when: 'always', run: (_c, e) => { e?.preventDefault?.(); d.togglePanel(); return true; } }),
+        ctx.registries.keys.register('debug.panel', { code: 'F10', label: 'Панель отладки', when: 'always', run: (_c, e) => { e?.preventDefault?.(); if (heldKey('F10', !!e?.repeat, false) === 'act') d.togglePanel(); return true; } }),
         // while the panel is open the game's input only passes menu keys: F10 closes it from here (and the browser's F10 menu stays shut)
-        (() => { const k = (e: KeyboardEvent) => { if (e.code === 'F10' && d.panelOpen) { e.preventDefault(); e.stopPropagation(); d.showPanel(false); } }; window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true); })(),
+        (() => { const k = (e: KeyboardEvent) => { if (e.code === 'F10' && d.panelOpen) { e.preventDefault(); e.stopPropagation(); if (heldKey(e.code, e.repeat, false) === 'act') d.showPanel(false); } }; window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true); })(),
         registerPauseItem({ id: 'debug', label: '🐞 Отладка', key: 'F10', order: 90, run: () => setTimeout(() => d.showPanel(true), 0) }),
         registerPauseItem({ id: 'debug-back', label: '🏙️ Вернуться в город', order: 91, enabled: () => d.inside, run: () => setTimeout(() => d.exitAll(), 0) }),
         registerPauseItem({ id: 'debug-dim', label: '🌀 Назад в измерение', order: 92, enabled: () => d.inside && !!d.dim && d.where() !== 'dim', run: () => setTimeout(() => { if (d.scenes.active) d.closeScene(true); else d.backToDim(); }, 0) }),

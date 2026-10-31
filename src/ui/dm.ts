@@ -102,6 +102,16 @@ export interface DmHooks {
   /** LGDm shows a conversation («Написать» somewhere): the mine tab of the dock steps back so «Личные» is seen. */
   show(): void;
   me(): string;
+  /** Site 30.10: the single chat is on for this viewer (app.js oneIsOn: hero.c1 and a City / mine feed, LGChatOne) — then
+   *  LGDm never shows its own window, «show» belongs to the single chat, and we must not hold a listener on LGDm (its
+   *  open() waits for the single chat only while nobody listens). Default: off. */
+  one?(): boolean;
+}
+
+/** app.js oneIsOn(): the hero has the single chat (c1) with a feed (cc / mc), and LGChatOne is (being) loaded. */
+export function dmOneOn(hero: { c1?: unknown; cc?: unknown; mc?: unknown } | null | undefined, win: W = window as W): boolean {
+  const o = (win as unknown as { LGChatOne?: unknown }).LGChatOne;
+  return !!(hero && hero.c1 && (hero.cc || hero.mc) && o);
 }
 
 export const DM_KEY = 'l3d-3d';
@@ -119,6 +129,8 @@ export class DmBridge {
   private toastAt = 0;
   private timers = new Set<number>();
   private offBus: (() => void) | null = null;
+  /** Our listener is registered on this LGDm (not while the single chat is on). */
+  private listening = false;
   private floatOff: (() => void) | null = null;
   floatFocused = false;
 
@@ -138,18 +150,29 @@ export class DmBridge {
   scan() {
     const lg = dmApi(this.win);
     if (lg && lg !== this.lg) {
-      this.lg = lg;
+      this.lg = lg; this.listening = false;
       this.last = lg.unread();
-      lg.on(DM_KEY, this.onLg);
-    } else if (!lg && this.lg) { this.lg = null; this.last = 0; }
+    } else if (!lg && this.lg) { this.lg = null; this.last = 0; this.listening = false; }
+    if (this.lg) {
+      const one = !!this.h.one?.();
+      if (one && this.listening) { try { this.lg.on(DM_KEY, null); } catch { /* */ } this.listening = false; }
+      else if (!one && !this.listening) { this.lg.on(DM_KEY, this.onLg); this.listening = true; }
+      if (one) this.unreadCheck();   // no events of ours with the single chat: the toast comes from the counter
+    }
     const fl = this.doc.querySelector<HTMLElement>('.dm-float');
     if (fl !== this.float) { this.floatOff?.(); this.floatOff = null; this.float = fl; if (fl) this.bindFloat(fl); }
   }
 
   private onLg = (why: string) => {
-    const lg = this.lg; if (!lg) return;
+    if (!this.lg) return;
     if (why === 'show') this.h.show();
-    const u = lg.unread();
+    this.unreadCheck();
+  };
+
+  /** The unread counter of LGDm grew → one toast (named when the SSE «dm» told us the sender a moment ago). */
+  private unreadCheck() {
+    const lg = this.lg; if (!lg) return;
+    let u = 0; try { u = lg.unread(); } catch { return; }
     const grew = u > this.last;
     this.last = u;
     if (!grew) return;
@@ -162,7 +185,7 @@ export class DmBridge {
       this.h.toast(dmToast(now - this.fromT < FROM_FRESH_MS ? this.from : null));
     }, 60);
     this.timers.add(t);
-  };
+  }
 
   /**
    * The single chat window (site 30.10 «chatone») registers its «Личные» box with LGDm while it is still detached (its holder is
@@ -220,7 +243,8 @@ export class DmBridge {
   }
 
   dispose() {
-    this.lg?.on(DM_KEY, null); this.lg = null;
+    if (this.listening) this.lg?.on(DM_KEY, null);
+    this.lg = null; this.listening = false;
     this.offBus?.(); this.offBus = null;
     this.floatOff?.(); this.floatOff = null; this.float = null;
     for (const t of this.timers) this.win.clearTimeout(t);

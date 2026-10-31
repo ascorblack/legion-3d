@@ -33,10 +33,14 @@ export interface GameState {
   toolInHand?: boolean;
   /** Expedition-only game (hero in an expedition party, the site's City locked): no city world, src/net/expedition-site.ts. */
   expeditionOnly?: boolean;
+  /** The hero is a prisoner of the channel's jail (site 30.10, /api/me `jail`): sits in the cage, cannot walk or enter
+   *  buildings, only the City (src/features/jail.ts). */
+  jailed?: boolean;
 }
 
 export interface Game {
-  classic: boolean; toClassic(): void; resume(): void; classicPanel(): void;
+  /** toClassic(reason): 'panel' = a site panel / tab was asked for (not the plain F8 view switch). */
+  classic: boolean; toClassic(reason?: string): void; resume(): void; classicPanel(): void;
   /** Tear the whole game down (engine, UI, features, site session). Set by startGame. */
   dispose?(): void;
 }

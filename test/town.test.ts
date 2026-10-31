@@ -19,13 +19,18 @@ describe('current town detection (LGCity.where is gone since 26.10)', () => {
     expect(detectTown({ session: 'camp', hero: { cp: 0 } }).id).toBe('fair');   // camp closed for this hero
     expect(detectTown({ session: 'd2', hero: { tw: 1 } }).id).toBe('d2');
     expect(detectTown({ session: 'd2', hero: {} }).id).toBe('fair');           // no district access
-    expect(detectTown({ hero: { hm: { id: 'x', camp: 1 } } })).toEqual({ id: 'camp', via: 'hero' });   // Prologue: camp
+    expect(detectTown({ hero: { hm: { id: 'camp', camp: 1 } } })).toEqual({ id: 'camp', via: 'hero' });   // Prologue (30.10 E2: hm.id = 'camp')
+    expect(detectTown({ hero: { hm: { id: 'd5', camp: 1 } } })).toEqual({ id: 'd5', via: 'hero' });     // 30.10: hm.camp no longer redirects a district
+    expect(detectTown({ hero: { hm: { camp: 1 } } }).id).toBe('fair');                                  // homePick needs hm.id
+    expect(detectTown({ session: 'd2', hero: { tw: 1, hm: { id: 'd9' } }, jailed: true })).toEqual({ id: 'fair', via: 'jail' });   // a prisoner: the fair
     expect(detectTown({ session: 'camp', hero: { hm: { id: 'd9' } } })).toEqual({ id: 'd9', via: 'hero' });   // drawn home district
     expect(detectTown({ hero: { cp: 1, hm: null } })).toEqual({ id: 'fair', via: 'default' });   // test account today
   });
   it('fairGone / campOpen mirror city.js', () => {
     expect(fairGone({ hm: { id: 'd1' } })).toBe(true);
-    expect(fairGone({ hm: { id: 'd1', camp: 1 } })).toBe(false);
+    expect(fairGone({ hm: { id: 'd1', camp: 1 } })).toBe(true);    // 30.10 (E2): the camp is hm.id = 'camp', not a flag
+    expect(fairGone({ hm: { id: 'camp', camp: 1 } })).toBe(false);
+    expect(campOpen({ hm: { id: 'camp', camp: 1 } })).toBe(true);
     expect(campOpen({ cp: 1 })).toBe(true);
     expect(campOpen({ cp: 1, hm: { id: 'd1' } })).toBe(false);
   });
@@ -55,15 +60,15 @@ describe('runtime site contract (boot guard)', () => {
   const page = (cityKeys: string[], dom: string[] = []) => ({
     win: {
       LGCity: Object.fromEntries(cityKeys.map((k) => [k, () => 0])),
-      LGCityMap: { make() {}, makeFrom() {}, follow() {}, stepAlong() {}, QW: 1800, LOW: {}, BUILDINGS: [] },
+      LGCityMap: { make() {}, makeFrom() {}, follow() {}, stepAlong() {}, lowJail() {}, JAIL_OBST: [], QW: 1800, LOW: {}, BUILDINGS: [] },
       LGCityArt: { quarter() {}, lower() {} }, MDDoodle: { defaultsFor() {}, location() {}, active: 'cats' },
       LGGameData: { baseCmd() {} }, LGInventory: { art() {} },
     },
     doc: { querySelector: (s: string) => (dom.includes(s) ? {} : null) },
   });
   const ALL_DOM = (contract.checks as any[]).filter((c) => c.kind === 'dom').map((c) => c.sel);
-  const LIVE_KEYS = 'board,open,close,sleep,wake,onEvent,heroChanged,forgeStart,forgeFx,forgeCancel,storeRes,anvil,debug,peek,hideOthers,awb,tradeMenu,quality,town,questChanged,go,goBuilding,center,panel'.split(',');
-  it('the live LGCity of 27.10 (no where/towns) passes', () => {
+  const LIVE_KEYS = 'jail,jailOpen,board,open,close,sleep,wake,onEvent,heroChanged,forgeStart,forgeFx,forgeCancel,storeRes,anvil,debug,peek,hideOthers,awb,tradeMenu,quality,town,questChanged,go,goBuilding,center,panel'.split(',');
+  it('the live LGCity of 27.10 (no where/towns) + 30.10 (jail, jailOpen) passes', () => {
     const p = page(LIVE_KEYS, ALL_DOM);
     expect(runtimeContract(contract.checks as any, p.win, p.doc as any, 'city')).toEqual([]);
   });

@@ -6,7 +6,7 @@
  * the chip's count from the site's badge, «zero requests of our own».
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DM_KEY, DmBridge, dmToast, nickMenuItems, type DmApi, type DmHooks, type FriendsApi } from '../src/ui/dm';
+import { DM_KEY, DmBridge, dmOneOn, dmToast, nickMenuItems, type DmApi, type DmHooks, type FriendsApi } from '../src/ui/dm';
 import { FRIENDS_CSS_ID, MODAL_ID, badgeCount, startFriends } from '../src/features/friends';
 import { pauseItem } from '../src/ui/settings-ext';
 
@@ -118,7 +118,7 @@ describe('dmToast', () => {
 
 /* ------------------------------------------------------------------ DmBridge */
 
-function bridge(over: { lg?: ReturnType<typeof fakeLgDm> | null; float?: FakeEl | null; me?: string } = {}) {
+function bridge(over: { lg?: ReturnType<typeof fakeLgDm> | null; float?: FakeEl | null; me?: string; one?: () => boolean } = {}) {
   const bus = new Map<string, Array<(d: any) => void>>();
   const win: any = {
     LGDm: over.lg === null ? undefined : (over.lg ?? fakeLgDm()).api,
@@ -127,7 +127,7 @@ function bridge(over: { lg?: ReturnType<typeof fakeLgDm> | null; float?: FakeEl 
   };
   const doc: any = { activeElement: null, querySelector: (s: string) => (s === '.dm-float' ? (over.float ?? null) : null) };
   if (over.float) { over.float.doc = doc; for (const k of Object.values(over.float.kids)) if (k) k.doc = doc; }
-  const hooks = { toast: vi.fn(), floatFocus: vi.fn(), show: vi.fn(), me: () => over.me ?? 'me_player' } satisfies DmHooks;
+  const hooks = { toast: vi.fn(), floatFocus: vi.fn(), show: vi.fn(), me: () => over.me ?? 'me_player', one: over.one } satisfies DmHooks;
   const br = new DmBridge(hooks, win, doc);
   const emit = (t: string, d: unknown) => { for (const f of bus.get(t) || []) f(d); };
   return { br, win, doc, hooks, emit, bus };
@@ -179,6 +179,27 @@ describe('DmBridge — LGDm hooks, toast', () => {
     vi.advanceTimersByTime(10_000);
     lg.set(4); lg.fire(); vi.advanceTimersByTime(80);
     expect(t.hooks.toast).toHaveBeenCalledTimes(2); expect(t.hooks.toast).toHaveBeenLastCalledWith('✉ Новое личное сообщение');
+  });
+
+  it('site 30.10 chatone (c1): no listener on LGDm (its open() waits for the single chat only while nobody listens); toasts from the counter; off again → listener back', () => {
+    const lg = fakeLgDm(); let one = true;
+    const t = bridge({ lg, one: () => one });
+    t.br.scan(); expect(lg.api.on).not.toHaveBeenCalled();
+    lg.set(1); t.br.scan(); vi.advanceTimersByTime(80);
+    expect(t.hooks.toast).toHaveBeenCalledOnce();
+    lg.fire('show'); expect(t.hooks.show).not.toHaveBeenCalled();   // «show» is the single chat's
+    one = false; t.br.scan(); expect(lg.api.on).toHaveBeenCalledWith(DM_KEY, expect.any(Function));
+    one = true; t.br.scan(); expect(lg.api.on).toHaveBeenLastCalledWith(DM_KEY, null);
+    t.br.dispose(); expect(lg.api.on).toHaveBeenCalledTimes(2);
+  });
+  it('dmOneOn mirrors app.js oneIsOn: c1 and a feed (cc / mc) and LGChatOne', () => {
+    const w: any = { LGChatOne: {} };
+    expect(dmOneOn({ c1: 1, cc: 1 }, w)).toBe(true);
+    expect(dmOneOn({ c1: 1, mc: 1 }, w)).toBe(true);
+    expect(dmOneOn({ c1: 1 }, w)).toBe(false);
+    expect(dmOneOn({ cc: 1 }, w)).toBe(false);
+    expect(dmOneOn({ c1: 1, cc: 1 }, {} as any)).toBe(false);
+    expect(dmOneOn(null, w)).toBe(false);
   });
 
   it('unread at the time of the first scan is not announced (restored from the page)', () => {

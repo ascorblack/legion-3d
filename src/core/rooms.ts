@@ -72,6 +72,9 @@ export interface RoomManagerEx extends RoomManager {
   onChange(fn: (current: string | null) => void): Unsub;
   /** The site panel of the hybrid room went away by itself (site «Выйти»): leave the room. */
   panelClosedBySite(): void;
+  /** A guard every enter() asks first: a string = refused with that toast (src/features/jail.ts: a prisoner enters
+   *  nothing but the Jail's window). Returns the remover. */
+  guard(fn: (id: string) => string | null): Unsub;
 }
 
 const SOON = 'Здание ещё строится — скоро откроется';
@@ -82,6 +85,7 @@ export function createRoomManager(host: RoomHost): RoomManagerEx {
   let owned: Unsub[] = [];
   const subs = new Set<(c: string | null) => void>();
   const frameFns: ((dt: number, t: number) => void)[] = [];
+  const guards: ((id: string) => string | null)[] = [];
   const emit = () => { for (const f of [...subs]) { try { f(current); } catch (e) { console.error('[l3d] rooms listener', e); } } };
 
   // the city client must not send go while we are inside (a throttled pending go landed in the mine → 429)
@@ -121,9 +125,11 @@ export function createRoomManager(host: RoomHost): RoomManagerEx {
     get panel() { return panel; },
     get busy() { return busy; },
     get stage() { return stageOf(scene); },
+    guard(fn) { guards.push(fn); return () => { const k = guards.indexOf(fn); if (k >= 0) guards.splice(k, 1); }; },
 
     async enter(id) {
       if (busy || current === id) return;
+      for (const g of guards) { const no = g(id); if (no) { host.toast(no, true); return; } }
       const b = host.building(id);
       if (b?.soon) { host.toast(SOON); return; }
       const def = host.registries.buildings.resolve(id);

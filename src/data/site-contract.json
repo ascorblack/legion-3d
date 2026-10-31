@@ -412,8 +412,47 @@
     {
       "id": "DOM .cy-read",
       "re": "cy-read",
-      "why": "board reading overlay",
-      "severity": "degrade"
+      "why": "board reading overlay (31.10: the Board window moved to /site/b-board.js; src/net/site.ts overlay())",
+      "severity": "degrade",
+      "file": "b-board.js"
+    },
+    {
+      "id": "city windows (31.10: cityshop.js + b-<id>.js)",
+      "kind": "global",
+      "name": "LGCityShop",
+      "file": "cityshop.js",
+      "when": "lazy",
+      "type": "any",
+      "severity": "degrade",
+      "why": "the shared shop code of the City's building windows (window.LGCityShop, loaded with /site/b-<id>.js before city.js); our 3D shops mirror its rules (src/rooms/common/stock.ts) — scripts/drift.mjs reads the list from the page (LG_CITYV.bl)"
+    },
+    {
+      "id": "shop rules (stockOf / goodsOf / coinsFor / lockedHere / buyAsk)",
+      "file": "cityshop.js",
+      "re": "^(?=[\\s\\S]*\\bconst stockOf = )(?=[\\s\\S]*\\bconst goodsOf = )(?=[\\s\\S]*\\bconst coinsFor = )(?=[\\s\\S]*\\bconst lockedHere = )(?=[\\s\\S]*\\bfunction buyAsk\\()",
+      "severity": "degrade",
+      "why": "the 3D shop's buy card is a port of these (src/rooms/common/stock.ts): a rename or a move means re-checking the port"
+    },
+    {
+      "id": "/api/city/stock",
+      "file": "cityshop.js",
+      "re": "/api/city/stock",
+      "severity": "degrade",
+      "why": "goods of the 3D shops (GET, src/rooms/common/stock.ts loadStock)"
+    },
+    {
+      "id": "/api/cityBuy",
+      "file": "cityshop.js",
+      "re": "'/api/cityBuy', \\{ item: it\\.id, price: c",
+      "severity": "degrade",
+      "why": "buy for coins from the 3D shop's card (POST {item, price, n?, town?} — only on the player's «Да»)"
+    },
+    {
+      "id": "/api/buymat",
+      "file": "cityshop.js",
+      "re": "'/api/buymat', \\{ mat: it\\.mat",
+      "severity": "degrade",
+      "why": "enchant materials from the 3D forge's card (POST {mat, ack?} — only on the player's «Да»)"
     },
     {
       "id": "DOM .tr-win",
@@ -505,6 +544,88 @@
       "re": "topBoss",
       "why": "hw_pumpkin leader = Pumpkin Golem, taller than the rank-and-file (src/expedition/adapter.ts foeArtOf → 'golem')",
       "severity": "degrade"
+    },
+    {
+      "id": "jail (citymap LOW.jail, lowJail, JAIL_OBST)",
+      "kind": "global",
+      "name": "LGCityMap",
+      "file": "citymap.js",
+      "keys": [
+        "lowJail",
+        "JAIL_OBST"
+      ],
+      "when": "city",
+      "severity": "degrade",
+      "why": "«Тюрьма и клетка» (30.10, legionary.jailPublic): building x0…x1 and cage c0…c1 / fy / door / seats on the lower street, the moved bench, the obstacles — the 3D jail and its colliders (src/world/jail.ts, src/net/site.ts buildLayout make({ jail }))"
+    },
+    {
+      "id": "LGCity.jailOpen / jail",
+      "kind": "keys",
+      "obj": "LGCity",
+      "file": "city.js",
+      "keys": [
+        "jailOpen",
+        "jail"
+      ],
+      "when": "city",
+      "severity": "degrade",
+      "why": "E on the jail / the cage / a prisoner opens the site's own Jail window (src/features/jail.ts → actions.openBuilding('jail') → LGCity.jailOpen)"
+    },
+    {
+      "id": "/api/jail",
+      "file": "city.js",
+      "re": "X\\.api\\('/api/jail'\\)",
+      "severity": "degrade",
+      "why": "who sits in the cage (GET once when the 3D City starts on the Fair, like the site's jailLoad; then SSE «jail»)"
+    },
+    {
+      "id": "SSE event jail",
+      "re": "addEventListener\\(\\s*['\"`]jail['\"`]",
+      "file": "app.js",
+      "severity": "degrade",
+      "why": "the cage's list changed (bridge tees SSE «jail»)"
+    },
+    {
+      "id": "me.jail / me.jl (prisoner, jail open)",
+      "file": "app.js",
+      "re": "ME\\.jail\\b[\\s\\S]*ME\\.jl\\b|ME\\.jl\\b[\\s\\S]*ME\\.jail\\b",
+      "severity": "degrade",
+      "why": "/api/me top-level `jail` {reason, until, untilText} = the hero is a prisoner (only the City, sits in the cage), `jl` = the jail is open for this viewer"
+    },
+    {
+      "id": "DOM .cy-jw (Jail window)",
+      "file": "city.js",
+      "re": "className = 'cy-jw'",
+      "severity": "degrade",
+      "why": "the site's Jail window is lifted above the 3D canvas while open (src/features/jail.ts)"
+    },
+    {
+      "id": "DOM .jail-bar (prisoner status)",
+      "file": "app.js",
+      "re": "jail-bar",
+      "severity": "degrade",
+      "why": "the prisoner's «Ты в тюрьме канала» bar (reason, term) is lifted above the 3D canvas; ours is drawn when it is missing (src/features/jail.ts)"
+    },
+    {
+      "id": "cityart lower({ jail })",
+      "file": "cityart.js",
+      "re": "opt\\.jail && L\\.jail",
+      "severity": "degrade",
+      "why": "reference art of the jail building and cage (colours / proportions of src/world/jail.ts)"
+    },
+    {
+      "id": "chatone c1 (oneIsOn)",
+      "file": "app.js",
+      "re": "h\\.c1 && \\(h\\.cc \\|\\| h\\.mc\\)",
+      "severity": "degrade",
+      "why": "30.10: with the single chat on (hero.c1 + a feed) the site never shows LGDm's small window: our DM bridge leaves «show» to the single chat and toasts from the unread counter (src/ui/dm.ts)"
+    },
+    {
+      "id": "homePick(hm) = hm.id",
+      "file": "city.js",
+      "re": "function homePick\\(hm\\) \\{[\\s\\S]{0,80}return \\{ id: String\\(hm\\.id\\) \\}",
+      "severity": "degrade",
+      "why": "30.10 (E2): the server puts the camp into hm.id ('camp'); hm.camp no longer redirects a district home (src/net/town.ts detectTown / fairGone)"
     }
   ]
 }

@@ -5,5 +5,5 @@
  * the site's title on its sign.
  */
 export const SUPPORTED_BUILDINGS: readonly string[] = [
-  'hall', 'auction', 'trainer', 'board', 'anvil', 'forge', 'gate', 'tent', 'shop', 'magic', 'mine', 'mineboard', 'storage',
+  'hall', 'auction', 'trainer', 'board', 'anvil', 'forge', 'gate', 'tent', 'shop', 'magic', 'mine', 'mineboard', 'storage', 'jail',
 ];

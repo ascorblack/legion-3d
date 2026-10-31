@@ -16,6 +16,7 @@ const W = (ctx: CoreContext) => ctx.store as unknown as StoreWriter;
 import { appearanceFrom } from '../avatar';
 import { setEventOverride, eventOverride } from '../features/seasonal';
 import { SX, SZ } from '../world/coords';
+import { deepActive, isTyping } from '../engine/input';
 
 /* ================================================================== free camera */
 const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _e = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -25,8 +26,16 @@ export class FreeCam {
   private hold = { x: 0, y: 0 };
   private keys = new Set<string>();
   private vmVis = true;
-  private onDown = (e: KeyboardEvent) => { if (this.on) this.keys.add(e.code); };
+  /** The shared input policy: no flight keys while a text field has the keyboard or a modal / menu is open (gameplay off). */
+  private onDown = (e: KeyboardEvent) => {
+    if (!this.on || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = (typeof e.composedPath === 'function' ? e.composedPath()[0] : e.target) as Element | null;
+    if (isTyping(t && (t as Element).tagName ? t : null) || isTyping(deepActive()) || !this.ctx.input.gameplay) { this.keys.clear(); return; }
+    this.keys.add(e.code);
+  };
   private onUp = (e: KeyboardEvent) => { this.keys.delete(e.code); };
+  private onBlur = () => { this.keys.clear(); };
+  private onVis = () => { if (document.hidden) this.keys.clear(); };
   constructor(private ctx: CoreContext, private pauseMoves: (on: boolean) => void) {}
   set(on: boolean): void {
     if (on === this.on) return;
@@ -38,8 +47,10 @@ export class FreeCam {
       this.vmVis = this.ctx.vm.root.visible;
       this.pauseMoves(true);
       addEventListener('keydown', this.onDown, true); addEventListener('keyup', this.onUp, true);
+      addEventListener('blur', this.onBlur); document.addEventListener('visibilitychange', this.onVis);
     } else {
       removeEventListener('keydown', this.onDown, true); removeEventListener('keyup', this.onUp, true);
+      removeEventListener('blur', this.onBlur); document.removeEventListener('visibilitychange', this.onVis);
       this.keys.clear();
       this.ctx.vm.root.visible = this.vmVis;
       this.pauseMoves(false);
@@ -55,6 +66,7 @@ export class FreeCam {
     _e.set(ctx.rig.pitch, ctx.rig.yaw, 0);
     _fwd.set(0, 0, -1).applyEuler(_e);
     _right.set(1, 0, 0).applyEuler(_e);
+    if (!ctx.input.gameplay || isTyping(deepActive())) this.keys.clear();   // a menu / modal / the chat took the keyboard
     const mv = ctx.input.move, fast = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     const sp = (fast ? 18 : 6) * dt;
     this.pos.addScaledVector(_fwd, mv.y * sp).addScaledVector(_right, mv.x * sp);

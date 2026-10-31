@@ -52,7 +52,7 @@ declare global {
   };
   Object.defineProperty(w, '__L3D_BUS', { value: bus, configurable: false, enumerable: false, writable: false });
 
-  const TEE = new Set(['me', 'city', 'mine', 'q', 'j', 'sm', 'style']);
+  const TEE = new Set(['me', 'city', 'mine', 'q', 'j', 'sm', 'style', 'jail']);   // jail: who sits in the cage (30.10)
   /* ---- EventSource: listen ourselves on every source the site opens to /api/live ---- */
   const ES = w.EventSource;
   if (typeof ES === 'function') {
@@ -89,6 +89,7 @@ declare global {
     [/\/api\/me(\?|$)/, 'me'],                       // hero snapshot when the live channel is down
     [/\/api\/(equip|unequip|use|wear)(\?|$)/, 'hero:act'],   // looks changed from the site's own panels
     [/\/api\/city\/chat\/ignore(\?|$)/, 'city:ignore'],     // ignore list (no other source: it is private to the site's chat)
+    [/\/api\/jail(\?|$)/, 'jail:list'],              // the cage's list when the City (re)opens (city.js jailLoad, 30.10)
   ];
   let wrapped: typeof fetch | null = null;   // our function while it is somewhere in the window.fetch chain
   let prev: typeof fetch | null = null;      // what window.fetch was when we put it on

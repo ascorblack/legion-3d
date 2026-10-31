@@ -11,6 +11,8 @@
 //   npm run drift -- --strict                      # exit 2 when anything is new/removed/unsupported/changed
 //   (always) exit 3 when a 'break' check of src/data/site-contract.json fails or an endpoint we call vanished
 //
+// Scripts: the page's <script src>, the ones app.js / other scripts load on demand (`'/site/x.js?v=`), and the City's
+// building windows named by page data (LG_CITYV.bl → /site/cityshop.js, /site/citystore.js, /site/b-<id>.js; 31.10).
 // Extracted: building ids (citymap.js run as UMD in node:vm), room ids (city.js `const ROOM = {` keys), look catalog
 // (doodle.js `const CATALOG = {` + event looks), game data (game-data.js → self.LG_GAME_DATA: classes and every other
 // list of {id}), every `/api/...` path in every script, quest kinds (quest.js `KIND_RU` keys).
@@ -49,6 +51,22 @@ export function scriptUrls(html, appJs, origin, base) {
   return [...out].map((p) => (p.startsWith('http') ? p : origin + p));
 }
 
+/**
+ * Building windows of the City (site 31.10, app.js cityWin): the shared shop code /site/cityshop.js, the Storage window
+ * /site/citystore.js and one /site/b-<building>.js per id of `LG_CITYV.bl` (page data, version `bw`). app.js builds those
+ * paths from a list (`/site/${f}.js`), so the regex of scriptUrls cannot see them: read the list from the page itself.
+ */
+export function cityModuleUrls(html, origin) {
+  let V = null;
+  const m = /LG_CITYV\s*=\s*\{/.exec(html || '');
+  const lit = m && braceBlock(html, m.index);
+  if (lit) { try { V = JSON.parse(lit); } catch { V = evalLiteral(lit); } }
+  if (!V || typeof V !== 'object') return [];
+  const bl = Array.isArray(V.bl) ? V.bl.filter((b) => typeof b === 'string' && /^[\w-]{1,40}$/.test(b)) : [];
+  // without ?v= like every other script here (the newest file); citystore.js is also named in app.js (a Set merges them)
+  return ['cityshop', 'citystore', ...bl.map((b) => 'b-' + b)].map((f) => `${origin}/site/${f}.js`);
+}
+
 async function get(url) {
   const r = await fetch(url, { headers: { 'user-agent': 'legion-3d-drift (+https://github.com/)' } });
   if (!r.ok) throw new Error(`${r.status} ${url}`);
@@ -64,7 +82,7 @@ async function download(pageUrl) {
   const files = {};
   const failed = [];
   const seen = new Set();
-  let urls = scriptUrls(html, appJs, u.origin, base);
+  let urls = [...new Set([...scriptUrls(html, appJs, u.origin, base), ...cityModuleUrls(html, u.origin)])];
   // scripts load more scripts on demand (city.js → auction.js, towngen.js…): follow them for a few rounds
   for (let round = 0; round < 3 && urls.length; round++) {
     const todo = urls.filter((x) => !seen.has(x));

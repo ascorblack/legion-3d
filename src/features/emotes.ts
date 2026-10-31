@@ -16,7 +16,7 @@ import { poseEmote, EmoteFx } from '../emotes/anims';
 import { EmoteWheel } from '../emotes/wheel';
 import { TpPeek } from '../emotes/tp';
 import { acquireFunFx } from '../combat/funfx';
-import { isTyping, type InputEx } from '../engine/input';
+import { isTyping, onPageKeys, type InputEx } from '../engine/input';
 import { funToggle, reducedMotion, sfx } from '../social/toggle';
 import { coreFeature } from './types';
 
@@ -100,7 +100,7 @@ export default coreFeature({
     };
     const onBlur = () => close(false);
     const onPhoto = (e: Event) => { photo = !!(e as CustomEvent).detail?.on; if (photo) { close(false); stop(); } };
-    window.addEventListener('keyup', onKeyUp);
+    const offUp = onPageKeys('keyup', onKeyUp);   // before the input's site key shield stops it
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('mousemove', onMove, true);
     window.addEventListener('blur', onBlur);
@@ -133,7 +133,7 @@ export default coreFeature({
 
     return () => {
       offFrame(); offKey(); tg.dispose(); stop(); peek.end();
-      window.removeEventListener('keyup', onKeyUp);
+      offUp();
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('mousemove', onMove, true);
       window.removeEventListener('blur', onBlur);

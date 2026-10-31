@@ -68,7 +68,9 @@ export default coreFeature({
       camera.position.copy(photoPos);fill.position.copy(photoPos).y+=.65;camera.fov=fov;camera.updateProjectionMatrix();
     };
     const refresh = () => { labels.root.visible = !opts.names; ctx.uiApi.setHudVisible(!opts.hud && previousHud); };
-    const showPanel = () => { if (!active || panel) return; flying=false; panel=photoPanel(opts,refresh,()=>{void capture();},finish,resetCamera,()=>{panel?.remove();panel=null;flying=true;try {void canvas.requestPointerLock();} catch {showPanel();}});ctx.uiRoot.append(panel); };
+    const showPanel = () => { if (!active || panel) return; flying=false; panel=photoPanel(opts,refresh,()=>{void capture();},finish,resetCamera,()=>{panel?.remove();panel=null;flying=true;lockCanvas();});ctx.uiRoot.append(panel); };
+    // a refused lock (Chrome's re-lock cooldown, no user activation) rejects the promise: the panel comes back
+    const lockCanvas=()=>{try {const r=canvas.requestPointerLock() as unknown as Promise<void>|undefined;r?.catch?.(()=>{showPanel();});} catch {showPanel();}};
     const finish = () => {
       if (!active) return;
       active=false; flying=false; keys.clear(); velocity.set(0,0,0); panel?.remove(); panel=null;
@@ -143,9 +145,11 @@ export default coreFeature({
       yaw-=e.movementX*.0022;pitch=Math.max(-1.45,Math.min(1.45,pitch-e.movementY*.0022));
     };
     const wheel=(e:WheelEvent)=>{if (!active)return;fov=Math.max(30,Math.min(85,fov+Math.sign(e.deltaY)*3));e.preventDefault();e.stopImmediatePropagation();};
-    const down=(e:MouseEvent)=>{if(active && !panel && e.target===canvas) { try {void canvas.requestPointerLock();}catch {showPanel();} }};
+    const down=(e:MouseEvent)=>{if(active && !panel && e.target===canvas) lockCanvas();};
+    // keyup never comes after Alt+Tab / a hidden tab: drop the held keys (the camera would keep flying)
+    const dropKeys=()=>{keys.clear();};const onVisKeys=()=>{if(document.hidden)keys.clear();};
     const lockChange=()=>{if (active && flying && document.pointerLockElement!==canvas) {showPanel();keys.clear();}};
-    window.addEventListener('keydown',keyDown,true);window.addEventListener('keyup',keyUp,true);
+    window.addEventListener('keydown',keyDown,true);window.addEventListener('keyup',keyUp,true);window.addEventListener('blur',dropKeys);document.addEventListener('visibilitychange',onVisKeys);
     document.addEventListener('mousemove',mouse,true);canvas.addEventListener('wheel',wheel,{capture:true,passive:false});canvas.addEventListener('mousedown',down,true);document.addEventListener('pointerlockchange',lockChange);
     const offKey=ctx.registries.keys.register('photo.toggle',{code:'F9',label:'Фоторежим',run:()=>{start();return true;}});
     const offPause=registerPauseItem({id:'photo',label:'Фоторежим',key:'F9',order:10,run:()=>{setTimeout(start,0);}});
@@ -174,6 +178,6 @@ export default coreFeature({
       applyPose();ctx.vm.setVisible(false);meAv.setFirstPerson(false);
     });
     ctx.dev.photo=()=>({active,position:camera.position.toArray(),pose:opts.pose,filter:opts.filter,capture,enter:start,exit:finish});
-    return ()=>{finish();offKey();offPause();offFrame();window.removeEventListener('keydown',keyDown,true);window.removeEventListener('keyup',keyUp,true);document.removeEventListener('mousemove',mouse,true);canvas.removeEventListener('wheel',wheel,true);canvas.removeEventListener('mousedown',down,true);document.removeEventListener('pointerlockchange',lockChange);};
+    return ()=>{finish();offKey();offPause();offFrame();window.removeEventListener('keydown',keyDown,true);window.removeEventListener('keyup',keyUp,true);window.removeEventListener('blur',dropKeys);document.removeEventListener('visibilitychange',onVisKeys);document.removeEventListener('mousemove',mouse,true);canvas.removeEventListener('wheel',wheel,true);canvas.removeEventListener('mousedown',down,true);document.removeEventListener('pointerlockchange',lockChange);};
   },
 });

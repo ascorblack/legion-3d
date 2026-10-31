@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 // @ts-ignore — plain ESM script
-import { checkContract, fingerprints, diffPrints, topKeys, braceBlock, objectKeys } from '../scripts/drift.mjs';
+import { checkContract, fingerprints, diffPrints, topKeys, braceBlock, objectKeys, cityModuleUrls } from '../scripts/drift.mjs';
 
 const contract = JSON.parse(readFileSync('src/data/site-contract.json', 'utf8'));
 
@@ -67,5 +67,19 @@ describe('site contract', () => {
       { id: 'mine2', kind: 'global', name: 'LGMine', file: 'mine.js', keys: ['dig'], severity: 'degrade', why: '' },
     ] });
     expect(f.map((x: any) => [x.id, x.missing])).toEqual([['camp2', ['spawnAt']], ['mine2', ['dig']]]);
+  });
+  it('31.10: the building windows of the City come from the page data LG_CITYV.bl (cityshop.js, citystore.js, b-<id>.js)', () => {
+    const html = '<script>window.LG_BASE="/c/x";window.LG_CITYV={"js":"1","st":"2","bw":"9","bl":["forge","tent","../evil","hall"],"bc":["cityshop"],"o":{"n":1}};</script>';
+    expect(cityModuleUrls(html, 'https://h')).toEqual(['https://h/site/cityshop.js', 'https://h/site/citystore.js', 'https://h/site/b-forge.js', 'https://h/site/b-tent.js', 'https://h/site/b-hall.js']);
+    expect(cityModuleUrls('<script>window.LG_BASE="/c/x"</script>', 'https://h')).toEqual([]);
+    expect(cityModuleUrls('<script>window.LG_CITYV={broken</script>', 'https://h')).toEqual([]);
+  });
+  it('the shop / jail checks fail on a site without the 31.10 modules and pass on one with them', () => {
+    const checks = contract.checks.filter((c: any) => ['/api/cityBuy', '/api/buymat', '/api/city/stock', 'DOM .cy-read'].includes(c.id));
+    expect(checks.length).toBe(4);
+    const old = { '/site/city.js': "X.act('/api/cityBuy', { item: it.id, price: c })", '/site/app.js': '' };
+    expect(checkContract(old, { checks }).map((x: any) => x.id).sort()).toEqual(['/api/buymat', '/api/city/stock', '/api/cityBuy', 'DOM .cy-read']);
+    const now = { ...old, '/site/cityshop.js': "C.X.api('/api/city/stock'); C.X.act('/api/buymat', { mat: it.mat }); C.X.act('/api/cityBuy', { item: it.id, price: c })", '/site/b-board.js': "r.className = 'cy-read'" };
+    expect(checkContract(now, { checks })).toEqual([]);
   });
 });
