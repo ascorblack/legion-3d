@@ -2,7 +2,8 @@
  * Doors: every building entrance is an interactable. Hit volumes come from the world (World3DExt.interactables(),
  * door-shaped meshes/boxes on the facade) when it provides them, else a Box3 is generated per door: the lower part of
  * the facade around the entrance. Using a door = ctx.rooms.enter(buildingId) (3D room, hybrid or the site's screen).
- * Disabled while a room is active. Rebuilt when the city world is rebuilt (layout change).
+ * Disabled while a room is active, and for a prisoner (site 31.10: no «E — войти»; only the Jail's window). Rebuilt when
+ * the city world is rebuilt (layout change).
  * Highlight: the silhouette outline of the real door (leaf, frame, arch, bands — the static city triangles inside the
  * doorway volume, extracted once on first aim; src/engine/outline.ts), never a box.
  */
@@ -57,6 +58,8 @@ export default coreFeature({
   setup(ctx) {
     let offs: Unsub[] = [];
     const enabled = () => !ctx.state.inRoom && !ctx.rooms.busy;
+    // site 31.10 (city.js): a prisoner gets no «E — войти» at all; only the Jail's own window (who sits, until when) stays
+    const open = (id: string) => () => enabled() && (!ctx.state.jailed || id === 'jail');
     const build = (world: World3D) => {
       for (const u of offs) u();
       offs = [];
@@ -81,7 +84,7 @@ export default coreFeature({
           offs.push(ctx.interact.add({
             ...wi, id: 'door:' + id, ...(ol ? { outline: ol.get } : {}), label: b && !(b.jail || b.id === 'jail') ? doorLabel(b.title, soon, wi.icon ?? b.icon) : wi.label,   // the Jail is not entered: its own label
             icon: wi.icon ?? b?.icon, title: b?.title ?? wi.label, soon,
-            enabled: () => enabled() && (!wi.enabled || wi.enabled()),
+            enabled: () => open(id)() && (!wi.enabled || wi.enabled()),
             use: () => { void ctx.rooms.enter(id); },
           } as Interactable));
         }
@@ -94,7 +97,7 @@ export default coreFeature({
         offs.push(ctx.interact.add({
           id: 'door:' + d.id, label: doorLabel(d.title, d.soon, d.icon), icon: d.icon, title: d.title, soon: !!d.soon,
           hit: doorBox(b, d.pos.y), outline: ol.get,
-          enabled,
+          enabled: open(d.id),
           use: () => { void ctx.rooms.enter(d.id); },
         } as Interactable));
       }

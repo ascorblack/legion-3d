@@ -2,15 +2,17 @@
  * Dev/test fixtures: a CityLayout built from the site's walk grid snapshot (test/fixtures/fair-map.json,
  * produced from LGCityMap.make() of the "cats" style fair city) — no site needed.
  */
-import type { CityLayout, Building, Obstacle } from '../src/contracts';
+import type { CityLayout, Building, Obstacle, JailGeo } from '../src/contracts';
 import map from '../test/fixtures/fair-map.json';
+import jailFx from '../test/fixtures/fair-jail.json';
 import camp from '../test/fixtures/camp-map.json';
 import village from '../test/fixtures/village-map.json';
 import { campScene, villageScene } from '../src/net/town';
 
-export function fixtureLayout(): CityLayout {
+/** free / nearest over a walk grid of the fair fixture (cells C px from AREA.y0, 1 = walkable). */
+function fairGrid(G: ArrayLike<number>): Pick<CityLayout, 'free' | 'nearest'> {
   const m = map as any;
-  const { C, cols, rows, G } = m.grid as { C: number; cols: number; rows: number; G: number[] };
+  const { C, cols, rows } = m.grid as { C: number; cols: number; rows: number };
   const y0 = m.AREA.y0;
   const cell = (x: number, y: number) => [Math.floor(x / C), Math.floor((y - y0) / C)];
   const free = (x: number, y: number) => {
@@ -28,6 +30,12 @@ export function fixtureLayout(): CityLayout {
     }
     return [m.QW + 960, y0 + 120];
   };
+  return { free, nearest };
+}
+
+export function fixtureLayout(): CityLayout {
+  const m = map as any;
+  const { free, nearest } = fairGrid(m.grid.G as number[]);
   return {
     id: 'fair', styleId: 'cats', W: m.W, H: m.H, QW: m.QW, area: m.AREA,
     obstacles: m.OBST as Obstacle[], buildings: m.BUILDINGS as Building[], low: m.LOW,
@@ -115,36 +123,25 @@ export function villageFixtureLayout(styleId = 'cats'): CityLayout {
 }
 
 /**
- * The fair with the channel's jail open (site 30.10, citymap.js LOW.jail / JAIL_OBST / lowJail; numbers only, the 3D
- * model is ours): the jail building + cage on the lower street right of the mine, their obstacles in the walk grid, the
- * two benches that stood there moved right. `?jail=1|me` in dist-dev/game.html.
+ * The fair with the channel's jail open — the site's own numbers (test/fixtures/fair-jail.json: citymap.js 31.10
+ * make(…, { jail }) of the same cats fair, the 3D model is ours): 31.10 the jail stands beyond the canal by the lower fence
+ * (30.10 it stood against the retaining wall right of the mine), building + cage solid from `back` to their base in the
+ * walk grid, the barrel that stood in the cage's place moved right of the bridge and the crate at the house's corner moved
+ * left (LOW.jail.move.decor; the benches stay). `?jail=1|me` in dist-dev/game.html.
  */
-export const JAIL_LOW = {
-  x0: 1540, x1: 1800, base: 1342, c0: 1830, c1: 2240, fy: 1352, door: [1985, 2055] as [number, number],
-  seats: [[1890, 1262], [1980, 1262], [2070, 1262], [2160, 1262], [1935, 1318], [2025, 1318], [2115, 1318], [2195, 1318]] as [number, number][],
-};
-export const JAIL_BUILDING = { id: 'jail', title: 'Тюрьма', sub: 'заключённые канала', icon: '⛓', jail: true, hit: [1540, 2240, 1060, 1352], door: { x: 1670, y: 1376 } } as unknown as Building;
+export const JAIL_LOW = (jailFx as any).jail as JailGeo & { move: { benches: [number, number][]; decor: [number, number][] } };
+export const JAIL_BUILDING = (jailFx as any).building as Building;
 export function withJail(L: CityLayout): CityLayout {
-  const J = JAIL_LOW, top = L.low?.edge?.[1] ?? 1124;
-  const rects: [number, number, number, number][] = [[J.x0, top, J.x1, J.base], [J.c0 - 6, top, J.c1 + 6, J.fy + 4]];
-  const MOVE: Record<string, [number, number]> = { '1600,1290': [2330, 1300], '2100,1310': [2560, 1310] };
-  const benchAt = (o: Obstacle) => ('b' in o ? MOVE[`${o.b[0] + 80},${o.b[1] + 26}`] : undefined);
-  const inR = (x: number, y: number) => rects.some(([a, b, c, d]) => x >= a && x <= c && y >= b && y <= d);
-  const moved = L.obstacles.map((o) => { const to = benchAt(o); return to ? { b: [to[0] - 80, to[1] - 26, to[0] + 80, to[1] + 6] } as Obstacle : o; });
-  const benches = (L.low?.benches || []).map(([x, y]) => MOVE[`${x},${y}`] ?? [x, y]) as [number, number][];
-  const newBench = Object.values(MOVE).map(([bx, by]) => [bx - 80, by - 26, bx + 80, by + 6]);
-  const blocked = (x: number, y: number) => inR(x, y) || newBench.some(([a, b, c, d]) => x >= a && x <= c && y >= b && y <= d);
-  const free0 = L.free, near0 = L.nearest;
-  const free = (x: number, y: number) => free0(x, y) && !blocked(x, y);
-  const nearest = (x: number, y: number): [number, number] => {
-    if (free(x, y)) return [x, y];
-    for (let d = 8; d < 600; d += 8) for (const [dx, dy] of [[0, d], [d, 0], [-d, 0], [0, -d], [d, d], [-d, d]]) if (free(x + dx, y + dy)) return [x + dx, y + dy];
-    return near0(x, y);
-  };
+  const fx = jailFx as any, m = map as any;
+  // the site's grid with the jail: fair-map.json grid.G patched by [cell, count, value] runs
+  const G = (m.grid.G as number[]).slice();
+  for (const [i, n, v] of fx.gridPatch as [number, number, number][]) for (let k = 0; k < n; k++) G[i + k] = v;
+  const { free, nearest } = fairGrid(G);
+  const J = JAIL_LOW;
   return {
     ...L, buildings: [...L.buildings, { ...JAIL_BUILDING, door: { ...JAIL_BUILDING.door } }],
-    obstacles: [...moved, ...rects.map((b) => ({ b }) as Obstacle)],
-    low: { ...L.low!, benches, jail: { ...J, door: [...J.door] as [number, number], seats: J.seats.map((s) => [...s] as [number, number]) } },
+    obstacles: fx.OBST as Obstacle[],
+    low: { ...L.low!, benches: fx.benches, decor: fx.decor, jail: { ...J, door: [...J.door] as [number, number], seats: J.seats.map((s) => [...s] as [number, number]), walk: [...J.walk!] as [number, number, number, number] } },
     free, nearest,
   };
 }

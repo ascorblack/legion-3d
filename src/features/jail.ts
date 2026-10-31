@@ -7,9 +7,13 @@
  *    Jail window (LGCity.jailOpen: who sits and until when; the reason only for staff), lifted above our canvas, with a modal
  *    on our input while it is open (pointer free, Esc closes it). Only on the player's action — nothing is sent by us; the
  *    window itself re-reads GET /api/jail like on the site;
- *  - the hero is a prisoner (/api/me `jail`): like the site — only the City (rooms refuse, travel refuses, the site itself
- *    keeps every other tab closed), the hero stands in the cage on the first seat and cannot walk (src/content/game.ts sends
- *    nothing while `state.jailed`), and the status «Ты в тюрьме канала · Причина: … · Выйдешь: …» is on screen: the site's own
+ *  - the hero is a prisoner (/api/me `jail`): like the site — only the City (rooms refuse, travel refuses, no «E — войти» on
+ *    any building but the Jail's own window, the site itself keeps every other tab closed). He is put on the first seat of
+ *    the cage; 31.10 (city.js jailGo / kwStep / kwSync) he walks on the cage floor (LOW.jail.walk: WASD with the same
+ *    collision, «Идти сюда» goes to its nearest point) — only on his own screen: src/content/game.ts sends nothing while
+ *    `state.jailed` (the site would answer 403 jailed; the others see him seated). Put back on the seat only when he is off
+ *    that floor (city.js: «на место сажаем, только если он не на её полу»). The status «Ты в тюрьме канала · Причина: … ·
+ *    Выйдешь: …» is on screen: the site's own
  *    `.jail-bar` lifted above the canvas, or ours with the same text when the site's is not there. Released → everything back,
  *    the hero steps out next to the jail door (city.js does the same).
  * Without the site's jail (old site, dev pages without ?jail) nothing here does anything.
@@ -17,7 +21,7 @@
 import type { CityLayout } from '../contracts';
 import type { CoreContext } from '../core/context';
 import { setModal, type ModalInput } from '../core/modal';
-import { jailBar, jailGeoOf, type JailHub, type JailState } from '../net/jail';
+import { inJailWalk, jailBar, jailGeoOf, jailWalkOf, type JailHub, type JailState } from '../net/jail';
 import { coreFeature } from './types';
 
 export const JAIL_CSS_ID = 'l3d-jail-css';
@@ -46,6 +50,20 @@ export function mySeat(L: CityLayout | null, st: JailState): [number, number] | 
   return J && J.seats[0] ? [J.seats[0][0], J.seats[0][1]] : null;
 }
 
+/** Where a prisoner's own hero may walk on this layout (px [x0, y0, x1, y1], LOW.jail.walk), or null (no jail here). */
+export function myWalk(L: CityLayout | null, st: JailState): [number, number, number, number] | null {
+  if (!st.me || !L || L.id !== 'fair') return null;
+  const b = L.buildings.find((x) => x.jail || x.id === 'jail');
+  const J = b ? jailGeoOf(b, L.low) : null;
+  return J ? jailWalkOf(J) : null;
+}
+
+/** city.js (31.10) on (re)seating: the own hero goes to his seat only when he is not on the cage floor (entered, just jailed,
+ *  teleported away); walking on it he stays where he is. */
+export function needsSeat(walk: readonly [number, number, number, number] | null, x: number, y: number): boolean {
+  return !walk || !inJailWalk(walk, x, y, 0.5);
+}
+
 export default coreFeature({
   id: 'jail',
   order: 45,   // after doors (40): the door of the jail exists; before labels
@@ -71,8 +89,9 @@ export default coreFeature({
     const apply = (st: JailState) => {
       const on = !!st.me;
       ctx.state.jailed = on;
+      ctx.state.jailWalk = on ? myWalk(ctx.layout(), st) : null;
       if (on && ctx.rooms.current) ctx.rooms.exit();
-      if (on && !wasJailed) { ctx.ui.open(null); ctx.ui.toast('Ты в тюрьме канала: только «Город», ходить и заходить в здания нельзя', true); }
+      if (on && !wasJailed) { ctx.ui.open(null); ctx.ui.toast('Ты в тюрьме канала: только «Город», ходить можно лишь по клетке, в здания нельзя', true); }
       if (!on && wasJailed) {
         // released: out of the cage, next to the jail door (city.js), and the City is open again
         const L = ctx.layout(), b = L?.buildings.find((x) => x.jail || x.id === 'jail');
@@ -85,12 +104,16 @@ export default coreFeature({
     offs.push(hub.on(apply));
     apply(hub.get());
     offs.push(ctx.rooms.guard((id) => (ctx.state.jailed && id !== 'jail' ? JAIL_NO_ROOM : null)));
-    // the hero stays on his seat (teleports, «Идти сюда», a town rebuild): put back when he is off it
+    // the hero stays in the cage: walking on its floor is his (31.10); off it (just jailed, a teleport, a town rebuild) —
+    // back on his seat, facing the street. The walk rect is what the city's walk space keeps him in (src/content/game.ts)
     offs.push(ctx.onFrame(() => {
-      if (!ctx.state.jailed || ctx.state.inRoom) return;
-      const seat = mySeat(ctx.layout(), hub.get()); if (!seat) return;
+      if (!ctx.state.jailed || ctx.state.inRoom) { if (ctx.state.jailWalk) ctx.state.jailWalk = null; return; }
+      const L = ctx.layout(), st = hub.get(), walk = myWalk(L, st);
+      const cur = ctx.state.jailWalk;
+      if (walk ? !cur || cur.some((v, i) => v !== walk[i]) : cur) ctx.state.jailWalk = walk;
+      const seat = mySeat(L, st); if (!seat) return;
       const c = ctx.controller();
-      if (Math.abs(c.x - seat[0]) > 3 || Math.abs(c.y - seat[1]) > 3 || c.walking) {
+      if (needsSeat(walk, c.x, c.y)) {
         c.teleport(seat[0], seat[1]); c.setFace(Math.PI); ctx.me.x = seat[0]; ctx.me.y = seat[1];
       }
     }));
@@ -112,7 +135,7 @@ export default coreFeature({
     return () => {
       for (const u of offs.splice(0)) { try { u(); } catch { /* */ } }
       if (modal) setModal(ctx.input as unknown as ModalInput, JAIL_MODAL_ID, false);
-      ownBar?.remove(); ctx.state.jailed = false;
+      ownBar?.remove(); ctx.state.jailed = false; ctx.state.jailWalk = null;
     };
   },
 });

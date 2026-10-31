@@ -107,13 +107,18 @@ export interface Building {
   jail?: boolean;
 }
 
-/** The jail on the lower street (site citymap.js LOW.jail, 30.10): building x0…x1 down to `base`, cage c0…c1 from the
- *  retaining wall to the bar line `fy`, the cage door opening `door` (x0, x1) in the bars, 8 seats [x, y] for prisoners. */
+/** The jail on the lower street (site citymap.js LOW.jail, 30.10; 31.10 moved beyond the canal, by the lower fence):
+ *  building x0…x1 from `back` down to `base` (`top` = the top of its wall in the 2D art), cage c0…c1 from `back` to the bar
+ *  line `fy` (`ct` = its top beam in the 2D art), the cage door opening `door` (x0, x1) in the bars, 8 seats [x, y] for
+ *  prisoners and `walk` = [x0, y0, x1, y1], where a prisoner may stand (31.10). 30.10 sites have no top / ct / back / walk:
+ *  the back was the retaining wall then. */
 export interface JailGeo {
   x0: number; x1: number; base: number;
   c0: number; c1: number; fy: number;
   door: [number, number];
   seats: [number, number][];
+  top?: number; ct?: number; back?: number;
+  walk?: [number, number, number, number];
 }
 
 /** Lower street of the fair city (LGCityMap.LOW). */

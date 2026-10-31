@@ -19,6 +19,18 @@ export function cellHtml(c: Cell | null, h: Hero | null, o: { sel?: boolean; act
     + `</button>`;
 }
 
+/** Site 31.10 (feat/candy-tile, app.js candyCell): the Halloween candies as a tile after the items in the bag (filter «Все»).
+ *  Not an item: no data-act / data-uid (nothing selects, equips or drags it), it takes no place (the «N / M» count and the
+ *  empty cells stay as without it), the hint is its title. The number is the event counter hero.hw.c («9999+» above 9999). */
+export const CANDY_MAX = 9999;
+export const candyText = (n: number): string => `Конфеты: ${n}. Тратить — в «Ступе сладостей» в Городе; в конце ивента остаток превратится в монеты.`;
+export function candyCellHtml(h: Hero | null): string {
+  const hw = h && (h as { hw?: { c?: unknown } | null }).hw;
+  if (!hw) return '';
+  const n = Math.max(0, Math.floor(+(hw.c as number) || 0)), t = candyText(n);
+  return `<div class="cell cnd" data-r="common" style="--rc:#9b5cff" role="img" data-candy="${n}" title="${esc(t)}" aria-label="${esc(t)}"><span class="ci" aria-hidden="true">🍬</span><i class="n">${n > CANDY_MAX ? CANDY_MAX + '+' : n}</i></div>`;
+}
+
 export interface CardOpts { full?: boolean; n?: number; busyText?: string | null; forceCompare?: boolean; pending?: string | null }
 
 /** Card body. full = detail pane (with actions + chat hint); else tooltip. */

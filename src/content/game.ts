@@ -24,6 +24,7 @@ import type { World3D, Unsub, Appearance } from '../contracts';
 import type { SiteSession, UiHost } from '../contracts/modules';
 import type { Interactable, RoomScene, World3DExt } from '../contracts/ext';
 import { setAppearanceFn, siteDefaults } from '../net/site';
+import { inJailWalk, jailWalkPt } from '../net/jail';
 import { createEngine, createInput, createCameraRig, createPlayerController, layoutColliderBoxes, isTyping, type WalkSpace } from '../engine';
 import { buildCity, createSvgArt } from '../world';
 import { createAvatarKit, createLabels, appearanceFrom, RECOMMENDED_NEAR, type ViewModelEx } from '../avatar';
@@ -98,13 +99,20 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
     /* ---- me + controller ---- */
     const me = store.me!;
     const start = site.selfPos() || world.spawn;
+    // where a prisoner may walk (set once the game state exists; the walk space is asked before that)
+    let jailCage: () => [number, number, number, number] | null = () => null;
     const citySpace = (w: World3D, L = store.layout!): WalkSpace => {
       const x = w as World3D & Partial<World3DExt>;
+      // a prisoner (site 31.10, src/features/jail.ts) walks only on the cage floor (LOW.jail.walk): outside it is a wall
+      // (he slides along its edge like city.js kwStep), a walk target goes straight to its nearest point (city.js jailGo)
+      const cage = () => jailCage();
+      const out = (px: number, py: number) => { const r = cage(); return !!r && !inJailWalk(r, px, py, 0); };
+      const solidTop = typeof x.solidTop === 'function' ? (px: number, py: number) => x.solidTop!(px, py) : null;
       return {
-        free: (px, py) => L.free(px, py),
+        free: (px, py) => !out(px, py) && L.free(px, py),
         groundAt: (px, py) => w.groundAt(px, py),
-        solidTop: typeof x.solidTop === 'function' ? (px, py) => x.solidTop!(px, py) : undefined,
-        path: L.path ? (a, b) => L.path!(a, b) : undefined,
+        solidTop: solidTop ? (px, py) => (out(px, py) ? Infinity : solidTop(px, py)) : undefined,
+        path: (a, b) => { const r = cage(); if (r) return [a, jailWalkPt(r, b[0], b[1])]; return L.path ? L.path(a, b) : [a, b]; },
       };
     };
     const ctl = createPlayerController(citySpace(world), undefined, { runMult: 1.35 });
@@ -129,6 +137,7 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
     rig.yaw = 0; rig.pitch = -0.05;
 
     const state: GameState = { mode: 'fp', menu: null, menuOrbit: false, overlay: null, overlayOver3d: false, classic: false, inRoom: false, expeditionOnly: expOnly };
+    jailCage = () => (state.jailed ? state.jailWalk ?? null : null);
     const registries = createRegistries();
     const interact = createInteractSystem({ scene: engine.scene });
     const frameFns: ((dt: number, t: number) => void)[] = [];
@@ -339,8 +348,9 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
       } else { const wh = input.consumeWheel(); if (wh && state.menu) rig.zoom(wh); }
       // 2. player
       if (!gameplay) input.consumeJump();   // no buffered jump after closing a menu
-      // a prisoner (site 30.10, src/features/jail.ts) stands in the cage: no walking, nothing sent
-      const moved = ctl.update(dt, gameplay && !state.jailed ? input : NO_INPUT as any, rig.yaw);
+      // a prisoner (site 30.10, src/features/jail.ts): 31.10 he walks on the cage floor (citySpace keeps him there) —
+      // only on his own screen: nothing is sent (the site would answer 403 jailed; the others see him seated)
+      const moved = ctl.update(dt, gameplay && (!state.jailed || !!state.jailWalk) ? input : NO_INPUT as any, rig.yaw);
       if (!state.inRoom) {
         me.x = ctl.x; me.y = ctl.y;
         if (moved && !state.jailed && t - sentAt > 0.1) { site.moveTo(ctl.x, ctl.y); sentAt = t; }

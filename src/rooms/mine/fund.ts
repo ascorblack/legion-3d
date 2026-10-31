@@ -33,6 +33,26 @@ export function followKey(st: MineView | null, me: MineMe | null, c: string, rid
   return k === c ? null : k;
 }
 
+/** The part of a mine client the entry follow needs (src/rooms/mine/net.ts MineClient). */
+export interface FollowClient {
+  readonly model: { st: MineView | null; me: MineMe | null };
+  readonly c: string;
+  rideAt: number;
+  switchTo(key: string, start: { x: number; y: number }): Promise<boolean>;
+}
+/**
+ * Site 31.10 (mine.js take(): follow3 before the floor is stored and drawn — the streamer's bug «вход из Города: на миг самый
+ * глубокий этаж, через секунду — этаж, где вышел»): right after the enter, before anything of the floor is built, a hero who
+ * is on another floor (me.at) is taken there. Returns the key switched to, null when nothing to follow, false when the switch
+ * failed (the room then shows the floor it entered).
+ */
+export async function followOnEnter(client: FollowClient, start: () => { x: number; y: number }, now: number): Promise<string | null | false> {
+  const k = followKey(client.model.st, client.model.me, client.c, client.rideAt, now);
+  if (!k) return null;
+  client.rideAt = now;
+  return (await client.switchTo(k, start())) ? k : false;
+}
+
 /** Duration «1 ч 5 мин» / «12 мин» (site hm). */
 export const hmTxt = (ms: number): string => { const m = Math.max(0, Math.round(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} ч ${m % 60} мин` : `${m} мин`; };
 /** Timer chip «18 мин» (site tmrTxt: rounded up, at least 1). */

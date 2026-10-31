@@ -34,7 +34,7 @@ import { estimateStone, promptEcon } from './econ';
 import { mineSwitch, PREF_ECON } from './prefs';
 import { layerBanner } from './layers';
 import { walkPlan, AutoWalk, LeaveGuard, ConfirmTwice, type WalkCtl } from './walk';
-import { liftPrompt, drillsOf, drillPrompt, followKey } from './fund';
+import { liftPrompt, drillsOf, drillPrompt, followKey, followOnEnter } from './fund';
 import { attachMineChat, chatOneOn } from '../../ui/chat';
 import type { Avatar } from '../../contracts/modules';
 import type { RoomCombat, RoomFighter } from '../../combat/room';
@@ -117,7 +117,14 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   let spawn = spawnPt(login);
   let entryErr = '';
   const offErr = client.on((e) => { if (e.type === 'error') entryErr = e.text; });
-  const ok = await client.enter(spawn);
+  let ok = await client.enter(spawn);
+  // site 31.10 (mine.js take(): follow3 first): the hero is on another floor (me.at) — go there before this floor is built,
+  // or the deepest floor flashes for a poll before the right one opens (entering from the City opens the base key = deepest)
+  if (ok && M.st) {
+    const c0 = client.c;
+    const f = await followOnEnter(client, () => (M.G && M.G.v3 ? M.G.spawn(login) : spawn), Date.now());
+    if (f === false) ok = await client.switchTo(c0, spawn);   // the other floor did not open: back to the one we were given
+  }
   offErr();
   if (!ok || !M.st) { client.close(); throw new Error(entryErr || 'Шахта не открылась'); }
   // geometry of the floor on show (classic 7 × 12 or «Шахта 3.0»): every px ⇄ metre mapping goes through it

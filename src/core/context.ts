@@ -33,9 +33,12 @@ export interface GameState {
   toolInHand?: boolean;
   /** Expedition-only game (hero in an expedition party, the site's City locked): no city world, src/net/expedition-site.ts. */
   expeditionOnly?: boolean;
-  /** The hero is a prisoner of the channel's jail (site 30.10, /api/me `jail`): sits in the cage, cannot walk or enter
-   *  buildings, only the City (src/features/jail.ts). */
+  /** The hero is a prisoner of the channel's jail (site 30.10, /api/me `jail`): in the cage, cannot enter buildings, only
+   *  the City; nothing of his walking is sent (src/features/jail.ts). */
   jailed?: boolean;
+  /** Where the jailed hero may walk (px [x0, y0, x1, y1], site 31.10 LOW.jail.walk; null = nowhere: he stands on his seat).
+   *  The walk space of the city treats everything outside it as a wall (src/content/game.ts). */
+  jailWalk?: [number, number, number, number] | null;
 }
 
 export interface Game {

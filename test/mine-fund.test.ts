@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { MineClient, MINE_TAB, type Timers } from '../src/rooms/mine/net';
 import { FakeMine, makeBus, applyMine3Demo, demoFromQuery } from '../src/rooms/mine/fake';
 import {
-  baseOf, keyOf, mineKey, followKey, rideFloor, rideDelay, fundButtons, liftInfo, liftPrompt, drillOf, drillFundable, drillPrompt,
+  baseOf, keyOf, mineKey, followKey, followOnEnter, rideFloor, rideDelay, fundButtons, liftInfo, liftPrompt, drillOf, drillFundable, drillPrompt,
   OreAsk, ORE_ASK_MIN, ORE_ASK_MS, objective, type ObjectiveIn,
 } from '../src/rooms/mine/fund';
 import { liftHtml, drillHtml, shaftHtml, honHtml, oreRowsHtml, bagHtml, objHtml, type FundCtx } from '../src/rooms/mine/hud';
@@ -67,6 +67,30 @@ describe('floor keys (site keyOf / CB / open)', () => {
     expect(followKey(st, { ...me, at: 3 }, 'home', 0, 1e9)).toBeNull();
     expect(followKey(st, me, 'home', 1e9 - 30_000, 1e9)).toBeNull();
     expect(followKey({ ...st, fl: { ...st.fl!, v3: undefined } } as MineView, me, 'home', 0, 1e9)).toBeNull();
+  });
+  it('site 31.10: entering from the City, the hero\'s own floor opens before the deepest one is ever shown', async () => {
+    const deepSt = { ...clone(P3.st), n: 3, deep: 3 } as unknown as MineView;
+    const log: string[] = [];
+    const mk = (at: number) => {
+      const c = {
+        model: { st: deepSt as MineView | null, me: { i: -1, day: 0, cap: 0, at } as MineMe | null },
+        c: 'home', rideAt: 0,
+        async switchTo(key: string, start: { x: number; y: number }) { log.push(`switch ${key} ${start.x},${start.y}`); c.c = key; c.model.st = { ...deepSt, n: 2 } as MineView; return true; },
+      };
+      return c;
+    };
+    const a = mk(2);
+    expect(await followOnEnter(a, () => ({ x: 7, y: 9 }), 1e9)).toBe('home.2');
+    expect(log).toEqual(['switch home.2 7,9']);
+    expect(a.rideAt).toBe(1e9);
+    expect(a.model.st!.n).toBe(2);
+    // the poll that follows sees the hero's own floor: nothing more to follow (and the minute after a ride)
+    expect(followKey(a.model.st, { ...a.model.me!, at: 2 }, a.c, a.rideAt, 1e9 + 1000)).toBeNull();
+    log.length = 0;
+    expect(await followOnEnter(mk(3), () => ({ x: 0, y: 0 }), 1e9)).toBeNull();   // on the deepest floor: nothing
+    expect(log).toEqual([]);
+    const b = mk(1); b.switchTo = async () => false;
+    expect(await followOnEnter(b, () => ({ x: 0, y: 0 }), 1e9)).toBe(false);
   });
 });
 

@@ -5,7 +5,7 @@ import {
   esc, rarOf, SLOT_NAME, WEAR_SLOTS, equipped, deltas, bagCells, catOf, CAT_NAME, CAT_ORDER, hpInfo, xpInfo, stLabel,
   XS_KEYS, XS_LABEL, XPCT, num, ST_HELP, edible, plainCountdown, timeAgo, coinStyle, CLASS_NAME, roleTitle, type Cell,
 } from './data';
-import { cellHtml, cardHtml } from './card';
+import { cellHtml, cardHtml, candyCellHtml } from './card';
 import { slotSilhouette, statIcon } from './icons';
 import { moneyParts } from './money';
 import { coinsHtml } from './hud';
@@ -319,6 +319,7 @@ export class Menus {
     if (!this.bSel && cells.length) this.bSel = cells[0].it.uid;
     this.bIdx = cells.findIndex((c) => c.uids.includes(this.bSel || ''));
     let grid = cells.map((c, i) => cellHtml(c, H, { sel: i === this.bIdx, idx: i })).join('');
+    if (this.bFilter === 'all') grid += candyCellHtml(H);   // site 31.10: the candies' tile after the items (takes no place)
     const free = this.bFilter === 'all' ? (cap ? Math.max(0, cap - used) : Math.max(0, 28 - cells.length)) : 0;
     for (let i = 0; i < free; i++) grid += cellHtml(null, H);
     const full = sg && used >= cap ? `<p class="note amber">Сумка полна (${used} / ${cap}) — новые вещи не поместятся. Освободи место или отнеси вещи на Склад.</p>` : '';

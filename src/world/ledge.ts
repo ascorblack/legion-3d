@@ -106,7 +106,9 @@ export function ledgeDressing(k: Ctx, L: CityLayout, s: GroundSpec): void {
   // ---------------- lower street: a raised bed along the wall foot (to the grid's last blocked row of the band)
   const zw = wallZ + 0.012;
   {
-    const lowB: [number, number][] = L.buildings.filter((b) => b.hit[3] > 1000 || b.mine).map((b) => [toX(b.hit[0]) - 0.35, toX(b.hit[1]) + 0.35]);
+    // (buildings against the wall only: the 31.10 jail stands free beyond the canal — its LOW.jail.back is not the wall)
+    const atWall = (b: (typeof L.buildings)[number]) => !((b.jail || b.id === 'jail') && typeof L.low?.jail?.back === 'number' && L.low.jail.back > s.edge[1] + 40);
+    const lowB: [number, number][] = L.buildings.filter((b) => (b.hit[3] > 1000 || b.mine) && atWall(b)).map((b) => [toX(b.hit[0]) - 0.35, toX(b.hit[1]) + 0.35]);
     const runs = cut(cut(blockedRuns(L, Math.round((s.wallY + s.edge[1]) / 2), L.area.x0, L.area.x1, 1.2), stairs), lowB);
     for (const [a, b] of runs) {
       if (b - a < 1.2) continue;

@@ -293,6 +293,7 @@ button { font: inherit; color: inherit; }
 .cell .en { position: absolute; left: 7px; top: 6px; font: 400 11.5px/1 var(--l3d-num); color: var(--l3d-gold); text-shadow: 0 1px 2px #000; font-style: normal; }
 .cell .n { position: absolute; right: 7px; bottom: 10px; font: 800 12.5px/1 var(--l3d-tx); text-shadow: 0 1px 2px #000, 0 0 2px #000; font-style: normal; }
 .cell .no { position: absolute; right: 5px; top: 5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; display: grid; place-items: center; font: 800 10px/1 var(--l3d-tx); color: #e9d9e3; background: #00000059; font-style: normal; }
+.cell.cnd { cursor: default; display: grid; place-items: center; } .cell.cnd:hover { transform: none; } .cell.cnd .ci { font-size: 34px; line-height: 1; filter: drop-shadow(0 2px 1px #0006); }
 .cell .up { position: absolute; left: 6px; bottom: 9px; font: 800 11px/1 var(--l3d-tx); color: var(--l3d-up); text-shadow: 0 1px 2px #000; font-style: normal; }
 .cell .cd { position: absolute; inset: 0; border-radius: 18px; background: #0009; display: grid; place-items: center; font: 800 12px/1 var(--l3d-tx); color: #fff; }
 .cell .lk { position: absolute; left: 7px; bottom: 8px; font-size: 11px; }

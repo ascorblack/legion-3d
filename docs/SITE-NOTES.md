@@ -43,11 +43,22 @@ so the extension must treat every internal API as unstable and degrade gracefull
   `scripts/drift.mjs` reads `LG_CITYV` from the page (`cityModuleUrls`). Behaviour unchanged; `LGCity.panel(id)` still opens them.
 - **Jail (30.10, flag legionary.jailPublic).** `/api/me` top level `jail = {reason, until, untilText}` (this hero is a prisoner) and
   `jl` (the jail is open for this viewer); `GET /api/jail` → `{ok, list:[{l,n,lv,lk,g,gh,aw,u}], n, staff?, why?}`, SSE `jail` (same).
-  citymap.js `LOW.jail {x0,x1,base,c0,c1,fy,door,seats[8]}`, `lowJail()` (the two benches there moved right), `JAIL_OBST` (house and cage
-  solid from the wall to the base), building `{id:'jail', jail:true}` (not enterable). city.js: prisoners sit on the seats (own hero first),
+  citymap.js `LOW.jail {x0,x1,top,base,c0,c1,ct,back,fy,door,seats[8],walk,move}` — 31.10 beyond the canal by the lower fence
+  (30.10: against the retaining wall; no top/ct/back/walk then), `lowJail()` (31.10 moves decor only: the barrel from the cage's
+  place right of the bridge, the crate at the house's corner left), `JAIL_OBST` (house and cage solid from `back` to the base),
+  `jailWalk(x, y)` (nearest point of `walk`), building `{id:'jail', jail:true}` (not enterable; hit `[x0, c1, ct − 56, fy]`, door
+  in front of the house by the fence). city.js: prisoners sit on the seats (own hero first),
   «+N» over the cage, `LGCity.jailOpen()` = the Jail window `.cy-jw` (list, terms; reason only for staff). A prisoner: only the City tab
-  (app.js `tab()` forces it; `html.jailed` hides the rest), the `.jail-bar` status (reason, term), cannot walk or enter buildings,
+  (app.js `tab()` forces it; `html.jailed` hides the rest), the `.jail-bar` status (reason, term), no buildings and no «E — войти»;
+  31.10 he walks on the cage floor (`walk`: click → jailGo, WASD → kwStep) only on his own screen — the steps are not sent (the
+  server answers 403 jailed; the others see him seated), reseated only when off that floor;
   always on the fair. 3D: src/world/jail.ts, src/net/jail.ts, src/features/jail.ts.
+- **31.10 afternoon.** mine.js `take()` runs `follow3` before the floor is stored and drawn (entering from the City showed the
+  deepest floor for a moment, then the hero's own floor) — ours: `followOnEnter` in src/rooms/mine/fund.ts right after the enter.
+  mine3.js: the sack on the «СКУПКА» counter is smaller and the plaque moved right of it (our 3D buyer has its sign on the
+  awning, no sack on it). app.js / inventory.js `feat/candy-tile`: the Halloween candies (`hero.hw.c`) are a «не вещь» tile after
+  the items of the bag (`data.pins`; filter «Все»; no place taken, no actions, «9999+», hint on hover / tap) instead of the counter
+  next to «Монеты» — ours: `candyCellHtml` in the bag (src/ui/card.ts).
 - **Single chat (30.10).** app.js `oneIsOn = hero.c1 && (hero.cc || hero.mc) && LGChatOne`: then LGDm never shows its own window; its
   `open()` asks the single chat to show «Личные» (and waits for it) only while nobody listens on LGDm — our DM bridge does not listen then.
 - **Camp (30.10 E2).** campmap.js moved to the «Пролог» module (same URL, same API). city.js `homePick(hm) = {id: hm.id}`: the server

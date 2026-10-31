@@ -4,7 +4,7 @@
  * no z-fighting) and the registry / supported data (drift shows no «without support»).
  */
 import { describe, it, expect } from 'vitest';
-import { createJailHub, jailBar, jailDay, jailFromMe, jailGeoOf, jailList, jailMore, jailSeats, JAIL_OFF } from '../src/net/jail';
+import { createJailHub, jailBar, jailDay, jailFromMe, jailGeoOf, jailList, jailMore, jailSeats, jailWalkOf, jailWalkPt, inJailWalk, jailBackOf, JAIL_OFF } from '../src/net/jail';
 import { fixtureLayout, withJail, JAIL_LOW, JAIL_BUILDING } from '../dev/fixtures';
 import { staticCity } from './world-fixture';
 import { SolidMap, collectSolids, makeSolidTop } from '../src/world/solid';
@@ -13,7 +13,9 @@ import { SUPPORTED_BUILDINGS } from '../src/world/supported';
 import { doorInteractables } from '../src/world/worldExt';
 import supported from '../src/data/supported.json';
 import { toX, toZ } from '../src/world/coords';
-import { mySeat } from '../src/features/jail';
+import { mySeat, myWalk, needsSeat } from '../src/features/jail';
+import doorsFeature from '../src/features/doors';
+import map from './fixtures/fair-map.json';
 
 describe('jail state from the site', () => {
   it('me.jail = a prisoner (reason, term), me.jl = the jail is open', () => {
@@ -61,14 +63,48 @@ describe('jail state from the site', () => {
     h.setList({ list: [{ l: 'a' }], n: 1 }); h.setList({ list: [{ l: 'a' }], n: 1 });
     expect(n).toBe(2); expect(h.get()).toMatchObject({ on: true, me: null, n: 1 });
   });
-  it('geometry: LOW.jail when present, else the 30.10 numbers from the building', () => {
+  it('geometry: LOW.jail when present, else the 31.10 numbers from the building', () => {
     const L = withJail(fixtureLayout());
     expect(jailGeoOf(JAIL_BUILDING, L.low)).toBe(L.low!.jail);
     const g = jailGeoOf(JAIL_BUILDING, null)!;
-    expect([g.x0, g.x1, g.c0, g.c1, g.fy, g.door[0], g.door[1]]).toEqual([JAIL_LOW.x0, JAIL_LOW.x1, JAIL_LOW.c0, JAIL_LOW.c1, JAIL_LOW.fy, JAIL_LOW.door[0], JAIL_LOW.door[1]]);
+    const keys = ['x0', 'x1', 'top', 'base', 'c0', 'c1', 'ct', 'back', 'fy', 'door', 'seats', 'walk'] as const;
+    for (const k of keys) expect(g[k], k).toEqual(JAIL_LOW[k]);
     expect(mySeat(L, { ...JAIL_OFF, on: true, me: {}, list: [] })).toEqual(JAIL_LOW.seats[0]);
     expect(mySeat(L, { ...JAIL_OFF, on: true, me: null, list: [] })).toBeNull();
     expect(mySeat({ ...L, id: 'd3' }, { ...JAIL_OFF, on: true, me: {}, list: [] })).toBeNull();
+    // the back: LOW.jail.back (31.10), else the retaining wall (a 30.10 LOW.jail without it)
+    expect(jailBackOf(JAIL_LOW, L.low)).toBe(1652);
+    const { back: _b, ...old } = JAIL_LOW;
+    expect(jailBackOf(old, L.low)).toBe(L.low!.edge[1]);
+  });
+  it('31.10: the jail stands beyond the canal by the lower fence — off the canal, the bridges and the fence', () => {
+    const L = withJail(fixtureLayout()), J = JAIL_LOW, low = L.low!;
+    expect(J.back).toBeGreaterThan(low.canal[1]);              // behind it: the passage along the canal
+    expect(J.fy).toBeLessThan(L.area.y1);                       // in front of it: the strip by the fence
+    for (const [a, b] of low.bridges) expect(b < J.x0 || a > J.c1, `bridge ${a}…${b}`).toBe(true);
+    // the site's walk grid: the passage behind, the strip in front and the door point are walkable
+    for (const x of [J.x0 + 20, (J.x0 + J.c1) / 2, J.c1 - 20]) { expect(L.free(x, J.back! - 20), `passage ${x}`).toBe(true); expect(L.free(x, J.base + 34), `strip ${x}`).toBe(true); }
+    expect(L.free(JAIL_BUILDING.door.x, JAIL_BUILDING.door.y)).toBe(true);
+    for (const [x, y] of J.seats) expect(L.free(x, y), `seat ${x},${y}`).toBe(false);
+  });
+  it('the prisoner walks on the cage floor: walk rect (every seat inside), nearest point, reseat rule', () => {
+    const L = withJail(fixtureLayout()), J = JAIL_LOW, w = jailWalkOf(J);
+    expect(w).toEqual([1870, 1760, 2200, 1844]);
+    for (const [x, y] of J.seats) expect(inJailWalk(w, x, y), `seat ${x},${y}`).toBe(true);
+    const { walk: _w, ...noWalk } = J;
+    expect(jailWalkOf(noWalk)).toEqual(w);   // derived like the site: 40 px off the sides, 22 off the front, back row − 16
+    expect(jailWalkPt(w, 2000, 1800)).toEqual([2000, 1800]);
+    expect(jailWalkPt(w, 1500, 1300)).toEqual([1870, 1760]);
+    expect(jailWalkPt(w, 2600, 1900)).toEqual([2200, 1844]);
+    expect(jailWalkPt(w, NaN, 1800)).toEqual([1870, 1800]);
+    const st = { ...JAIL_OFF, on: true, me: {}, list: [] };
+    expect(myWalk(L, st)).toEqual(w);
+    expect(myWalk(L, { ...st, me: null })).toBeNull();
+    expect(myWalk({ ...L, id: 'camp' }, st)).toBeNull();
+    expect(needsSeat(w, 2100, 1800)).toBe(false);        // walking on the floor: stays
+    expect(needsSeat(w, 2200.3, 1844.2)).toBe(false);    // on the edge
+    expect(needsSeat(w, 1400, 1880)).toBe(true);         // outside (just jailed / teleported): to the seat
+    expect(needsSeat(null, 2100, 1800)).toBe(true);
   });
 });
 
@@ -77,18 +113,32 @@ describe('jail street model', () => {
   const { k, spec, rec, ground } = staticCity(false, L);
   const top = makeSolidTop(L, new SolidMap(collectSolids(L, spec, k.solids ?? [], k.inst)));
   const J = JAIL_LOW;
-  it('building and cage are solid from the wall to the base (citymap.js JAIL_OBST); the street in front is open', () => {
-    for (const x of [J.x0 + 40, (J.x0 + J.x1) / 2, J.x1 - 40]) for (const y of [1150, 1250, J.base - 10]) expect(top(x, y), `house ${x},${y}`).toBe(Infinity);
-    for (const x of [J.c0 + 30, (J.c0 + J.c1) / 2, J.c1 - 30]) expect(top(x, J.fy), `bars ${x}`).toBe(Infinity);
-    for (const y of [1160, 1250, 1320]) { expect(top(J.c0, y)).toBe(Infinity); expect(top(J.c1, y)).toBe(Infinity); }
+  const open = (t: number) => t === -Infinity || t < -1.2;
+  it('building and cage are solid from the back to the base (citymap.js JAIL_OBST); the passage behind and the strip in front are open', () => {
+    const back = J.back!, mid = (back + J.base) / 2;
+    for (const x of [J.x0 + 40, (J.x0 + J.x1) / 2, J.x1 - 40]) for (const y of [back + 6, mid, J.base - 10]) expect(top(x, y), `house ${x},${y}`).toBe(Infinity);
+    for (const x of [J.c0 + 30, (J.c0 + J.c1) / 2, J.c1 - 30]) { expect(top(x, J.fy), `front bars ${x}`).toBe(Infinity); expect(top(x, back + 2), `back bars ${x}`).toBe(Infinity); }
+    for (const y of [back + 20, mid, J.fy - 20]) { expect(top(J.c0, y)).toBe(Infinity); expect(top(J.c1, y)).toBe(Infinity); }
     // inside: a floor a prisoner stands on (finite, at the lower street), never open to walk in from outside (bars all round)
     for (const [x, y] of J.seats) { const t = top(x, y); expect(t, `seat ${x},${y}`).toBeGreaterThan(-1.5); expect(t).toBeLessThan(-1.2); }
-    for (const x of [J.x0 + 60, (J.c0 + J.c1) / 2, J.c1 - 20]) { const t = top(x, J.fy + 40); expect(t === -Infinity || t < -1.2, `street ${x}`).toBe(true); }
+    const w = jailWalkOf(J);
+    for (const x of [w[0], (w[0] + w[2]) / 2, w[2]]) for (const y of [w[1], w[3]]) { const t = top(x, y); expect(t, `walk ${x},${y}`).toBeGreaterThan(-1.5); expect(t).toBeLessThan(-1.2); }
+    for (const x of [J.x0 + 60, (J.c0 + J.c1) / 2, J.c1 - 20]) { expect(open(top(x, J.fy + 30)), `strip ${x}`).toBe(true); expect(open(top(x, back - 20)), `passage ${x}`).toBe(true); }
   });
-  it('the moved benches stand where citymap.js lowJail puts them', () => {
+  it('nothing of the canal / bridges / fence inside the jail; the decor moved where citymap.js lowJail puts it', () => {
+    const solidCanal = toZ(map.LOW.canal[1]) + 0.35;   // the far coping
+    expect(toZ(J.back!) - 0.14).toBeGreaterThan(solidCanal);
+    const zFence = toZ(map.AREA.y1) + 0.8 + 0.4;          // src/world/terrain.ts cityWalls
+    expect(toZ(J.fy) + 0.1).toBeLessThan(zFence - 1.2);
+    const inJail = (p: { x: number; z: number }) => p.x > toX(J.x0) - 0.3 && p.x < toX(J.c1) + 0.3 && p.z > toZ(J.back!) - 0.2 && p.z < toZ(J.fy) + 0.2;
+    for (const kind of ['bench', 'barrel', 'crate', 'bed', 'tree', 'lamp', 'statue']) for (const p of k.inst.placed.get(kind) ?? []) expect(inJail(p), `${kind} at ${p.x.toFixed(2)},${p.z.toFixed(2)}`).toBe(false);
+    const near = (kind: string, x: number, y: number) => (k.inst.placed.get(kind) ?? []).some((p) => Math.abs(p.x - toX(x)) < 0.6 && Math.abs(p.z - toZ(y)) < 0.4);
+    expect(near('barrel', 2640, 1700) || near('crate', 2640, 1700)).toBe(true);     // the barrel from the cage's place: right of the bridge
+    expect(near('barrel', 1400, 1870) || near('crate', 1400, 1870)).toBe(true);     // the crate at the house's corner: left
+    expect(near('barrel', 2100, 1700) || near('crate', 2100, 1700)).toBe(false);
+    // the benches stay (31.10: LOW.jail.move.benches = []), the one under the Fair where the jail stood 30.10 is back
     const benches = k.inst.placed.get('bench')!.map((p) => [Math.round(p.x * 100), Math.round(p.z * 50 + 800)]);
-    expect(benches.some(([x, y]) => Math.abs(x - 2330) < 30 && Math.abs(y - 1300) < 40)).toBe(true);
-    expect(benches.some(([x, y]) => Math.abs(x - 2100) < 30 && Math.abs(y - 1310) < 40)).toBe(false);   // was in the cage
+    expect(benches.some(([x, y]) => Math.abs(x - 2100) < 30 && Math.abs(y - 1310) < 40)).toBe(true);
   });
   it('no z-fighting in the jail and the cage', () => {
     const hits = rec.find(0.004, 2e-4, ground).filter((h) => h.a.includes('jail') || h.b.includes('jail'));
@@ -110,5 +160,29 @@ describe('jail support data', () => {
     expect(SUPPORTED_BUILDINGS).toContain('jail');
     expect(supported.buildings.models).toContain('jail');
     expect((supported.buildings.rooms as Record<string, string>).jail).toBe('site');
+  });
+});
+
+describe('jail prisoner: no «E — войти»', () => {
+  it('a prisoner has no building door but the Jail\'s window (site 31.10 city.js nearBuilding → null)', () => {
+    const L = withJail(fixtureLayout());
+    const list = doorInteractables(L, () => -1.4, () => undefined);
+    const added: { id: string; enabled?: () => boolean }[] = [];
+    const ctx = {
+      state: { inRoom: false, jailed: false },
+      rooms: { busy: false, enter: () => Promise.resolve() },
+      interact: { add: (i: { id: string; enabled?: () => boolean }) => { added.push(i); return () => { /* */ }; } },
+      layout: () => L,
+      world: () => ({ root: null, doors: [], interactables: () => list }),
+      onWorld: () => () => { /* */ },
+    };
+    const off = doorsFeature.setup(ctx as never);
+    const on = () => added.filter((i) => !i.enabled || i.enabled()).map((i) => i.id).sort();
+    expect(on().length).toBe(L.buildings.length);
+    ctx.state.jailed = true;
+    expect(on()).toEqual(['door:jail']);
+    ctx.state.jailed = false;
+    expect(on().length).toBe(L.buildings.length);
+    if (typeof off === 'function') off();
   });
 });

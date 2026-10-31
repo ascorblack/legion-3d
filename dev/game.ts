@@ -29,7 +29,8 @@ import { QUEST_MOCKS } from '../src/debug/questMocks';
 // (test/fixtures/village-map.json); otherwise the fair
 const TOWN = new URLSearchParams(location.search).get('town');
 const MAGIC = new URLSearchParams(location.search).get('magic') === '1';   // ?magic=1: the camp's magic shop (hero.ms)
-// ?jail=1: the channel's jail is open (6 prisoners in the cage, «+5»); ?jail=me: and the hero is one of them (site 30.10)
+// ?jail=1: the channel's jail is open (6 prisoners in the cage, «+5»); ?jail=me: and the hero is one of them, walking on the
+// cage floor (site 30.10 / 31.10: beyond the canal by the lower fence)
 const JAIL = new URLSearchParams(location.search).get('jail');
 const layout = TOWN === 'camp' ? campFixtureLayout('cats', MAGIC) : TOWN === 'village' ? villageFixtureLayout() : JAIL ? withJail(fixtureLayout()) : fixtureLayout();
 // ?sky=dusk: an evening sky for photos (the site's own style sky otherwise)
@@ -217,7 +218,7 @@ if (jailHub && layout.low?.jail) {
 
 const site: SiteSession & { jail?: typeof jailHub } = {
   store, actions, ...(jailHub ? { jail: jailHub } : {}),
-  moveTo() { /* offline */ },
+  moveTo() { (window as any).__demoMoves = ((window as any).__demoMoves || 0) + 1; },   // offline: counted (dev/jail-shots.mjs: a prisoner sends none)
   art: () => null,
   setClassic() { /* offline */ },
   selfPos: () => [store.me!.x, store.me!.y],

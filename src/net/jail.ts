@@ -2,8 +2,8 @@
  * «Тюрьма и клетка» of the channel (site 30.10, flag legionary.jailPublic) — pure helpers + the live state hub.
  *
  * What the site has (app.js, city.js, citymap.js LOW.jail):
- *  - `/api/me` top level: `jail` = { reason, until, untilText } when THIS hero is a prisoner (only the City, sits in the cage,
- *    cannot walk or enter buildings, the chat is read-only, a status bar «Ты в тюрьме канала» with the reason and the term),
+ *  - `/api/me` top level: `jail` = { reason, until, untilText } when THIS hero is a prisoner (only the City, sits in the cage —
+ *    31.10: walks on its floor, only on his own screen —, cannot enter buildings, the chat is read-only, a status bar «Ты в тюрьме канала» with the reason and the term),
  *    `jl` = the jail is open for this viewer (app.js jailOn = !!(ME.jail || ME.jl));
  *  - GET `/api/jail` → { ok, list: [{ l, n, lv, lk, g, gh, aw, u }], n, staff?, why? } and the SSE event «jail» with the same
  *    payload: who sits in the cage. Up to 8 sit on LOW.jail.seats (the own hero of a prisoner always first), the rest is «+N».
@@ -50,17 +50,43 @@ export function jailList(d: unknown): { list: JailEntry[]; n: number } | null {
   return { list, n: Math.max(list.length, num(r.n) ?? list.length) };
 }
 
-/** LOW.jail of the layout, or the same numbers derived from the building's hit box (the site's 30.10 values). */
+/** LOW.jail of the layout, or the same numbers derived from the building's hit box (the site's 31.10 values: hit =
+ *  [x0, c1, ct − 56, fy], the house and the cage 214 px deep from `back` to the bars). */
 export function jailGeoOf(b: Pick<Building, 'hit'> | null | undefined, low?: LowerStreet | null): JailGeo | null {
   const J = low?.jail;
   if (J && [J.x0, J.x1, J.base, J.c0, J.c1, J.fy].every((v) => typeof v === 'number' && Number.isFinite(v)) && J.c1 > J.c0 && J.x1 > J.x0
     && Array.isArray(J.door) && Array.isArray(J.seats)) return J;
   if (!b) return null;
-  const [h0, h1, , h3] = b.hit;
+  const [h0, h1, h2, h3] = b.hit;
   const c0 = h0 + 290, fy = h3, door: [number, number] = [c0 + 155, c0 + 225];
   const seats: [number, number][] = [];
-  for (let i = 0; i < 8; i++) seats.push(i < 4 ? [c0 + 60 + i * 90, fy - 90] : [c0 + 105 + (i - 4) * 90, fy - 34]);
-  return { x0: h0, x1: h0 + 260, base: h3 - 10, c0, c1: h1, fy, door, seats };
+  for (let i = 0; i < 8; i++) seats.push(i < 4 ? [c0 + 60 + i * 90, fy - 90] : [Math.min(c0 + 105 + (i - 4) * 90, h1 - 45), fy - 34]);
+  const ct = h2 + 56;
+  return { x0: h0, x1: h0 + 260, top: ct, base: h3 - 10, c0, c1: h1, ct, back: fy - 214, fy, door, seats, walk: [c0 + 40, fy - 106, h1 - 40, fy - 22] };
+}
+
+/** The back edge of the jail and the cage (px): LOW.jail.back (31.10), else the retaining wall (30.10: they stood against it). */
+export function jailBackOf(J: JailGeo, low?: Pick<LowerStreet, 'edge'> | null): number {
+  return typeof J.back === 'number' && Number.isFinite(J.back) ? J.back : low?.edge?.[1] ?? 1124;
+}
+
+/** Where a prisoner may stand (px [x0, y0, x1, y1], site 31.10 LOW.jail.walk): the cage floor 40 px off the side bars,
+ *  22 px off the front ones, at the back no higher than the back row of seats. Every seat is inside. */
+export function jailWalkOf(J: JailGeo): [number, number, number, number] {
+  const w = J.walk;
+  if (Array.isArray(w) && w.length === 4 && w.every((v) => typeof v === 'number' && Number.isFinite(v)) && w[2] > w[0] && w[3] > w[1]) return w;
+  const y0 = J.seats.length ? Math.min(...J.seats.map((s) => s[1])) - 16 : J.fy - 106;
+  return [J.c0 + 40, Math.min(y0, J.fy - 22 - 1), J.c1 - 40, J.fy - 22];
+}
+
+/** citymap.js jailWalk(x, y): the nearest point (px) where a prisoner may stand; a point inside stays where it is. */
+export function jailWalkPt(w: readonly [number, number, number, number], x: number, y: number): [number, number] {
+  return [Math.max(w[0], Math.min(w[2], +x || 0)), Math.max(w[1], Math.min(w[3], +y || 0))];
+}
+
+/** city.js inWalk(w): the point is on the floor a prisoner may walk (within `eps` px of the rect). */
+export function inJailWalk(w: readonly [number, number, number, number], x: number, y: number, eps = 0.5): boolean {
+  return x >= w[0] - eps && x <= w[2] + eps && y >= w[1] - eps && y <= w[3] + eps;
 }
 
 export interface JailSeat {
