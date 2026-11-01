@@ -33,9 +33,18 @@ export const CATALOG = {
   colors: ['#ff9fb2', '#ffb27a', '#ffe27a', '#9fe39a', '#7fd6e6', '#8fb6ff', '#b9a2ff', '#e6e6ee', '#ffc94d', '#5a5470'],
   weapons: ['sword', 'gladius', 'dagger', 'axe', 'club', 'mace', 'hammer', 'spear', 'pitchfork', 'bow', 'staff', 'crook', 'censer', 'kris', 'skullstaff', 'grimoire', 'holymace'],
   shields: ['scutum', 'round', 'buckler', 'barrel'],
-  armors: ['lorica', 'robe', 'leather', 'shroud', 'plate'],
+  armors: ['lorica', 'robe', 'leather', 'shroud', 'plate', 'hwbarrow', 'hwthicket', 'hwchapel', 'hwshadow', 'hwgrave', 'hwmidnight'],
   rarities: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
 } as const;
+
+/**
+ * Halloween armour (site 31.10 feat/hw-armor-pick, doodle.js HW_ARMOR / game-data.js ARMOR_LOOKS): every piece has its own
+ * drawing on the site; in 3D it is the nearest base kind (barrow guard lorica, pumpkin-thicket and shadowless jackets = leather,
+ * chapel cassock = robe, whispering-graveyard shroud, midnight-gate plate).
+ */
+export const HW_ARMOR_BASE: Record<string, string> = { hwbarrow: 'lorica', hwthicket: 'leather', hwchapel: 'robe', hwshadow: 'leather', hwgrave: 'shroud', hwmidnight: 'plate' };
+/** The armour kind our models draw for a site armour look id. */
+export const armorBaseKind = (a: string): string => HW_ARMOR_BASE[a] || a;
 
 export const RARITY_COLOR: Record<string, string> = {
   common: '#c9ccd6', uncommon: '#4cc95a', rare: '#4aa3ff', epic: '#b06bff', legendary: '#ffb83d',
@@ -127,7 +136,7 @@ function cleanGear(g: any): Gear {
   const rar = (v: unknown) => (typeof v === 'string' && RARS.has(v) ? (v as Gear['wr']) : 'common');
   if (str(g.w)) { out.w = str(g.w); out.wr = rar(g.wr); }
   if (str(g.s)) { out.s = str(g.s); out.sr = rar(g.sr); }
-  if (str(g.a)) { out.a = str(g.a); out.ar = rar(g.ar); }
+  if (str(g.a)) { out.a = armorBaseKind(str(g.a)!); out.ar = rar(g.ar); }
   if (g.am === 'heavy' || g.am === 'light' || g.am === 'cloth') out.am = g.am;
   if (str(g.h)) { out.h = str(g.h); out.hr = rar(g.hr); }
   if (str(g.t)) { out.t = str(g.t); out.tr = rar(g.tr); }

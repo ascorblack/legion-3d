@@ -36,7 +36,9 @@ const JRK: Record<string, Record<string, string>> = {
   trap: { win: 'Справился', lose: 'Пострадал' }, shop: { win: 'Готово', lose: 'Не вышло' }, hero: { win: '', lose: '' }, ach: { win: 'Открыто' }, store: { win: '', lose: '' },
 };
 const JR: Record<string, string> = { win: 'Победа', lose: 'Неудача', tie: 'Ничья' };
-interface JEntry { id: string; at: number; k: string; t: string; r?: string; c?: number; x?: number }
+interface JEntry { id: string; at: number; k: string; t: string; r?: string; c?: number; x?: number; cl?: { go?: string; done?: unknown; pick?: unknown } | null }
+/** Site 31.10 (app.js jClaimBtn, /api/jClaim): a journal entry whose reward waits for its «Забрать» button. */
+export const jClaimable = (e: { cl?: { done?: unknown; [k: string]: unknown } | null }): boolean => !!(e && e.cl && typeof e.cl === 'object' && !e.cl.done);
 
 const CLASSIC: Record<string, { spec: string; title: string; text: string; icon: string; alt?: [string, string] }> = {
   skills: { spec: 'hero:skills', title: 'Навыки', icon: 'mag', text: 'Деревья навыков твоего класса: изучение, очки и сброс — в оригинальном окне сайта. Тот же тренер ждёт тебя в городе.' },
@@ -398,7 +400,11 @@ export class Menus {
     const tm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     const cs = coinStyle();
     const coins = e.c ? `<span class="${e.c > 0 ? 'win' : 'lose'}">${e.c > 0 ? '+' : '−'}${esc(moneyParts(Math.abs(e.c), Math.abs(e.c), cs).map(([, v, t]) => `${v} ${t}`).join(' '))}</span>` : '';
-    return `<li class="je" title="${esc(timeAgo(e.at))}"><span class="ji emo">${ic}</span><time>${tm}</time><span>${esc(e.t)}</span><span class="jr">${rk ? `<span class="${e.r}">${rk}</span>` : ''}${coins}${e.x ? `<span class="xp">+${e.x} опыта</span>` : ''}</span></li>`;
+    return `<li class="je" title="${esc(timeAgo(e.at))}"><span class="ji emo">${ic}</span><time>${tm}</time><span>${esc(e.t)}</span><span class="jr">${rk ? `<span class="${e.r}">${rk}</span>` : ''}${coins}${e.x ? `<span class="xp">+${e.x} опыта</span>` : ''}${jClaimable(e) ? this.jClaimBtn(e) : ''}</span></li>`;
+  }
+  /** The reward is taken only by the site's own «Забрать» (its handler, the player's click): ours opens the site's journal there. */
+  private jClaimBtn(e: JEntry): string {
+    return `<button type="button" class="btn gold sm" data-act="classic" data-spec="hero:log" title="Награду выдаёт журнал сайта — откроется он, там нажми «${esc((e.cl && e.cl.go) || 'Забрать')}»">${esc((e.cl && e.cl.go) || 'Забрать')}</button>`;
   }
   private pLog(): string {
     const tabs = JT.map(([k, n]) => `<button type="button" class="fl${k === this.jTab ? ' on' : ''}" data-act="jtab" data-f="${k}">${n}</button>`).join('');
@@ -427,7 +433,9 @@ export class Menus {
       }
       rows += '</ul>';
       const more = this.jNext != null ? `<div style="text-align:center;margin:14px 0 4px"><button type="button" class="btn ghost sm" data-act="jmore"${this.jLoading ? ' disabled' : ''}>${this.jLoading ? 'Секунду…' : 'Показать ещё'}</button></div>` : '';
-      inner = `${sum}<div class="scroll">${rows}${more}</div>`;
+      const wait = L.filter(jClaimable).length;
+      const claim = wait ? `<p class="note">🎁 Наград ждут кнопки «Забрать»: <b>${wait}</b> — выдаёт их журнал сайта. <button type="button" class="btn gold sm" data-act="classic" data-spec="hero:log">Открыть журнал сайта</button></p>` : '';
+      inner = `${sum}${claim}<div class="scroll">${rows}${more}</div>`;
     }
     const m = milestones(this.jList || []);
     const timeline = '<section class="milestones"><div class="h3">Вехи <small>среди загруженных записей</small></div>' + (m.length ? m.slice(0, 12).map((x) => '<p>✦ ' + esc(x.label) + ' · ' + esc(new Date(x.at).toLocaleDateString('ru-RU')) + '</p>').join('') : '<p>В загруженных записях пока нет вех.</p>') + '</section>';

@@ -162,7 +162,13 @@
       "robe",
       "leather",
       "shroud",
-      "plate"
+      "plate",
+      "hwbarrow",
+      "hwthicket",
+      "hwchapel",
+      "hwshadow",
+      "hwgrave",
+      "hwmidnight"
     ],
     "rarities": [
       "common",
@@ -220,7 +226,13 @@
       "robe",
       "leather",
       "shroud",
-      "plate"
+      "plate",
+      "hwbarrow",
+      "hwthicket",
+      "hwchapel",
+      "hwshadow",
+      "hwgrave",
+      "hwmidnight"
     ],
     "hats": [
       "tuft",

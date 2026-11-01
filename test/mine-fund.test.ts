@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { MineClient, MINE_TAB, type Timers } from '../src/rooms/mine/net';
 import { FakeMine, makeBus, applyMine3Demo, demoFromQuery } from '../src/rooms/mine/fake';
 import {
-  baseOf, keyOf, mineKey, followKey, followOnEnter, rideFloor, rideDelay, fundButtons, liftInfo, liftPrompt, drillOf, drillFundable, drillPrompt,
+  baseOf, keyOf, mineKey, followKey, followOnEnter, rideFloor, rideHold, RIDE_MS, RIDE_MIN, fundButtons, liftInfo, liftPrompt, drillOf, drillFundable, drillPrompt,
   OreAsk, ORE_ASK_MIN, ORE_ASK_MS, objective, type ObjectiveIn,
 } from '../src/rooms/mine/fund';
 import { liftHtml, drillHtml, shaftHtml, honHtml, oreRowsHtml, bagHtml, objHtml, type FundCtx } from '../src/rooms/mine/hud';
@@ -59,7 +59,7 @@ describe('floor keys (site keyOf / CB / open)', () => {
     expect(mineKey('home.0')).toBe('home');           // site regexp: floors 1-999 only
     expect(mineKey('../x')).toBe('home');
     expect(rideFloor(9, 3)).toBe(3); expect(rideFloor(0, 3)).toBe(1);
-    expect(rideDelay(3, 3)).toBe(300); expect(rideDelay(2, 3)).toBe(2500);
+    expect(rideHold(1000, 1100)).toBe(RIDE_MIN - 100); expect(rideHold(1000, 1000 + RIDE_MIN + 5)).toBe(0);
   });
   it('follow3: another floor only on a big floor, not the one on show, not within a minute of an own ride', () => {
     const st = { ...clone(P3.st), n: 3, deep: 3 } as unknown as MineView, me = { i: -1, day: 0, cap: 0, at: 2 } as MineMe;
@@ -169,24 +169,103 @@ describe('client: lift, drill, ride (site bodies, only on action)', () => {
     expect(acts()).toHaveLength(1);
     c.close();
   });
-  it('ride: {c: CB, n}, then the mine re-opens on that floor (leave, enter ?c=home.2) — as the site open()', async () => {
+  it('ride (site 31.10 rideGo): mineRide {c: CB, n}, then enter ?c=home.2 in the same mine — no leave, no chat re-entry', async () => {
     const { c, calls, acts } = await setup();
-    const r = await c.ride(2);
-    expect(r).toEqual({ key: 'home.2', delay: 2500, f: 2 });
-    expect(acts()).toEqual([{ p: '/api/mineRide', b: { c: 'home', n: 2 } }]);
-    const n0 = calls.length;
-    expect(await c.switchTo(r!.key, { x: 2000, y: 1250 })).toBe(true);
-    expect(calls.slice(n0).map((x) => x.p)).toEqual(['/api/mine/leave?c=home', '/api/mine/enter?c=home.2']);
+    const ev: string[] = []; c.on((e) => { if (e.type === 'ride') ev.push(e.phase); });
+    const chat0 = c.chat.lines.length, n0 = calls.length;
+    const p = c.ride(2, { x: 1500, y: 900 });
+    expect(ev).toEqual(['start']);                                      // the ride screen at the press, before the game answers
+    expect(await p).toBe('home.2');
+    for (let k = 0; k < 20 && ev.length < 2; k++) await new Promise((r) => setTimeout(r, 20));
+    expect(calls.slice(n0).map((x) => x.p)).toEqual(['/api/mineRide', '/api/mine/enter?c=home.2']);
+    expect(calls[n0]).toEqual({ p: '/api/mineRide', b: { c: 'home', n: 2 } });
+    expect(calls[n0 + 1].b).toEqual({ x: 1500, y: 900, tab: MINE_TAB });   // site enter(false): the spawn point
+    expect(ev).toEqual(['start', 'arrived']);
+    expect(c.riding).toBeNull(); expect(c.model.rideF).toBe(0);
     expect(c.c).toBe('home.2'); expect(c.cb).toBe('home');
     expect(c.model.st!.n).toBe(2);
+    expect(c.chat.lines.length).toBe(chat0);                            // the shared mine chat is not entered again
     // from an upper floor: the collections and the ride still name the mine without the floor; the chat too
     expect(await c.liftFund(100)).toBe(true);
     expect(acts().at(-1)).toEqual({ p: '/api/mineLift', b: { c: 'home', coins: 100 } });
     expect(c.chatQ).toBe('?c=home');
-    const back = await c.ride(3);
-    expect(back).toEqual({ key: 'home', delay: 300, f: 3 });
+    expect(await c.ride(3, { x: 1500, y: 900 })).toBe('home');
     expect(acts().at(-1)).toEqual({ p: '/api/mineRide', b: { c: 'home', n: 3 } });
     c.close();
+  });
+  it('ride: the screen holds until the chosen floor’s view; other floors’ views and a poll of the previous floor are not applied', async () => {
+    const ck = clock(), st3 = clone(P3.st) as unknown as MineView, calls: string[] = [];
+    let enterSt: MineView = { ...st3, n: 3, v: 50 }, stateSt: MineView | null = null, slow: ((r: any) => void) | null = null;
+    const api = async (p: string, b?: any) => {
+      calls.push(p);
+      if (p === '/api/mineRide') return { ok: true };
+      if (p.startsWith('/api/mine/enter')) return { ok: true, sid: 's1', st: clone(enterSt), mchat: { chat: [{ id: 'x' + calls.length, l: 'a', t: 'hi', s: calls.length }], c: calls.length } };
+      if (p.startsWith('/api/mine/state') && p.includes('slow')) return new Promise((r) => { slow = r; });
+      if (p.startsWith('/api/mine/state')) return { ok: true, n: 0, st: stateSt ? clone(stateSt) : undefined };
+      return { ok: true };
+    };
+    const c = new MineClient({ api, login: LOGIN, c: 'home', timers: ck.T, now: ck.now });
+    expect(await c.enter({ x: 1, y: 1 })).toBe(true);
+    const lines0 = c.chat.lines.length;
+    const ev: string[] = []; c.on((e) => { if (e.type === 'ride') ev.push(e.phase + (e.wait != null ? ':' + e.wait : '')); });
+    // a poll of floor 3 still on its way when the lift goes
+    const old = (c as any).q; (c as any).q = function () { return old.call(this) + '&slow'; };
+    const late = c.poll(); (c as any).q = old;
+    // the game still answers with floor 3's view (shared v, even a newer one): ignored, the screen stays
+    enterSt = { ...st3, n: 3, v: 60 };
+    expect(await c.ride(1, { x: 5, y: 5 })).toBe('home.1');
+    await ck.advance(0);
+    expect(c.model.st!.n).toBe(3); expect(c.model.st!.v).toBe(50); expect(ev).toEqual(['start']);
+    expect(c.chat.lines.length).toBe(lines0);
+    // the late poll of floor 3 comes back after the ride started: not applied
+    slow!({ ok: true, n: 0, st: { ...st3, n: 3, v: 70 } }); await ck.advance(0);
+    expect(c.model.st!.v).toBe(50); void late;
+    // ride polls: every 1.5 s, the whole view (no v= / f=), forced even with a live channel
+    stateSt = { ...st3, n: 3, v: 80 };
+    await ck.advance(1500);
+    const polls = calls.filter((p) => p.startsWith('/api/mine/state') && !p.includes('slow'));
+    expect(polls.at(-1)).toMatch(/^\/api\/mine\/state\?c=home\.1&sid=s1(&mc=\d+)?$/);
+    expect(c.model.st!.n).toBe(3); expect(ev).toEqual(['start']);
+    // floor 1's view — even with a lower v (v is shared by the floors) — is drawn and the ride ends
+    stateSt = { ...st3, n: 1, v: 10 };
+    await ck.advance(1500);
+    expect(c.model.st!.n).toBe(1); expect(ev).toEqual(['start', 'arrived:0']);
+    // nothing of the previous floor: no leave was sent at all
+    expect(calls.some((p) => p.startsWith('/api/mine/leave'))).toBe(false);
+    c.close();
+  });
+  it('ride: no view of the chosen floor in RIDE_MS — back to the previous floor (enter ?c=<from>), screen off', async () => {
+    const ck = clock(), st3 = clone(P3.st) as unknown as MineView, calls: string[] = [];
+    const api = async (p: string) => { calls.push(p); if (p.startsWith('/api/mine/enter')) return { ok: true, sid: 's1', st: { ...st3, n: 3 } }; if (p.startsWith('/api/mine/state')) return { ok: true, n: 0, st: { ...st3, n: 3 } }; return { ok: true }; };
+    const c = new MineClient({ api, login: LOGIN, c: 'home', timers: ck.T, now: ck.now });
+    await c.enter({ x: 1, y: 1 });
+    const ev: string[] = []; c.on((e) => { if (e.type === 'ride') ev.push(e.phase); });
+    expect(await c.ride(2, { x: 5, y: 5 })).toBe('home.2');
+    await ck.advance(RIDE_MS + 10);
+    expect(ev).toEqual(['start', 'failed']); expect(c.c).toBe('home'); expect(c.riding).toBeNull();
+    expect(calls.filter((p) => p.startsWith('/api/mine/enter'))).toEqual(['/api/mine/enter?c=home', '/api/mine/enter?c=home.2', '/api/mine/enter?c=home']);
+    c.close();
+  });
+  it('ride refused: screen off, nothing entered; no walking is sent while the lift goes', async () => {
+    const { c, calls } = await setup();
+    const ev: string[] = []; c.on((e) => { if (e.type === 'ride') ev.push(e.phase); });
+    expect(await c.ride(9 as number, { x: 1, y: 1 }) === null || ev.includes('start')).toBe(true);
+    c.close();
+    const ck = clock(), out: string[] = [];
+    const api = async (p: string) => { out.push(p); return p === '/api/mineRide' ? { ok: false, error: 'Этаж ещё не открыт' } : { ok: true, sid: 's', st: clone(P3.st) }; };
+    const d = new MineClient({ api, login: LOGIN, c: 'home', timers: ck.T, now: ck.now });
+    await d.enter({ x: 1, y: 1 });
+    const ev2: string[] = []; d.on((e) => { if (e.type === 'ride') ev2.push(e.phase); });
+    expect(await d.ride(2, { x: 1, y: 1 })).toBeNull();
+    expect(ev2).toEqual(['start', 'refused']); expect(d.c).toBe('home');
+    expect(out.filter((p) => p.startsWith('/api/mine/enter'))).toHaveLength(1);
+    // while riding the feet do not go out
+    const e = new MineClient({ api: async (p: string) => { out.push(p); return p.startsWith('/api/mine/enter') ? { ok: true, sid: 's', st: clone(P3.st) } : { ok: true }; }, login: LOGIN, c: 'home', timers: ck.T, now: ck.now });
+    await e.enter({ x: 1, y: 1 });
+    expect(await e.ride(1, { x: 1, y: 1 })).toBe("home.1"); out.length = 0;
+    e.moveTo(900, 900, true);
+    expect(out.filter((p) => p.startsWith('/api/mine/go'))).toEqual([]);
+    void calls; d.close(); e.close();
   });
   it('a floor switch accepts the other floor’s view even with a lower version (the model is told it is fresh)', () => {
     const M = new MineModel(LOGIN), st = clone(P3.st) as unknown as MineView;

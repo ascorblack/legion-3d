@@ -9,7 +9,7 @@
 import type { Store, Actions, QuestView } from '../contracts';
 import { onPageKeys } from '../engine/input';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
-import { bossName, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
+import { bossName, deadIn, deadText, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
 import { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, type SiteControls, type SiteBtn } from './siteui';
 import { setHtml } from '../core/html';
 export { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, findSite, qaSig, siteScope } from './siteui';
@@ -79,6 +79,12 @@ export function pressSiteSquad(doc: ParentNode, k: 'join' | 'leave', openPanel: 
 /** Pure: QuestView (+ own login/role) → what to show. Exported for tests. `fresh` = the newest view (the Prologue boss name:
  *  quest.js bn() takes NEW first, then the delayed CUR). */
 export function cardOf(v: QuestView | null, me: { login: string; role: string }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
+  const c = cardOf0(v, me, baseCmd, fresh), D = c && v && v.on ? deadIn(v) : null;
+  // site 31.10: my hero fell in this fight — «💀 Пал в бою» instead of what to type (the site shows no buttons either)
+  if (c && D) return { ...c, urge: { kind: 'info', text: '💀 Пал в бою · ' + deadText(D) } };
+  return c;
+}
+function cardOf0(v: QuestView | null, me: { login: string; role: string }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
   if (!v || !v.on) return null;
   const q = v as any, inParty = q.party === 'in';
   // 28.10 (empty-party, quest.js v.nb): the gather ended with nobody — the site shows only this, nothing else of the view

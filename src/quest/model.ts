@@ -705,3 +705,14 @@ export function eventInstructions(E: QuestEvent, party: unknown): { status: stri
   if (cmds[0] && text) cmds[0].note = [cmds[0].note, text].filter(Boolean).join(' · ');
   return { status: EVENT_ST[st] || st, text, cmds };
 }
+
+/** Site 31.10 (quest.js deadIn): my hero fell in this fight (expedition battle or boss) — the site shows «Пал в бою»
+ *  instead of hints and buttons. rev: in a plain battle he may still be revived (donation, scroll, priest). */
+export function deadIn(v: any): { rev: boolean } | null {
+  if (!v || typeof v !== 'object') return null;
+  const bg = v.bg, b = v.b;
+  if (bg && typeof bg === 'object' && bg.st !== 'end' && bg.in && !(bg.my > 0)) return { rev: false };
+  if (b && typeof b === 'object' && b.st !== 'end' && b.hp === 0) return { rev: !b.gb };
+  return null;
+}
+export const deadText = (d: { rev: boolean }) => d.rev ? 'жди конца боя или воскрешения' : 'жди конца боя';

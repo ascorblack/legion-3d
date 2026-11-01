@@ -56,7 +56,8 @@ const WEAPONS: Record<string, Draw> = {
   spear, pitchfork: spear, bow, staff, crook, skullstaff, censer, grimoire,
 };
 const SHIELDS: Record<string, Draw> = { scutum, round, buckler: round, barrel: round };
-const ARMORS: Record<string, Draw> = { lorica, plate: lorica, leather, robe, shroud: robe };
+const ARMORS: Record<string, Draw> = { lorica, plate: lorica, leather, robe, shroud: robe,
+  hwbarrow: lorica, hwthicket: leather, hwchapel: robe, hwshadow: leather, hwgrave: robe, hwmidnight: lorica };   // Halloween armour (site 31.10)
 const HATS: Record<string, Draw> = { wizard, miner, crown, laurel: crown, cap, beret: cap, party: wizard, tophat: helm, legion: helm };
 
 function pick(it: Partial<Item>): Draw {

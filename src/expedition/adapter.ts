@@ -10,7 +10,7 @@
  *   - after the boss: `b.res` (end) and then `loot` = the results scene.
  */
 import { bossName, emptyParty, EMPTY_PARTY, stageOf, kindOf, cmdFor, isMulti, SIDE_CMD, SKILLS, camFor, zoneOf, BASE_CMD, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, eventInstructions, PUZZLE_ST,
-  type QuestPuzzle, type QuestPayload, type QuestBattle, type Side, type Zone, type Role } from '../quest/model';
+  deadIn, deadText, type QuestPuzzle, type QuestPayload, type QuestBattle, type Side, type Zone, type Role } from '../quest/model';
 
 /* ------------------------------------------------------------------ scene kinds */
 
@@ -281,7 +281,12 @@ const EMPTY: SceneState = {
 
 /** Delayed view → scene state. Never throws: a broken block is dropped, the rest still shows. */
 export function adapt(v: QuestPayload | null | undefined, c: AdaptCtx): SceneState {
-  try { return adaptUnsafe(v, c); } catch (e) {
+  try {
+    const s = adaptUnsafe(v, c), D = v && (v as any).on ? deadIn(v) : null;
+    // site 31.10 (quest.js deadIn): my hero fell in this fight — no commands, only «Пал в бою»
+    if (D) s.cmds = [{ kind: 'info', text: '💀 Пал в бою', note: deadText(D) }];
+    return s;
+  } catch (e) {
     try { console.warn('[l3d] expedition adapter', e); } catch { /* */ }
     return { ...EMPTY, kind: v && (v as any).on ? 'travel' : 'off', setKey: v && (v as any).on ? 'travel|meadow' : 'off', title: 'Поход', status: 'Поход идёт', cmds: [] };
   }

@@ -166,6 +166,12 @@ const CSS = `
 .l3m-dark .l3m-btn{flex:none}
 @media (max-width:700px){.l3m-hud{width:224px}.l3m-jr{width:240px}.l3m-coach{display:none}}
 .l3m-coach.flat{left:16px}
+.l3m-ride{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 45%,rgba(30,22,40,.9),rgba(8,6,14,.98));pointer-events:none;opacity:0;transition:opacity .25s}
+.l3m-ride.on{opacity:1}
+.l3m-ride .b{display:flex;gap:12px;align-items:center;font:800 18px/1.2 var(--tx);color:#ffe9c2;text-shadow:0 2px 0 #2a1d18}
+.l3m-ride i{width:18px;height:18px;border-radius:50%;border:3px solid #ffd27a;border-top-color:transparent;animation:l3mRide 0.9s linear infinite}
+@keyframes l3mRide{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.l3m-ride{transition:none}.l3m-ride i{animation:none}}
 `;
 
 export interface MineHudHandlers {
@@ -438,6 +444,7 @@ export class MineHud {
       + `<div class="l3m-dark" data-p="dark" hidden role="status"></div>`
       + `<section class="l3m-box l3m-coach" data-p="coach" hidden aria-label="Как начать"></section>`
       + `<div class="l3m-mm" data-p="mm" hidden aria-label="Карта этажа"></div>`
+      + `<div class="l3m-ride" data-p="ride" hidden role="status"><div class="b"><i aria-hidden="true"></i><b></b></div></div>`
       + `<div class="l3m-tip" data-p="tip" hidden></div><div class="l3m-pops" data-p="pops"></div><div data-p="modal"></div>`);
     host.appendChild(this.el);
     this.el.addEventListener('click', (e) => this.onClick(e));
@@ -453,6 +460,13 @@ export class MineHud {
   tip(text: string, bad = false): void {
     const el = this.q('tip'); el.textContent = text; el.hidden = false; el.classList.toggle('bad', bad);
     clearTimeout(this.tipT); this.tipT = window.setTimeout(() => { el.hidden = true; }, 4200);
+  }
+  private rideOffT = 0;
+  /** The lift ride screen (site 31.10 rideCover: only opacity) over the scene: on at the press, off when the chosen floor is drawn. */
+  rideCover(on: boolean, text = ''): void {
+    const el = this.q('ride'); clearTimeout(this.rideOffT);
+    if (on) { (el.querySelector('b') as HTMLElement).textContent = text; el.hidden = false; void el.offsetWidth; el.classList.add('on'); return; }
+    el.classList.remove('on'); this.rideOffT = window.setTimeout(() => { if (!el.classList.contains('on')) el.hidden = true; }, 300);
   }
   /** Floating text over a world point (room metres), projected each frame by update(). */
   popup(text: string, x: number, y: number, z: number): void {

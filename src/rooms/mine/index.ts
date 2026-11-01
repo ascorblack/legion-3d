@@ -6,7 +6,7 @@
  *
  * create(ctx): closes the site's own mine if open (one presence per tab), POST /api/mine/enter, builds the cave,
  * registers interactables (front stones, lift, buyer, supplier, board, way down; «Шахта 3.0»: drill rigs and the lift shaft —
- * fund.ts / hud.ts cards, ride = /api/mineRide then leave + enter of the floor key «id.N», follow3), mounts the HUD and returns the
+ * fund.ts / hud.ts cards, ride = /api/mineRide then enter of the floor key «id.N» inside the same mine under a ride screen (site 31.10), follow3), mounts the HUD and returns the
  * RoomScene (free/groundAt over the cleared cells + entrance area). Keys: E dig / use, Shift+E queue the stone after the
  * current one (only with the game's fx.q flag; same /api/mineDig {…, q} as the site's Shift+click), L journal,
  * Esc closes a card / the journal. AFK comfort (afk.ts): tab title / favicon / optional notification, a soft chime on
@@ -447,8 +447,18 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     if (plan && plan.length && Math.hypot(f0.x - to.x, f0.y - to.y) > 40 && ctlOf()) walk.startPx(plan, G());
     else if (!plan) hud.tip('Не пройти — расчисти путь', true);
   };
-  /* lift ride (site ride): POST /api/mineRide on the player's press, then the mine opens on that floor (leave + enter as the site's open()) */
+  /* follow3 (site open(x, k)): the floor opens anew — leave + enter of the other key */
   let switching = false;
+  /** The floor on show changed under us (follow3 / a lift ride): the hero stands in the lift hall, the scene shows the new floor. */
+  const arrived = () => {
+    const s2 = G().spawn(login), ctl = core0.controller && core0.controller();
+    if (ctl && typeof ctl.teleport === 'function') ctl.teleport(mx(s2.x), mz(s2.y));
+    client.syncPos(s2); geomKey = geomKeyOf();
+    scene.setView(M, client.queue()); syncStones(); syncRigs(); syncShaft(); refreshBoxes();
+    window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id: 'door.open' } }));
+    hud.tip(`Этаж ${M.st ? M.st.n : ''}${M.st && M.st.deep && M.st.n < M.st.deep ? ` из ${M.st.deep}` : ''} — лифт приехал`);
+    hud.render();
+  };
   const switchFloor = async (key: string) => {
     if (switching) return; switching = true;
     try {
@@ -456,21 +466,24 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       const sp = G().spawn(login);
       const ok = await client.switchTo(key, sp);
       if (!ok) { hud.tip('Этаж не открылся — попробуй лифт ещё раз', true); return; }
-      const s2 = G().spawn(login), ctl = core0.controller && core0.controller();
-      if (ctl && typeof ctl.teleport === 'function') ctl.teleport(mx(s2.x), mz(s2.y));
-      client.syncPos(s2); geomKey = geomKeyOf();
-      scene.setView(M, client.queue()); syncStones(); syncRigs(); syncShaft(); refreshBoxes();
-      window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id: 'door.open' } }));
-      hud.tip(`Этаж ${M.st ? M.st.n : ''}${M.st && M.st.deep && M.st.n < M.st.deep ? ` из ${M.st.deep}` : ''} — лифт приехал`);
-      hud.render();
+      arrived();
     } finally { switching = false; }
   };
+  /* lift ride (site 31.10 ride / rideGo): the ride screen at the press, POST /api/mineRide, then the floor is entered inside the same
+     mine (enter ?c=<floor key>, no leave, no chat re-entry); the previous floor stays drawn under the screen until the chosen floor's
+     view arrives (net.ts ignores other floors' views and stale polls), then the screen goes (at least RIDE_MIN on screen) */
+  let rideOffT = 0;
+  const offRide = client.on((e) => {
+    if (e.type !== 'ride') return;
+    window.clearTimeout(rideOffT);
+    if (e.phase === 'start') { hud.close(); hud.rideCover(true, `Лифт едет на этаж ${e.f}…`); window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id: 'door.close' } })); return; }
+    if (e.phase === 'arrived') arrived();
+    if (e.phase === 'refused' || e.phase === 'failed') { hud.rideCover(false); hud.render(); return; }
+    rideOffT = window.setTimeout(() => { if (!disposed && !client.riding) hud.rideCover(false); }, e.wait || 0);
+  });
   const rideTo = async (f: number) => {
-    const r = await client.ride(f);
-    if (!r) { hud.render(); return; }
-    window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id: 'door.close' } }));
-    hud.close();
-    window.setTimeout(() => { if (!disposed) void switchFloor(r.key); }, r.delay);
+    const k = await client.ride(f, spawnPt(login));
+    if (!k) hud.render();
   };
   let disposed = false;
 
@@ -641,7 +654,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       disposed = true; for (const r of rigIts.values()) r.off(); rigIts.clear(); if (shaftIt) shaftIt.off();
       emitStatus(false); offAfk();
       afterFns.length = 0; miners.clear();
-      offFrame(); offEv(); offChatTab(); offKey(); for (const u of unsubs) u(); for (const s of stoneIts.values()) s.off(); stoneIts.clear();
+      offFrame(); offEv(); offRide(); window.clearTimeout(rideOffT); offChatTab(); offKey(); for (const u of unsubs) u(); for (const s of stoneIts.values()) s.off(); stoneIts.clear();
       document.removeEventListener('keydown', onShiftE, true); walk.cancel();
       // leaving the 3D mine for good: with the site's mine held under it, the site's own «В город» (its mine leave + City
       // wake); ours only when we stand on another floor than it. Released: the site already left — nothing to send.

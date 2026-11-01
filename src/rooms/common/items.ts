@@ -14,6 +14,7 @@ import { addWeapon, addShield } from '../../avatar/gear';
 import { addHat } from '../../avatar/hats';
 import { toonMat, outlineMat } from '../../avatar/materials';
 import { styledGoods } from '../../avatar/items';
+import { armorBaseKind } from '../../avatar/appearance';
 import type { ItemModelFactory, Registry } from '../../contracts/ext';
 import type { StockItem } from './stock';
 
@@ -203,7 +204,7 @@ export function localItemGeometry(it: StockItem): THREE.BufferGeometry {
   if (L.shield) return shieldModel(L.shield, r);
   if (L.hat) return hatModel(L.hat, r);
   switch (it.slot) {
-    case 'armor': return armorModel(L.armor || (it.gear === 'cloth' ? 'robe' : it.gear === 'light' ? 'leather' : 'lorica'), r);
+    case 'armor': return armorModel((L.armor && armorBaseKind(L.armor)) || (it.gear === 'cloth' ? 'robe' : it.gear === 'light' ? 'leather' : 'lorica'), r);
     case 'trinket': return charmModel(String(L.aura || L.charm || 'plain'), r);
     case 'potion': return potionModel(+((it.effect as any)?.heal || 0), it.id);
     case 'food': return foodModel(it.name || '', it.id);

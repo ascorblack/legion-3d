@@ -21,7 +21,7 @@ import { Parts, T, sphere, cyl, cone, box, torus, star, slab, tube, capsule, bod
 import { addWeapon, addShield } from './gear';
 import { addHat } from './hats';
 import { armorKind, RANK } from './armor';
-import { CATALOG, RARITY_COLOR } from './appearance';
+import { CATALOG, RARITY_COLOR, armorBaseKind } from './appearance';
 import { toonMat, outlineMat, glowMat, glowSolidMat } from './materials';
 import { ITEM_HATS, ITEM_CHARMS, ITEM_SLOTS, ITEM_FOODS, SUPPORTED_ITEM_MODEL_KEYS } from './supported';
 import { addChertsFood, addChertsPotion, addChertsScroll, chFoodKind } from './cherts-goods';
@@ -633,7 +633,7 @@ export function itemModelFactories(): Map<string, ItemModelFactory> {
   const m = new Map<string, ItemModelFactory>();
   for (const k of CATALOG.weapons) m.set('weapon:' + k, weaponFactory(k));
   for (const k of CATALOG.shields) m.set('shield:' + k, shieldFactory(k));
-  for (const k of CATALOG.armors) m.set('armor:' + k, armorFactory(k));
+  for (const k of CATALOG.armors) m.set('armor:' + k, armorFactory(armorBaseKind(k)));
   for (const k of ITEM_HATS) m.set('hat:' + k, hatFactory(k));
   for (const k of ITEM_CHARMS) m.set('charm:' + k, charmFactory(k));
   const slot: Record<(typeof ITEM_SLOTS)[number], ItemModelFactory> = {

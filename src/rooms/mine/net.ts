@@ -14,7 +14,7 @@ import { dayLimit } from './state';
 import { MineModel, TX, blockTitle, mmss, type MinePayload, type MineMe, type Burst, type ChatLine, type LookRec } from './state';
 import { REACH, type Pt } from './geo';
 import { GEO1, type MineGeom } from './geo3';
-import { baseOf, mineKey, deepOf, keyOf, rideFloor, rideDelay, OreGone } from './fund';
+import { baseOf, mineKey, deepOf, keyOf, rideFloor, rideHold, RIDE_MS, RIDE_POLL_MS, OreGone } from './fund';
 
 /**
  * Layout key of a floor for the poll (`&f=`), site mine.js floorKey (30.10): `seed.n`; a big v3 floor also carries the number of dug
@@ -59,6 +59,10 @@ export type MineEvent =
   /** Mine chat moderation, live (site chatApply): deleted lines and the addressed chatMe (mute / moderator role). */
   | { type: 'chatLive'; del: string[]; me: { mod?: unknown; muted?: unknown } | null }
   | { type: 'other'; on: boolean }
+  /** Lift ride in the same mine (site 31.10 ride / rideGo / rideEnd / rideFail): `start` = the ride screen goes on (at the press),
+   *  `refused` = the game refused the ride (screen off), `arrived` = the chosen floor's view is taken (screen off after `wait` ms),
+   *  `failed` = no view in RIDE_MS: back on the previous floor (screen off). */
+  | { type: 'ride'; phase: 'start' | 'refused' | 'arrived' | 'failed'; f: number; wait?: number }
   | { type: 'busy' }
   | { type: 'error'; text: string };
 
@@ -107,7 +111,7 @@ export class MineClient {
   private o: MineClientOpts;
   private T: Timers;
   private now: () => number;
-  private pollT: any = 0; private pingT: any = 0; private goneT: any = 0; private goT: any = 0;
+  private pollT: any = 0; private pingT: any = 0; private goneT: any = 0; private goT: any = 0; private rideT: any = 0; private rideTO: any = 0;
   private pollN = 0; private lkAt = 0; private full = false; private rejoinAt = 0; private lastSse = 0;
   private lastGoAt = -1e9;
   private unsubs: (() => void)[] = [];
@@ -153,7 +157,7 @@ export class MineClient {
 
   /* ---------------------------------------------------------------- presence */
   /** POST /api/mine/enter?c= {x, y, tab}: first entry (spawn point) or re-entry from the current position. */
-  async enter(start: Pt, again = false): Promise<boolean> {
+  async enter(start: Pt, again = false, ride = false): Promise<boolean> {
     if (this.closed) return false;
     const r: MinePayload = await this.o.api('/api/mine/enter' + this.q(), { x: Math.round(start.x), y: Math.round(start.y), tab: MINE_TAB });
     if (this.closed) return false;
@@ -163,7 +167,8 @@ export class MineClient {
     this.sent = { x: Math.round(start.x), y: Math.round(start.y) };
     this.entered = true; this.other = false;
     this.apply(r, true);
-    if (r.mchat) { this.chat.on = true; this.chat.st = { mod: (r.mchat as any).mod, muted: (r.mchat as any).muted }; this.chatIn(r.mchat); }
+    // site 31.10: a lift ride enters the floor of the same mine — its chat is shared by the floors and is not entered again
+    if (r.mchat && !ride) { this.chat.on = true; this.chat.st = { mod: (r.mchat as any).mod, muted: (r.mchat as any).muted }; this.chatIn(r.mchat); }
     this.T.clearInterval(this.pollT); this.T.clearInterval(this.pingT); this.T.clearInterval(this.goneT);
     this.pollT = this.T.setInterval(() => { void this.poll(); }, 3000);
     this.pingT = this.T.setInterval(() => { if (!this.hidden()) void this.o.api('/api/mine/ping' + this.q(), {}); }, 60000);
@@ -171,16 +176,20 @@ export class MineClient {
     return true;
   }
   /** GET /api/mine/state?c=…[&v=&f=][&sid=][&lk=][&mc=] — mine.js poll(). */
-  async poll(full = false): Promise<void> {
+  async poll(full = false, force = false): Promise<void> {
     if (this.closed || !this.entered || (this.hidden() && !full)) return;
     const M = this.model;
     this.pollN++;
-    if (!full && this.live() && this.pollN % 10 && !M.lkWant.size) return;
-    const st0 = M.st, have = !full && st0 ? `&v=${encodeURIComponent(st0.v)}&f=${encodeURIComponent(mineFloorKey(st0))}` : '';
+    if (!full && !force && this.live() && this.pollN % 10 && !M.lkWant.size) return;
+    // site 31.10: riding — the chosen floor's view whole (v is shared by the floors: «the same view» of the previous floor says
+    // nothing about the new one); the key the poll went out with (a poll of the previous floor is not applied after the ride)
+    const c0 = this.c;
+    const st0 = this.riding ? null : M.st, have = !full && st0 ? `&v=${encodeURIComponent(st0.v)}&f=${encodeURIComponent(mineFloorKey(st0))}` : '';
     const lk = [...M.lkWant].slice(0, 60); M.lkWant.clear(); if (lk.length) this.lkAt = this.now();
     const mc = this.chat.on && this.chat.poll && !this.live() ? `&mc=${this.chat.c || 0}` : '';
     const r: MinePayload = await this.o.api('/api/mine/state' + this.q() + have + (this.sid ? `&sid=${this.sid}` : '') + (lk.length ? `&lk=${encodeURIComponent(lk.join(','))}` : '') + mc);
     if (this.closed || !r || !r.ok) return;
+    if (this.c !== c0) return;
     if (r.mchat && this.chat.on) this.chatIn(r.mchat);
     this.setOther(!!r.other);
     // the server forgot us (tab hidden > 3 min): enter again, it re-sends everyone
@@ -211,6 +220,8 @@ export class MineClient {
     if (res.changed) this.emit({ type: 'state', newFloor: res.newFloor });
     else if (r.me) this.emit({ type: 'state', newFloor: false });
     if (res.bursts.length) this.emit({ type: 'burst', bursts: res.bursts });
+    // site 31.10: the chosen floor's view is drawn — the ride screen goes
+    if (this.riding && res.changed && M.st && +M.st.n === this.riding.f) this.rideEnd();
     if (M.lkWant.size && now - this.lkAt > 5000) { this.lkAt = now; this.T.setTimeout(() => { void this.poll(); }, 50); }
   }
   private setOther(on: boolean): void { if (on !== this.other) { this.other = on; if (on) this.model.want = null; this.emit({ type: 'other', on }); } }
@@ -271,6 +282,7 @@ export class MineClient {
    * GO_MS while walking; `stopped` flushes the final point at once. Same payload as mine.js walkTo.
    */
   moveTo(x: number, y: number, stopped = false): void {
+    if (this.riding) return;   // site rideGo: no walking on the previous floor while the lift goes (the hero stands in the new floor's lift hall)
     this.pos = { x, y };
     if (!this.entered || this.closed) return;
     const s = this.sent; if (s && Math.hypot(x - s.x, y - s.y) < GO_MIN) return;
@@ -456,19 +468,57 @@ export class MineClient {
   readonly oreGone = new OreGone();
   /** When we last rode the lift (site S.rideAt): follow3 waits a minute after it. */
   rideAt = 0;
+  /** The lift goes (site S.ride): floor, its key, the key we came from, when, the entry point. */
+  riding: { f: number; k: string; from: string; at: number; start: Pt } | null = null;
   /**
-   * «Этажи» → floor f: POST /api/mineRide {c: CB, n: f} (site ride). On success returns the key of the mine to open and
-   * the delay (the site re-opens the mine there: the deepest floor is CB, an upper one CB.f), else null.
+   * «Этажи» → floor f (site 31.10 ride / rideGo): POST /api/mineRide {c: CB, n: f}; on success the floor is entered inside the
+   * same mine: C = its key (the deepest floor is CB, an upper one CB.f), POST /api/mine/enter?c=<key> {start, tab} — no leave, the
+   * mine chat is not entered again — and its view is asked every RIDE_POLL_MS (whole, ?c=<key>) until it arrives (event
+   * 'ride' arrived) or RIDE_MS pass (back to the previous floor: enter ?c=<from>, event 'ride' failed). `start` = site spawnPt().
+   * Returns the key ridden to, or null (refused / busy).
    */
-  async ride(f: number): Promise<{ key: string; delay: number; f: number } | null> {
+  async ride(f: number, start: Pt): Promise<string | null> {
     const st = this.model.st, deep = deepOf(st); f = rideFloor(f, deep);
-    if (this.busyOp) return null; this.busyOp = true; this.emit({ type: 'busy' });
+    if (this.busyOp || this.riding || this.closed) return null; this.busyOp = true;
+    // the ride screen at once (the game answers in half a second or a second: the previous floor does not stay under the window)
+    this.emit({ type: 'ride', phase: 'start', f }); this.emit({ type: 'busy' });
     const r = await this.o.api('/api/mineRide', { c: this.cb, n: f });
-    this.busyOp = false; this.emit({ type: 'busy' });
+    this.busyOp = false;
     if (this.closed) return null;
-    if (!r || !r.ok) { this.tip((r && r.error) || 'Лифт не поехал', true); return null; }
-    this.rideAt = this.now(); this.tip(`Лифт едет на этаж ${f}…`);
-    return { key: keyOf(f, deep, this.c), delay: rideDelay(f, deep), f };
+    this.emit({ type: 'busy' });
+    if (!r || !r.ok) { this.emit({ type: 'ride', phase: 'refused', f }); this.tip((r && r.error) || 'Лифт не поехал', true); return null; }
+    this.rideAt = this.now();
+    const k = keyOf(f, deep, this.c);
+    this.rideGo(f, k, start);
+    return k;
+  }
+  /** Site rideGo: the floor of the lift, in the same mine. */
+  private rideGo(f: number, k: string, start: Pt): void {
+    this.riding = { f, k, from: this.c, at: this.now(), start: { x: start.x, y: start.y } };
+    this.model.rideF = f;
+    if (this.goT) { this.T.clearTimeout(this.goT); this.goT = 0; }
+    this.model.want = null; this.qq = [];
+    this.c = k;
+    this.T.clearInterval(this.rideT);
+    this.rideT = this.T.setInterval(() => { if (this.riding) void this.poll(false, true); }, RIDE_POLL_MS);
+    this.T.clearTimeout(this.rideTO);
+    this.rideTO = this.T.setTimeout(() => { if (this.riding) this.rideFail(); }, RIDE_MS);
+    void this.enter(start, false, true);
+  }
+  private rideStop(): void { this.riding = null; this.model.rideF = 0; this.T.clearInterval(this.rideT); this.T.clearTimeout(this.rideTO); this.rideT = 0; this.rideTO = 0; }
+  /** Site rideEnd: the chosen floor is drawn under the ride screen; the screen stays at least RIDE_MIN since the press. */
+  private rideEnd(): void {
+    const R = this.riding; if (!R) return;
+    this.rideStop();
+    this.emit({ type: 'ride', phase: 'arrived', f: R.f, wait: rideHold(R.at, this.now()) });
+  }
+  /** Site rideFail: no view of the chosen floor in RIDE_MS — back on the previous floor (enter it again, no chat). */
+  private rideFail(): void {
+    const R = this.riding; if (!R) return;
+    this.rideStop();
+    this.c = R.from;
+    this.tip('Лифт не доехал — попробуй ещё раз', true);
+    void this.enter(R.start, false, true).then(() => { if (!this.closed) this.emit({ type: 'ride', phase: 'failed', f: R.f }); });
   }
   /** Coins and / or ore heaps (lines [[uid, shards]]) into the lift's collection: POST /api/mineLift {c: CB, coins, lines?}. */
   async liftFund(coins: number, lines?: [string, number][]): Promise<boolean> {
@@ -502,12 +552,14 @@ export class MineClient {
     return this.oreItems().filter((it) => +P[it.res] > 0 && !this.oreGone.has(it.uid, now)).slice(0, max);
   }
   /**
-   * Open another floor key (site open(x, k) after a ride / follow3): leave this one, forget its floor, enter the other
+   * Open another floor key (site open(x, k) after follow3 / F8 back; a lift ride stays in the same mine: ride()): leave this one, forget its floor, enter the other
    * from `start` (the hero is put into the lift hall by the game). Same requests as the site: leave, then enter.
    */
   async switchTo(key: string, start: Pt): Promise<boolean> {
     if (this.closed) return false;
-    key = mineKey(key); if (key === this.c && this.entered) return true;
+    key = mineKey(key);
+    if (this.riding) { const f = this.riding.f; this.rideStop(); this.emit({ type: 'ride', phase: 'failed', f }); }   // the floor is opened anew (F8 back): no ride any more
+    if (key === this.c && this.entered) return true;
     if (this.goT) { this.T.clearTimeout(this.goT); this.goT = 0; }
     this.T.clearInterval(this.pollT); this.T.clearInterval(this.pingT); this.T.clearInterval(this.goneT);
     if (this.entered) { try { void this.o.api('/api/mine/leave' + this.q(), {}); } catch { /* */ } }
@@ -527,6 +579,7 @@ export class MineClient {
     if (this.goT) { this.T.clearTimeout(this.goT); this.goT = 0; }
     this.closed = true;
     this.T.clearInterval(this.pollT); this.T.clearInterval(this.pingT); this.T.clearInterval(this.goneT);
+    this.rideStop();
     for (const u of this.unsubs) { try { u(); } catch { /* */ } }
     this.unsubs = []; this.subs.clear();
     if (this.entered && leave) { try { void this.o.api('/api/mine/leave' + this.q(), {}); } catch { /* */ } }

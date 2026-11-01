@@ -1,6 +1,6 @@
 /**
  * «Шахта 3.0» lift, drill rigs and the player's next step — pure helpers (no DOM, no network, `now` is a parameter).
- * Mirrors the site's mine.js (30.10): ride / liftFund / drillFund / liftHtml / drillHtml / fundBlock / oreAsk / keyOf /
+ * Mirrors the site's mine.js (30.10; ride 31.10: rideGo / rideEnd / rideFail in the same mine): ride / liftFund / drillFund / liftHtml / drillHtml / fundBlock / oreAsk / keyOf /
  * follow3 / tmrDraw, plus our own objective line (what to do next) for the HUD.
  *
  *   keyOf(3, 5, 'home') → 'home.3'   (floors above the deepest are their own site mine «id.floor»; the deepest is «id»)
@@ -19,8 +19,13 @@ export const mineKey = (c: unknown): string => (/^[a-z0-9_-]{1,24}(\.[1-9][0-9]{
 export const deepOf = (st: MineView | null | undefined): number => (st ? st.deep || st.n : 1);
 /** Floor to ride to, clamped to 1…deep (site ride()). */
 export const rideFloor = (f: number, deep: number): number => Math.max(1, Math.min(deep, Math.floor(+f) || 1));
-/** How long after a successful ride the site re-opens the mine (the upper floor's view comes with the next upload). */
-export const rideDelay = (f: number, deep: number): number => (f >= deep ? 300 : 2500);
+/**
+ * Site 31.10 ride in the same mine (rideGo): the ride screen waits at most RIDE_MS for the chosen floor's view (else back to
+ * the previous floor) and stays at least RIDE_MIN on screen (a ride, not a flicker); the floor's view is asked every RIDE_POLL_MS.
+ */
+export const RIDE_MS = 15000, RIDE_MIN = 450, RIDE_POLL_MS = 1500;
+/** How long the ride screen still stays after the floor arrived (site rideEnd: not shorter than RIDE_MIN since the press). */
+export const rideHold = (at: number, now: number): number => Math.max(0, RIDE_MIN - (now - at));
 
 /**
  * Site follow3: the game says the hero is on another floor (me.at — he dug when a new floor opened): open that floor,

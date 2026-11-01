@@ -289,6 +289,8 @@ export class MineModel {
   constructor(public login: string) { this.login = String(login || '').toLowerCase(); }
   /** The next view is another mine key's (a floor switch): accept it whatever its version and treat it as a new floor. */
   fresh = false;
+  /** The lift goes to this floor (site S.ride.f), 0 = no ride: views of other floors are ignored meanwhile. */
+  rideF = 0;
   /**
    * Another floor key is opened (site open() starts with a fresh S): forget who is here and the own stone; the floor on
    * show stays until the new view arrives (the scene keeps drawing it meanwhile). Looks stay.
@@ -303,8 +305,11 @@ export class MineModel {
     const res: TakeResult = { changed: false, newFloor: false, bursts: [] };
     if (me) this.me = me; else if (heroMe) this.me = heroMe;
     if (lk) for (const [l, v] of Object.entries(lk)) this.looks.set(l, v);
+    // site 31.10 ride: while the lift goes, only the chosen floor's view is taken (the view number v is shared by the floors,
+    // so no «late view» check then); another floor's view (the previous one, late) is not drawn
+    if (this.rideF) { if (!st || +st.n !== this.rideF) return res; }
     // late view (poll and SSE interleave) — never roll back
-    if (st && this.st && !this.fresh && st.v < this.st.v && st.v > this.st.v - 500 && st.week === this.st.week) st = null;
+    else if (st && this.st && !this.fresh && st.v < this.st.v && st.v > this.st.v - 500 && st.week === this.st.week) st = null;
     if (!st) return res;
     if (!st.fl) {
       if (this.st && this.st.fl && !this.fresh && this.st.seed === st.seed && this.st.n === st.n) st = { ...st, fl: this.st.fl };
