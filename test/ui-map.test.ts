@@ -22,7 +22,8 @@ describe('map features (metres, true aspect)', () => {
     const mine = F.pins.find((p) => p.id === 'mine')!;
     expect(mine.lower).toBe(true);
     expect(mine.z).toBeGreaterThan(6);
-    expect(F.pins.find((p) => p.id === 'hall')!.soon).toBe(true);
+    expect(F.pins.find((p) => p.id === 'auction')!.soon).toBe(true);
+    expect(F.pins.find((p) => p.id === 'hall')!.soon).toBe(false);   // site 03.11: the Ратуша opens (src/net/site.ts soonOf)
   });
   it('finds the canal, bridges, stairs and the ledge', () => {
     expect(F.water.length).toBeGreaterThanOrEqual(4);

@@ -48,6 +48,15 @@ export function scriptUrls(html, appJs, origin, base) {
     else p = m[1].slice(1) + (p.startsWith('/') ? p : '/' + p);
     if (!/bugreport/.test(p)) out.add(p.replace(/\/\/+/g, '/'));
   }
+  // 02.11: the tabs' scripts are listed in the page as window.LG_SITEF {name: version} and loaded by app.js tabSrc():
+  // '@x.js' → <base>/x.js, '/lib/x.js' as is, 'x.js' / 'q/x.js' → /site/…
+  const sm = /LG_SITEF\s*=\s*\{/.exec(html || '');
+  const lit = sm && braceBlock(html, sm.index);
+  let F = null; if (lit) { try { F = JSON.parse(lit); } catch { F = null; } }
+  if (F && typeof F === 'object') for (const n of Object.keys(F)) {
+    if (!/^[@/]?[\w/.-]+\.js$/.test(n) || /pixi|bugreport/.test(n)) continue;
+    out.add(n[0] === '@' ? `${base}/${n.slice(1)}` : n[0] === '/' ? n : `/site/${n}`);
+  }
   return [...out].map((p) => (p.startsWith('http') ? p : origin + p));
 }
 
@@ -67,8 +76,19 @@ export function cityModuleUrls(html, origin) {
   return ['cityshop', 'citystore', ...bl.map((b) => 'b-' + b)].map((f) => `${origin}/site/${f}.js`);
 }
 
+// Since 02.11 the site serves the game's tab scripts (city.js, quest.js, mine.js…) only to a signed-in visitor (404 «Нет
+// файла» otherwise). L3D_COOKIES=<Netscape cookies.txt> sends that session's cookie with these GETs (read-only; the value is
+// never printed or written anywhere). Without it the gated scripts count as unavailable, not as removed.
+const COOKIE = (() => {
+  const f = process.env.L3D_COOKIES;
+  if (!f) return '';
+  try {
+    return readFileSync(f, 'utf8').split(/\r?\n/).filter((l) => l && !l.startsWith('#') || l.startsWith('#HttpOnly_'))
+      .map((l) => l.split('\t')).filter((p) => p.length >= 7).map((p) => `${p[5]}=${p[6].trim()}`).join('; ');
+  } catch { return ''; }
+})();
 async function get(url) {
-  const r = await fetch(url, { headers: { 'user-agent': 'legion-3d-drift (+https://github.com/)' } });
+  const r = await fetch(url, { headers: { 'user-agent': 'legion-3d-drift (+https://github.com/)', ...(COOKIE ? { cookie: COOKIE } : {}) } });
   if (!r.ok) throw new Error(`${r.status} ${url}`);
   return r.text();
 }

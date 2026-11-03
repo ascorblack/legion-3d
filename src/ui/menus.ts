@@ -2,7 +2,7 @@
 import type { Hero, Item, ApiResult } from '../contracts';
 import { type Ctx, h } from './ctx';
 import {
-  esc, rarOf, SLOT_NAME, WEAR_SLOTS, equipped, deltas, bagCells, catOf, CAT_NAME, CAT_ORDER, hpInfo, xpInfo, stLabel,
+  esc, rarOf, SLOT_NAME, WEAR_SLOTS, equipped, deltas, bagCells, bagLay, layCells, catOf, CAT_NAME, CAT_ORDER, hpInfo, xpInfo, stLabel,
   XS_KEYS, XS_LABEL, XPCT, num, ST_HELP, edible, plainCountdown, timeAgo, coinStyle, CLASS_NAME, roleTitle, type Cell,
 } from './data';
 import { cellHtml, cardHtml, candyCellHtml } from './card';
@@ -303,14 +303,16 @@ export class Menus {
   }
 
   /* ------------------------------------------------------------ Сумка */
+  /** All bag cells; with the free layout (hero.sg.sx) stacks split by hero.sg.bs like the site, so saved keys match. */
+  private bagAll(H: Hero | null): Cell[] { return bagCells(H, H && bagLay(H) ? +(H.sg as any).bs || 20 : 0); }
   private bagCellsFiltered(H: Hero | null): Cell[] {
-    const all = bagCells(H);
+    const all = this.bagAll(H);
     return this.bFilter === 'all' ? all : all.filter((c) => catOf(c.it) === this.bFilter);
   }
   private pBag(): string {
     const H = this.c.host.store.hero;
     if (!H) return this.pEmpty('bag');
-    const all = bagCells(H), cells = this.bagCellsFiltered(H);
+    const all = this.bagAll(H), cells = this.bagCellsFiltered(H);
     const cats = new Map<string, number>(); for (const c of all) cats.set(catOf(c.it), (cats.get(catOf(c.it)) || 0) + c.n);
     if (this.bFilter !== 'all' && !cats.has(this.bFilter)) this.bFilter = 'all';
     const filters = CAT_ORDER.filter((k) => k === 'all' || cats.has(k)).map((k) => `<button type="button" class="fl${k === this.bFilter ? ' on' : ''}" data-act="filter" data-f="${k}">${CAT_NAME[k]}<i>${k === 'all' ? all.reduce((a, c) => a + c.n, 0) : cats.get(k)}</i></button>`).join('');
@@ -320,10 +322,17 @@ export class Menus {
     if (this.bSel && !cells.some((c) => c.uids.includes(this.bSel!))) this.bSel = null;
     if (!this.bSel && cells.length) this.bSel = cells[0].it.uid;
     this.bIdx = cells.findIndex((c) => c.uids.includes(this.bSel || ''));
-    let grid = cells.map((c, i) => cellHtml(c, H, { sel: i === this.bIdx, idx: i })).join('');
-    if (this.bFilter === 'all') grid += candyCellHtml(H);   // site 31.10: the candies' tile after the items (takes no place)
-    const free = this.bFilter === 'all' ? (cap ? Math.max(0, cap - used) : Math.max(0, 28 - cells.length)) : 0;
-    for (let i = 0; i < free; i++) grid += cellHtml(null, H);
+    // site 03.11 (hero.sg.sx): things stay where the player put them (sg.lay.b, inventory.js place) — gaps included
+    const lay = this.bFilter === 'all' ? bagLay(H) : null;
+    let grid: string;
+    if (lay) {
+      grid = layCells(cells, lay, cap).map((c) => { const i = c ? cells.indexOf(c) : -1; return c ? cellHtml(c, H, { sel: i === this.bIdx, idx: i }) : cellHtml(null, H); }).join('') + candyCellHtml(H);
+    } else {
+      grid = cells.map((c, i) => cellHtml(c, H, { sel: i === this.bIdx, idx: i })).join('');
+      if (this.bFilter === 'all') grid += candyCellHtml(H);   // site 31.10: the candies' tile after the items (takes no place)
+      const free = this.bFilter === 'all' ? (cap ? Math.max(0, cap - used) : Math.max(0, 28 - cells.length)) : 0;
+      for (let i = 0; i < free; i++) grid += cellHtml(null, H);
+    }
     const full = sg && used >= cap ? `<p class="note amber">Сумка полна (${used} / ${cap}) — новые вещи не поместятся. Освободи место или отнеси вещи на Склад.</p>` : '';
     const sortBtn = sg && !H.ghost && !H.busy ? `<button type="button" class="btn ghost sm" data-act="sort">⇅ Разложить</button>` : '';
     const sel = cells[this.bIdx];

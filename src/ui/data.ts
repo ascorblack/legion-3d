@@ -137,20 +137,53 @@ export function catOf(it: Item): string {
 export const CAT_NAME: Record<string, string> = { all: 'Всё', ...SLOT_NAME, material: 'Материалы', relic: 'Особое', use: 'Расходники' };
 export const CAT_ORDER = ['all', 'weapon', 'armor', 'shield', 'helmet', 'trinket', 'use', 'material', 'relic'];
 
-/** A bag cell: identical non-wearables stack (same id). */
-export interface Cell { it: Item; uids: string[]; n: number }
-export function bagCells(h: Hero | null): Cell[] {
+/** A bag cell: identical non-wearables stack (same id). `ck` = the n-th stack of that id (only when split by `stack`). */
+export interface Cell { it: Item; uids: string[]; n: number; ck?: number }
+/**
+ * Bag cells. `stack` > 0 splits plain stacks like the site's inventory.js cells() (hero.sg.bs per cell; ore with `qty` and
+ * event items stay one cell) — needed for the free layout below, whose saved keys name the n-th stack.
+ */
+export function bagCells(h: Hero | null, stack = 0): Cell[] {
   if (!h) return [];
   const out: Cell[] = []; const st = new Map<string, Cell>();
   for (const it of h.items) {
     if (it.on) continue;
     if (!it.wearable) {
       const key = it.id + '|' + it.rarity; const c = st.get(key);
-      if (c) { c.uids.push(it.uid); c.n++; continue; }
-      const nc = { it, uids: [it.uid], n: 1 }; st.set(key, nc); out.push(nc);
+      const one = !!(it as any).qty || !!(it as any).event;
+      if (c && (!(stack > 0) || one || c.n < stack)) { c.uids.push(it.uid); c.n++; continue; }
+      const nc: Cell = { it, uids: [it.uid], n: 1 };
+      if (c) nc.ck = (c.ck || 0) + 1;
+      st.set(key, nc); out.push(nc);
     } else out.push({ it, uids: [it.uid], n: 1 });
   }
   return out;
+}
+
+/** inventory.js cellKey (site 03.11): the name a bag position is saved under (POST /api/stLay {box, lay: keys}). */
+export function cellKey(c: Cell): string {
+  const it = c.it as any;
+  return it.qty ? 'q:' + it.id : it.event && !it.wearable ? 'e:' + it.id : it.wearable ? 'u:' + (c.uids[0] ?? it.uid) : 'i:' + it.id + (c.ck ? '*' + c.ck : '');
+}
+/** inventory.js place: cells at their saved positions, the rest fill the gaps in order; null = an empty cell (≥ total long). */
+export function layCells(cs: Cell[], L: readonly unknown[] | null | undefined, total = 0): (Cell | null)[] {
+  const by = new Map(cs.map((c) => [cellKey(c), c] as const)), pos: (Cell | null)[] = [], used = new Set<Cell>();
+  const list = L || [];
+  for (let i = 0; i < list.length; i++) {
+    const c = typeof list[i] === 'string' ? by.get(list[i] as string) : undefined;
+    pos[i] = c && !used.has(c) ? (used.add(c), c) : null;
+  }
+  let j = 0;
+  for (const c of cs) if (!used.has(c)) { while (pos[j]) j++; pos[j] = c; used.add(c); }
+  for (let i = 0; i < Math.max(total || 0, pos.length); i++) if (!pos[i]) pos[i] = null;
+  return pos;
+}
+/** hero.sg.sx (site 03.11): the bag keeps free positions (sg.lay.b) — null when the hero has the classic packed bag. */
+export function bagLay(h: Hero | null): string[] | null {
+  const sg = h && (h.sg as any);
+  if (!sg || !sg.sx) return null;
+  const b = sg.lay && sg.lay.b;
+  return Array.isArray(b) ? b : [];
 }
 
 export function xpInfo(h: Hero): { xin: number; xneed: number | null; pct: number } {

@@ -133,7 +133,7 @@ function buildLayout(hero: Hero | null, town: string, townMetaOf: any, jl = fals
   const buildings: Building[] = (map.BUILDINGS as any[]).filter((b) => !b.hw).map((b) => ({
     ...b,
     title: b.id === 'magic' && ms ? String(hero!.ms) : b.title,
-    soon: !!b.soon && !((b.id === 'auction' && hero?.au) || (b.id === 'storage' && hero?.sg) || (b.id === 'mine' && mn)),
+    ...soonOf(b, !!(hero?.au), !!(hero?.sg), mn),
   }));
   const out: CityLayout = {
     id: 'fair', styleId: st, W: map.W, H: map.H, QW: map.QW, area: map.AREA,
@@ -160,10 +160,19 @@ function townBuildings(list: any[], hero: Hero | null, magicOk: boolean): Buildi
   return list.filter((b) => (!b.magic || magicOk) && (!b.mine || mn)).map((b) => ({
     ...b, door: { ...b.door },
     title: b.id === 'magic' && h.ms ? String(h.ms) : b.title,
-    // a building under construction (b.build, towngen.js buildLeft) is closed like a «soon» one
-    soon: (!!b.soon && !((b.id === 'auction' && h.au) || (b.id === 'storage' && h.sg) || (b.id === 'mine' && mn)))
-      || !!(b.build && safe(() => W.LGTownGen?.buildLeft?.(b, Date.now()), 0)),
+    ...soonOf(b, !!h.au, !!h.sg, mn),
+    // a building under construction (b.build, towngen.js buildLeft) is closed like a «soon» one (city.js buildSay)
+    ...(b.build && safe(() => W.LGTownGen?.buildLeft?.(b, Date.now()), 0) ? { soon: true } : {}),
   }));
+}
+/**
+ * city.js soonB: auction / storage / mine stop being «soon» with the hero's flags. The Ратуша keeps its «скоро» art on
+ * the site but city.js openPanel never checks `soon` and b-hall.js is a real window (treasury, mayor, ore donations,
+ * 03.11) — so it opens here too, drawn with its scaffold (`scaffold`).
+ */
+export function soonOf(b: { id: string; soon?: boolean }, au: boolean, sg: boolean, mn: boolean): { soon: boolean; scaffold?: boolean } {
+  if (b.id === 'hall' && b.soon) return { soon: false, scaffold: true };
+  return { soon: !!b.soon && !((b.id === 'auction' && au) || (b.id === 'storage' && sg) || (b.id === 'mine' && mn)) };
 }
 function buildTownLayout(hero: Hero | null, id: string, meta: any): CityLayout | null {
   // District towns: the site keeps its generated layout private (TOWN.L); towngen.js is deterministic, so the same

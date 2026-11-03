@@ -8,6 +8,7 @@ import jailFx from '../test/fixtures/fair-jail.json';
 import camp from '../test/fixtures/camp-map.json';
 import village from '../test/fixtures/village-map.json';
 import { campScene, villageScene } from '../src/net/town';
+import { soonOf } from '../src/net/site';
 
 /** free / nearest over a walk grid of the fair fixture (cells C px from AREA.y0, 1 = walkable). */
 function fairGrid(G: ArrayLike<number>): Pick<CityLayout, 'free' | 'nearest'> {
@@ -38,7 +39,8 @@ export function fixtureLayout(): CityLayout {
   const { free, nearest } = fairGrid(m.grid.G as number[]);
   return {
     id: 'fair', styleId: 'cats', W: m.W, H: m.H, QW: m.QW, area: m.AREA,
-    obstacles: m.OBST as Obstacle[], buildings: m.BUILDINGS as Building[], low: m.LOW,
+    // the Ратуша opens like on the live page (src/net/site.ts soonOf, site 03.11), drawn with its scaffold
+    obstacles: m.OBST as Obstacle[], buildings: (m.BUILDINGS as Building[]).map((b) => (b.id === 'hall' ? { ...b, ...soonOf(b, false, false, false) } : b)), low: m.LOW,
     sky: 'linear-gradient(#0f0d2a 0%, #1d1a4a 40%, #3a2f6e 75%, #5a3a7a 100%)',
     free, nearest,
   };

@@ -9,7 +9,7 @@ import { Frame, counter, COUNTER_TOP, DAIS } from '../shop/furniture';
 import { hitPlane } from '../common/kit';
 import { bunting, stringLights, wallLamp, potPlant, candle, books, painting, mug, sack, stool, cloth, basket, roundRug, dot, brazier, wallShelf, patternRug } from '../common/decor';
 import { M } from '../../world/batch';
-import { AnvilFx, hookSiteForge } from './anvil';
+import { AnvilFx, hookSiteForge, siteAniOf, siteForgeV3 } from './anvil';
 import { faceTo } from '../common/npc';
 
 export interface DeskBox { x: number; y: number; z: number; w: number; h: number; d: number }
@@ -184,7 +184,8 @@ export const HYBRID_SCENES: Record<string, HybridSpec> = {
   },
   /* ---------------------------------------------------------------- hall: Ратуша */
   hall: {
-    side: 'left', verb: 'Склад Ратуши',
+    // site 03.11 (b-hall.js hall4): the treasury window — drag ore from the bag to «Пожертвовать» / the hall's store
+    side: 'left', verb: 'Казна и склад Ратуши',
     build(R, env) {
       const K = R.kit, P = R.pal, W = 10, D = 9, H = 4.4;
       R.bg = '#18142a';
@@ -230,7 +231,7 @@ export const HYBRID_SCENES: Record<string, HybridSpec> = {
       wallLamp(K, -1.3, 2.4, D / 2, Math.PI, { real: 1 }); wallLamp(K, 1.3, 2.4, D / 2, Math.PI);
       bunting(K, -W / 2 + 0.1, H - 0.2, 0.4, W / 2 - 0.1, H - 0.2, 0.4, 14, ['#a3122a', '#ffcf4a', '#3a6aa8', '#ffffff'], 0.35);
       R.npc({ seed: 'Мастер-строитель', name: 'Мастер-строитель', x: 1.7, z: -D / 2 + 0.95, y: DAIS, face: Math.PI, look: { hat: 'cap', shape: 'box', color: '#c9884a', acc: ['glasses'] },
-        hello: ['Добро пожаловать в Ратушу!', 'Всё, что сдают скупщику шахты, — на нашем складе.'], lines: ['Город растёт — и мы с ним.'], emote: { anim: 'wave', every: 15 } });
+        hello: ['Добро пожаловать в Ратушу!', 'Всё, что сдают скупщику шахты, — на нашем складе.', 'Руда из шахты? Казна примет — перетащи её из сумки.'], lines: ['Город растёт — и мы с ним.', 'На стройки нужна казна.'], emote: { anim: 'wave', every: 15 } });
       R.exitDoor();
       R.spawn = { x: 0.6, z: D / 2 - 0.9, face: 0 };
       return { x: 1.6, y: 0.9, z: -D / 2 + 1.75, w: 2.8, h: 1.8, d: 1.4 };
@@ -469,7 +470,7 @@ export const HYBRID_SCENES: Record<string, HybridSpec> = {
       // the smith works the anvil; the site's real enchant run drives the hammer (hookSiteForge → AnvilFx)
       const smith = R.npc({ seed: 'кузнец', name: 'Кузнец', x: 0.2, z: -2.2, face: Math.atan2(-0.72, -0.2), look: { shape: 'box', color: '#c9884a', hat: 'cap', acc: ['mustache'] }, gear: { w: 'hammer' },
         hello: ['Клади на наковальню — подточим!', 'Звезда — к удаче, сфера — от поломки. Что точим?', 'Горн разогрет. Выбирай вещь!'], lines: ['Тук-тук! Ещё немного…'] });
-      const fx = new AnvilFx({ top: new THREE.Vector3(0.92, 0.87, -1.98), smith, flash: fire, itemModels: env.itemModels || null });
+      const fx = new AnvilFx({ top: new THREE.Vector3(0.92, 0.87, -1.98), smith, flash: fire, itemModels: env.itemModels || null, siteAni: siteAniOf(), siteV3: () => siteForgeV3() });
       R.root.add(fx.root);
       { const base = fire.intensity; R.onUpdate((dt, t) => { fx.update(dt, t); fire.intensity += (base * (0.85 + 0.1 * Math.sin(t * 13) * Math.sin(t * 5.3)) - fire.intensity) * Math.min(1, dt * 3); }); }
       const unhook = hookSiteForge(fx);

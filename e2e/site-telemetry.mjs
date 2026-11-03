@@ -18,8 +18,12 @@ export function fixtureDrift(root = new URL('../.local/', import.meta.url).pathn
   for (let i = dumps.length - 1; i >= 0; i--) {
     const txt = readFileSync(join(root, dumps[i], 'mine.js'), 'utf8');
     if (!txt.includes('function tlPi()')) continue;
-    const fx = readFileSync(FIXTURE, 'utf8').split('\n').filter((l) => l && !l.startsWith('//'));
-    const missing = fx.filter((l) => !txt.includes(l));
+    // since 01.11 the site strips its comments: compare code only (comments and whitespace removed on both sides)
+    const code = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
+    const norm = (l) => l.replace(/\s+/g, '');
+    const site = norm(code(txt));
+    const fx = code(readFileSync(FIXTURE, 'utf8')).split('\n').map(norm).filter(Boolean);
+    const missing = fx.filter((l) => !site.includes(l));
     return { dump: dumps[i], ok: missing.length === 0, missing };
   }
   return null;

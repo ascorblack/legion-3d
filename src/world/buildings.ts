@@ -271,7 +271,7 @@ const auction: BuildFn = (k, b, x0, x1, zf, h) => {
   // gavel ornament on the ridge
   rbox(k, 'wood', P.woodD, (x0 + x1) / 2, bh + 1.6, zf - 1.5, 0.08, 0.6, 0.08);
   rbox(k, 'wood', P.wood, (x0 + x1) / 2, bh + 1.95, zf - 1.5, 0.45, 0.2, 0.2);
-  if (b.soon) scaffolding(k, x0 + 0.2, x1 - 0.2, zf - 0.8, bh);
+  if (b.soon || b.scaffold) scaffolding(k, x0 + 0.2, x1 - 0.2, zf - 0.8, bh);
 };
 
 const trainer: BuildFn = (k, b, x0, x1, zf, h) => {
@@ -605,7 +605,7 @@ export const BUILDING_XF = new WeakMap<Building, { virt: Building; z: (z: number
 export function solidFrontOf(b: Building): number {
   const m = modelOf(b), f = -0.15 + (m.solidFront ?? m.front ?? 0) + 0.3;
   // a «soon» hall has the scaffolding in front (its solid reaches 1.05 m out, scaffolding())
-  return b.soon && b.id === 'hall' ? Math.max(f, -0.15 + 1.05) : f;
+  return (b.soon || b.scaffold) && b.id === 'hall' ? Math.max(f, -0.15 + 1.05) : f;
 }
 
 export function buildBuilding(k: Ctx, b: Building): void {
@@ -632,7 +632,7 @@ export function buildBuilding(k: Ctx, b: Building): void {
     k.colliders.push(x0, x1, 0, h + 2.5, zf - 5, Math.max(front, solid));
     (k.solids ||= []).push(x0, x1, zf - 6, solid, Infinity);
   }
-  if (b.soon && (b.id === 'hall')) scaffolding(k, x0 + 1.2, x1, zf, Math.min(h * 0.62, 4));
+  if ((b.soon || b.scaffold) && (b.id === 'hall')) scaffolding(k, x0 + 1.2, x1, zf, Math.min(h * 0.62, 4));
 }
 
 /**

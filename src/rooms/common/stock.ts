@@ -107,7 +107,7 @@ export function standsOf(s: ShopStock | null): StockStand[] {
 export interface PriceEnv {
   hero: Hero | null;
   /** /api/me .ench (coins for materials). */
-  ench?: { coins?: { star?: number; sphere?: number } } | null;
+  ench?: { coins?: { star?: number; sphere?: number }; out?: boolean } | null;
   /** Foreign district town: price multiplier (>1) and the best deals locked. 1 = own city. */
   foreignK?: number;
   /** District town id (sent as `town` with /api/cityBuy). */
@@ -169,8 +169,13 @@ const pts = (n: number) => (+n || 0).toLocaleString('ru-RU');
 export function offerOf(it: StockItem, b: string, env: PriceEnv): Offer {
   const h = env.hero, name = it.name, k = thK(h), fk = env.foreignK || 1;
   const base: Offer = { kind: 'points', coins: 0, points: +(it.price || 0) || 0, can: false, why: '', poor: false, req: null, okText: '', note: '', rank: it.rank ? String(it.rank) : '', thief: k, foreign: fk };
+  // site buyAsk / popHtml (re-checked 03.11): the foreign-town lock comes first, then «закончились»
   if (lockedHere(it, env)) {
     return { ...base, kind: 'locked', note: 'Этот округ не принадлежит каналу: лучшие вещи торговец бережёт для своих. Захватите округ на стриме — откроется всё и по обычной цене.' };
+  }
+  // site 02.11 (cityshop.js buyAsk): enchant materials can run out (item.out or /api/me .ench.out) — «закончились», no buy
+  if (it.mat && ((it as any).out || (env.ench && env.ench.out))) {
+    return { ...base, kind: 'mat', note: `«${name}» — закончились. Скоро завезут. Звёзды и сферы сейчас можно найти в походе, в шахте и в наградах.`, why: 'Закончились' };
   }
   const c = coinsFor(it, env);
   const can = !!h && (it.mat ? !!(h.ef && c) : csOn(h) && c > 0);

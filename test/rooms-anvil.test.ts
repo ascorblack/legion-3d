@@ -121,3 +121,68 @@ describe('anvil: AnvilFx state machine', () => {
     fx.dispose();
   });
 });
+
+describe('anvil: site 03.11 forge v3 scene (LGCity.anvil.ani)', () => {
+  it('aniBeat maps the site steps', async () => {
+    const { aniBeat } = await import('../src/rooms/hybrid/anvil');
+    expect(aniBeat('', 'in', true)).toBe(null);
+    expect(aniBeat('in', 'heat', true)).toBe('heat');
+    expect(aniBeat('heat', 'hit1', true)).toBe('hit');
+    expect(aniBeat('hit1', 'hit1', true)).toBe(null);
+    expect(aniBeat('hit3', 'quench', true)).toBe(null);
+    expect(aniBeat('tense', 'r-up', true)).toBe('show');
+    expect(aniBeat('hit2', '', false)).toBe('show');   // «Пропустить» / finished
+  });
+  it('siteAniOf reads LGCity.anvil.ani lazily and never throws', async () => {
+    const { siteAniOf, siteForgeV3 } = await import('../src/rooms/hybrid/anvil');
+    const win: any = {};
+    const read = siteAniOf(win);
+    expect(read()).toBe(null);
+    win.LGCity = { anvil: { ani: () => ({ on: true, kind: 'magic', step: 'rise' }) } };
+    expect(read()).toEqual({ on: true, kind: 'magic', step: 'rise' });
+    win.LGCity.anvil.ani = () => { throw new Error('x'); };
+    expect(read()).toBe(null);
+    expect(siteForgeV3({ querySelector: () => ({}) })).toBe(true);
+    expect(siteForgeV3({ querySelector: () => null })).toBe(false);
+  });
+  it('v3: no blows while waiting; after the result it follows the site (3 blows, result at r-*)', async () => {
+    const { AnvilFx } = await import('../src/rooms/hybrid/anvil');
+    const smith = fakeSmith();
+    const site = { on: false, kind: 'metal', step: '' };
+    const fx = new AnvilFx({ top: new THREE.Vector3(0, 0.9, 0), smith: smith as any, siteAni: () => ({ ...site }), siteV3: () => true });
+    let t = 0; const step = (s: number) => { for (let i = 0; i < Math.round(s / 0.02); i++) { t += 0.02; fx.update(0.02, t); } };
+    step(0.3);
+    fx.start({ id: 'gladius', slot: 'weapon', rarity: 'rare', name: 'Гладиус' }, 5);
+    step(2);
+    expect(fx.struck).toBe(0);
+    expect(fx.state).toBe('wait');
+    site.on = true; site.step = 'in';
+    fx.fx({ op: 'enchant', out: 'up', to: 5 });
+    expect(fx.follow).toBe(true);
+    for (const s of ['heat', 'hit1', 'hit2', 'hit3', 'quench']) { site.step = s; step(0.3); }
+    expect(fx.struck).toBe(3);
+    expect(fx.shown).toBe(null);   // the site is still animating: no spoiler
+    site.step = 'r-up'; step(0.2);
+    expect(fx.shown).toBe('ok');
+    expect(fx.follow).toBe(false);
+    fx.dispose();
+  });
+  it('v3 skipped («Пропустить» or the skip setting): the result shows at once', async () => {
+    const { AnvilFx } = await import('../src/rooms/hybrid/anvil');
+    const site = { on: true, kind: 'magic', step: 'rise' };
+    const fx = new AnvilFx({ top: new THREE.Vector3(0, 0.9, 0), smith: fakeSmith() as any, siteAni: () => ({ ...site }), siteV3: () => true });
+    let t = 0; const step = (s: number) => { for (let i = 0; i < Math.round(s / 0.02); i++) { t += 0.02; fx.update(0.02, t); } };
+    fx.start(null, 3); step(0.5);
+    fx.fx({ out: 'broken' });
+    site.step = 'hit1'; step(0.2);
+    expect(fx.struck).toBe(1);
+    site.on = false; site.step = ''; step(0.2);
+    expect(fx.shown).toBe('bad');
+    // no scene at all (skip setting): shown right away
+    const fx2 = new AnvilFx({ top: new THREE.Vector3(0, 0.9, 0), smith: fakeSmith() as any, siteAni: () => ({ on: false }), siteV3: () => true });
+    fx2.start(null, 3); fx2.update(0.02, 1);
+    fx2.fx({ out: 'up', to: 3 });
+    expect(fx2.shown).toBe('ok');
+    fx.dispose(); fx2.dispose();
+  });
+});

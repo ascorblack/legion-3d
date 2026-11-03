@@ -626,6 +626,27 @@
       "re": "function homePick\\(hm\\) \\{[\\s\\S]{0,80}return \\{ id: String\\(hm\\.id\\) \\}",
       "severity": "degrade",
       "why": "30.10 (E2): the server puts the camp into hm.id ('camp'); hm.camp no longer redirects a district home (src/net/town.ts detectTown / fairGone)"
+    },
+    {
+      "id": "LGCity.anvil.ani (forge v3 scene)",
+      "file": "city.js",
+      "re": "anvil: \\{[\\s\\S]{0,600}\\bani: \\(\\) => \\{[\\s\\S]{0,80}return \\{ on: A\\.on, kind: A\\.kind, step: A\\.step \\}",
+      "severity": "degrade",
+      "why": "03.11: the forge window v3 plays its own enchant scene after the result; the 3D anvil follows its steps (src/rooms/hybrid/anvil.ts siteAniOf / aniBeat) and waits while it runs (`.cyf-wrap.cyf-v3`)"
+    },
+    {
+      "id": "inventory.js cellKey / place (free bag layout)",
+      "file": "inventory.js",
+      "re": "function cellKey\\(c\\) \\{[\\s\\S]{0,400}function place\\(cs, L, total\\)",
+      "severity": "degrade",
+      "why": "03.11 hero.sg.sx: bag positions saved as cell keys (sg.lay.b, POST /api/stLay); the native bag (src/ui/menus.ts) lays its cells out with a port (src/ui/data.ts cellKey / layCells)"
+    },
+    {
+      "id": "Ратуша opens despite «soon» (b-hall.js)",
+      "file": "b-hall.js",
+      "re": "/api/mine/hall\\?c=",
+      "severity": "degrade",
+      "why": "the hall stays «soon» in citymap.js but city.js openPanel never checks soon and b-hall.js is a real window — src/net/site.ts soonOf lets E open it (hybrid room 'hall')"
     }
   ]
 }

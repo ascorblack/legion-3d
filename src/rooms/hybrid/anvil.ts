@@ -12,6 +12,10 @@
  * level, 0.62 s apart), every blow throws sparks, flashes the hearth light and makes the item glow brighter; then the
  * result: success → golden burst + rising sparkles + «+N»; broken → grey smoke puff, the item vanishes; failed / saved
  * by a sphere → a blue-grey puff with «Цела» / «−1». Idle: the smith taps the anvil now and then with small sparks.
+ * Site 03.11 (b-forge.js v3, hero.av: anvil + «Усилитель» cells): the site no longer strikes while the order is on the way;
+ * after the result it plays its own scene (in → boost → heat / rise → hit1…3 → quench → tense → r-<out>, «Пропустить»),
+ * exposed as LGCity.anvil.ani() = { on, kind, step }. With that window open AnvilFx waits instead of striking, then
+ * follows the site's steps (a blow per hitN — a magic pulse for kind 'magic', the result at r-* or when it is skipped).
  * No allocations per frame (fixed particle pools). Sprites and particle systems stay `visible` (opacity 0 / parked
  * below the floor) so their shaders compile with the room, not with the first blow (no hitch mid-animation).
  */
@@ -55,6 +59,28 @@ export function hookSiteForge(sink: ForgeSink, win: any = typeof window !== 'und
   };
 }
 
+/** The site's v3 enchant scene state (city.js LGCity.anvil.ani(), 03.11). */
+export interface SiteAni { on: boolean; kind?: string; step?: string }
+/** Reader of LGCity.anvil.ani() resolved on every call (null: no such hook / it threw). */
+export function siteAniOf(win: any = typeof window !== 'undefined' ? window : null): () => SiteAni | null {
+  return () => {
+    try { const A = win && win.LGCity && win.LGCity.anvil; return A && typeof A.ani === 'function' ? (A.ani() as SiteAni) || null : null; } catch { return null; }
+  };
+}
+/** The site's forge window is v3 (b-forge.js `.cyf-wrap.cyf-v3`): it does not strike while waiting for the result. */
+export const siteForgeV3 = (doc: any = typeof document !== 'undefined' ? document : null): boolean => {
+  try { return !!(doc && doc.querySelector('.cyf-wrap.cyf-v3')); } catch { return false; }
+};
+/** What the 3D anvil does on a step of the site's scene: a blow, the heat-up, the result (also when it stops / is skipped). */
+export function aniBeat(prev: string, step: string, on: boolean): 'hit' | 'heat' | 'show' | null {
+  if (!on) return 'show';
+  if (step === prev) return null;
+  if (/^hit\d$/.test(step)) return 'hit';
+  if (step.startsWith('r-')) return 'show';
+  if (step === 'heat' || step === 'rise' || step === 'boost') return 'heat';
+  return null;
+}
+
 /** Blows per run like the site (city.js FX.start): 2 up to +3, 3 up to +6, 4 up to +10, else 5. */
 export const blowsFor = (tg: number): number => (tg <= 3 ? 2 : tg <= 6 ? 3 : tg <= 10 ? 4 : 5);
 export const BEAT = 0.62;
@@ -73,6 +99,10 @@ export interface AnvilFxOpts {
   flash?: THREE.PointLight | null;
   itemModels?: Registry<ItemModelFactory> | null;
   reduceMotion?: boolean;
+  /** The site's v3 scene (siteAniOf()); absent → the classic rhythm only. */
+  siteAni?: (() => SiteAni | null) | null;
+  /** The site's forge window is v3 (siteForgeV3): no blows while the order is on the way. */
+  siteV3?: (() => boolean) | null;
 }
 
 export class AnvilFx {
@@ -86,6 +116,9 @@ export class AnvilFx {
   private now = 0;
   private nextBlow = 0; private impactAt = -1; private impactBig = false; private doneAt = 0; private resultUntil = 0;
   private nextIdle = 2;
+  /** Following the site's v3 scene (tests, debug). */
+  follow = false;
+  private aniStep = ''; private aniKind = 'metal'; private pollAt = 0;
   private glowK = 0; private glowTarget = 0; private glowStep = 0;
   private item: THREE.Object3D | null = null;
   private itemY = 0; private bounce = 0;
@@ -139,21 +172,30 @@ export class AnvilFx {
   /** forgeStart(item, target level): put the item on the anvil and start the blows. */
   start(it: unknown, tg: number): void {
     this.setItem(it);
-    this.left = blowsFor(tg); this.struck = 0;
+    this.follow = false;
+    // v3 window: the site waits silently for the result and animates after it (fx → follow)
+    this.left = this.o.siteV3 && this.o.siteV3() ? 0 : blowsFor(tg); this.struck = 0;
     this.state = 'work'; this.result = null; this.shown = null;
     this.nextBlow = this.now + 0.1; this.impactAt = -1;
     this.glowK = this.glowTarget = Math.min(1, 0.15 + (tg - 1) / 15 * 0.85) * 0.6;
-    this.glowStep = 0.5 / this.left;
+    this.glowStep = 0.5 / Math.max(1, this.left);
+    this.doneAt = this.now;
     this.o.smith.say(['Тук-тук! Держись, железо…', 'Звезду на удачу — и бьём!', 'Сейчас посмотрим, выдержит ли.'][Math.floor(Math.random() * 3)], this.now, 3500);
   }
   /** forgeFx(x): the result; shown after the blows (or at once when they are over). */
   fx(x: ForgeResult): void {
     this.result = x;
+    const a = this.o.siteAni ? this.o.siteAni() : null;
+    if (a && a.on) {   // the site's v3 scene runs: follow its steps (no own blows any more)
+      this.follow = true; this.aniStep = ''; this.aniKind = a.kind || 'metal'; this.pollAt = this.now;
+      this.left = 0; this.impactAt = -1; this.state = 'wait';
+      return;
+    }
     if (this.state !== 'work') this.show(x);
   }
   /** forgeCancel(): stop striking, the item stays on the anvil. */
   cancel(): void {
-    this.state = 'idle'; this.left = 0; this.result = null; this.impactAt = -1;
+    this.state = 'idle'; this.left = 0; this.result = null; this.impactAt = -1; this.follow = false;
     this.glowTarget = 0;
     this.nextIdle = this.now + IDLE_EVERY;
   }
@@ -162,6 +204,7 @@ export class AnvilFx {
   update(dt: number, t: number): void {
     this.now = t;
     const S = this.o.smith;
+    if (this.follow && t >= this.pollAt) this.followStep(t);
     if (this.state === 'work') {
       if (this.left > 0 && t >= this.nextBlow) {
         S.av.play('swing'); this.impactAt = t + IMPACT; this.impactBig = true;
@@ -204,6 +247,24 @@ export class AnvilFx {
     this.stepParticles(dt);
   }
 
+  /** Poll the site's scene (10 Hz — ani() returns a fresh object) and mirror its step. */
+  private followStep(t: number): void {
+    this.pollAt = t + 0.1;
+    const a = this.o.siteAni ? this.o.siteAni() : null, on = !!(a && a.on), step = on ? String(a!.step || '') : '';
+    if (a && a.kind) this.aniKind = a.kind;
+    const b = aniBeat(this.aniStep, step, on);
+    this.aniStep = step;
+    if (b === 'hit') {
+      this.struck++;
+      if (this.aniKind === 'magic') {   // the site raises magic things with runes: a pulse, no hammer
+        const T = this.o.top;
+        this.emitSparks(16, T.x, T.y + 0.12, T.z, 1.8, '#c9b3ff', true);
+        this.light.intensity = 4; this.glowTarget = Math.min(1.4, this.glowTarget + 0.15); this.bounce = 0.04;
+      } else { this.o.smith.av.play('swing'); this.impactAt = t + IMPACT; this.impactBig = true; }
+    } else if (b === 'heat') this.glowTarget = Math.max(this.glowTarget, 0.55);
+    else if (b === 'show') { this.follow = false; if (this.result) this.show(this.result); else this.state = 'idle'; }
+  }
+
   /* ------------------------------------------------------------ effects */
   private impact(big: boolean): void {
     const T = this.o.top;
@@ -215,6 +276,7 @@ export class AnvilFx {
   }
   private show(x: ForgeResult): void {
     const T = this.o.top, S = this.o.smith;
+    this.follow = false;
     this.state = 'result'; this.resultUntil = this.now + 3.2;
     const out = x.out;
     if (out === 'up') {

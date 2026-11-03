@@ -105,6 +105,9 @@ export interface Building {
   soon?: boolean; fair?: boolean; mine?: boolean; magic?: boolean;
   /** «Тюрьма и клетка» (site 30.10, citymap.js BUILDINGS jail): you cannot enter it — E opens the site's Jail window. */
   jail?: boolean;
+  /** Drawn under construction (the site's art keeps the «скоро» plank / scaffold) although it opens: the Ратуша — city.js
+   *  openPanel never checks `soon`, and b-hall.js is a real window (treasury, mayor, «Пожертвовать» ore, 03.11). */
+  scaffold?: boolean;
 }
 
 /** The jail on the lower street (site citymap.js LOW.jail, 30.10; 31.10 moved beyond the canal, by the lower fence):
