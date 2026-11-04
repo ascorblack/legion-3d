@@ -487,7 +487,7 @@ function placeItem(k: Ctx, sc: FairCatsScene, it: FcItem, G: (x: number, y: numb
       for (const h of [0.35, 0.65]) rbox(k, 'wood', P.wood, (X + X2) / 2, g + h + hj, (Z + Z2) / 2, len, 0.07, 0.04, -Math.atan2(Z2 - Z, X2 - X), 0, 0, 0.5);
       break;
     }
-    case 'dummy': k.inst.add('dummy', X, g, toZ(y - 6), 0, 0.9); break;
+    case 'dummy': k.inst.add(VK.dummy, X, g, toZ(y - 6), 0, 0.9); break;   // the site's ellipse (OBST) is its solid
     case 'target': {
       cyl(k, 'wood', P.woodD, X - 0.25, g, Z, 0.04, 1.0, 8, 0.5); cyl(k, 'wood', P.woodD, X + 0.25, g, Z, 0.04, 1.0, 8, 0.5);
       for (const [r, c, dz] of [[0.42, '#f0e6d0', 0], [0.3, '#c8402a', 0.012], [0.16, '#f0e6d0', 0.024], [0.07, '#c8402a', 0.036]] as [number, string, number][])

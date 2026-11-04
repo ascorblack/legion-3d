@@ -117,6 +117,15 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
     };
     const ctl = createPlayerController(citySpace(world), undefined, { runMult: 1.35 });
     ctl.teleport(start[0], start[1]);
+    // the site's walk speed (px/s along x): 230 on the old fair, 260 on the new one when this 3D was tuned; 04.11 the
+    // site sped both up ×1.5 — follow it (the server allows what the site walks; other players move at that pace)
+    const siteWalk = () => {
+      const W = window as any, fc = W.LGFairCats, cm = W.LGCityMap;
+      const r = fc && cityIsFc() && +fc.SPEED > 0 ? +fc.SPEED / 260 : cm && +cm.SPEED > 0 ? +cm.SPEED / 230 : 1;
+      return 2.3 * Math.max(0.6, Math.min(2.5, r));
+    };
+    const cityIsFc = () => { try { return !!document.querySelector('.cy[data-town="fairc"]'); } catch { return false; } };
+    ctl.setWalk(siteWalk());
     const meAv = kit.create(me.app);
     engine.scene.add(meAv.root);
     // jumping: camera dip on landing; avatar animations (Avatar.play falls back for names it does not know)
@@ -315,6 +324,7 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
       engine.scene.remove(world.root); world.dispose(); world = nw; engine.scene.add(world.root);
       world.root.visible = !state.inRoom;
       if (!state.inRoom) { ctl.setSpace(citySpace(world, L), 'px', { x: ctl.x, y: ctl.y }); cityCamera(); }
+      ctl.setWalk(siteWalk());
       for (const f of [...worldFns]) { try { f(world); } catch (e) { console.error('[l3d] world listener', e); } }
     });
 

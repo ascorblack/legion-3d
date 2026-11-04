@@ -95,6 +95,8 @@ export interface PlayerControllerEx extends PlayerController {
   readonly vx: number; readonly vz: number;
   /** True while auto-walking (walkTo). */
   readonly walking: boolean;
+  /** Change the walk speed (m/s; run keeps its multiplier) — the site's SPEED can change with an update. */
+  setWalk(mps: number): void;
   /** Current space and its units. */
   readonly space: WalkSpace;
   readonly units: SpaceUnits;
@@ -144,8 +146,9 @@ export function createPlayerController(
   groundAt?: (x: number, y: number) => number,
   opts: PlayerOptions = {},
 ): PlayerControllerEx {
-  const WALK = opts.walk ?? 2.3;
-  const RUN = WALK * (opts.runMult ?? 2);
+  let WALK = opts.walk ?? 2.3;
+  const RUNK = opts.runMult ?? 2;
+  let RUN = WALK * RUNK;
   const ACC = opts.accel ?? 10;
   const DEC = opts.decel ?? 14;
   const R = opts.radius ?? 0.08;
@@ -376,6 +379,7 @@ export function createPlayerController(
     get vx() { return vx; },
     get vz() { return vz; },
     get walking() { return path !== null; },
+    setWalk(mps: number) { if (Number.isFinite(mps) && mps > 0.5 && mps < 12) { WALK = mps; RUN = WALK * RUNK; } },
     get space() { return space; },
     get units() { return units; },
     get flying() { return flyH !== null; },

@@ -346,7 +346,7 @@ export function propKind(p: Pick<VillageProp, 'k' | 'tall' | 'foot'>): string {
 }
 
 /** Village aliases of the repeated prop kinds (instancer.ts alias: the same parts, no PROP_SOLID entry — solid.ts). */
-export const VK = { tree: 'v:tree', bush: 'v:bush', lamp: 'v:lamp', barrel: 'v:barrel', crate: 'v:crate', bed: 'v:bed', fence: 'v:fence' } as const;
+export const VK = { tree: 'v:tree', bush: 'v:bush', lamp: 'v:lamp', barrel: 'v:barrel', crate: 'v:crate', bed: 'v:bed', fence: 'v:fence', dummy: 'v:dummy' } as const;
 
 /** Solid of a prop on the site's footprint (px half-axes) — the inscribed box (−10 %), never bigger than the site's ellipse. */
 function footSolid(k: Ctx, p: VillageProp, top: number): void {
