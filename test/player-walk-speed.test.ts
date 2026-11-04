@@ -4,7 +4,7 @@ import { createPlayerController } from '../src/engine/player';
 
 const layout: CityLayout = {
   id: 't', styleId: 'cats', W: 9000, H: 4000, QW: 0, area: { x0: 0, x1: 9000, y0: 0, y1: 4000 },
-  obstacles: [], buildings: [], free: () => true, nearest: (x, y) => [x, y],
+  obstacles: [], buildings: [], free: () => true, nearest: (x: number, y: number) => [x, y],
 } as any;
 const go = { move: { x: 1, y: 0 }, run: false, jump: false } as any;
 const walk = (mps?: number) => {
