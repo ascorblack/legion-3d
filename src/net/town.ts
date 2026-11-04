@@ -11,6 +11,8 @@
  *                                        the server says 'camp' there for a channel in the Prologue — city.js homePick),
  *                                        hm.camp / cp (start camp «Перепутье» is open);
  *   6. a prisoner of the channel's jail (/api/me `jail`, 30.10) is always on the fair, by the cage.
+ * The new cats fair (site 04.11, `fairc`, src/net/faircats.ts): the City DOM says `data-town="fairc"` (city.js buildCats); without
+ * a built City (the fair being prepared) the fair counts as the new one when /api/me has `fc` and fc-city.js is loaded.
  */
 export const CAMP = 'camp';
 export const FAIR = 'fair';
@@ -25,8 +27,12 @@ export interface TownSignals {
   hero?: HeroTownFlags | null;
   /** The hero is a prisoner (/api/me `jail`): city.js keeps him on the fair (TOWN = fair). */
   jailed?: boolean;
+  /** /api/me `fc` (the new cats fair is on for this hero) and its scripts are loaded (window.LGFairCatsCity). */
+  fc?: boolean;
 }
 export type TownSource = 'where' | 'dom' | 'picker' | 'session' | 'hero' | 'jail' | 'default';
+/** The new cats fair (city.js buildCats: `.cy[data-town="fairc"]`). */
+export const FAIRC = 'fairc';
 
 /** city.js fairGone(): the channel drew its home district — fair and camp are closed for it. Since 30.10 (E2) hm.camp no
  *  longer keeps them open: the server puts the camp into hm.id ('camp') itself. */
@@ -40,8 +46,17 @@ export const campOpen = (h?: HeroTownFlags | null): boolean => !!(h && (h.cp || 
 
 const clean = (v: unknown): string | null => (typeof v === 'string' && /^[\w-]{1,40}$/.test(v) ? v : null);
 
-/** The current town id from whatever the page shows, strongest signal first. */
+/** The current town id from whatever the page shows, strongest signal first. 'fairc' = the new cats fair. */
 export function detectTown(s: TownSignals): { id: string; via: TownSource } {
+  const t = detectTown0(s);
+  if (t.id !== FAIR) return t;
+  // LGCity.where() is back (04.11) but says 'fair' for both fairs (TOWN.id): the City DOM tells them apart
+  // (city.js buildCats: data-town="fairc"; the old fair has none — FC_OFF / SVG / town_closed)
+  if (s.dom !== undefined && s.dom !== null) return s.dom === FAIRC ? { id: FAIRC, via: 'dom' } : t;
+  // no City DOM yet (the fair being built): the new fair when the hero has it and its scripts are there (city.js fcWant)
+  return s.fc ? { id: FAIRC, via: t.via } : t;
+}
+function detectTown0(s: TownSignals): { id: string; via: TownSource } {
   const w = clean(s.where); if (w) return { id: w, via: 'where' };
   if (s.dom !== undefined && s.dom !== null) return { id: clean(s.dom) || FAIR, via: 'dom' };
   // city.js open() 30.10: a prisoner is only on the fair, by the cage
@@ -57,7 +72,7 @@ export function detectTown(s: TownSignals): { id: string; via: TownSource } {
 }
 
 /** Read the signals from a page (browser only). */
-export function readTownSignals(win: any, doc: Document, hero: HeroTownFlags | null): TownSignals {
+export function readTownSignals(win: any, doc: Document, hero: HeroTownFlags | null, fc = false): TownSignals {
   let where: string | null = null;
   try { const f = win.LGCity?.where; if (typeof f === 'function') where = f()?.id ?? null; } catch { /* none */ }
   const cy = doc.querySelector<HTMLElement>('#tab-city .cy');
@@ -65,7 +80,8 @@ export function readTownSignals(win: any, doc: Document, hero: HeroTownFlags | n
   const picker = doc.querySelector<HTMLElement>('#tab-city .cy-tp [data-town][aria-current="true"]')?.dataset.town ?? null;
   let session: string | null = null;
   try { session = win.sessionStorage?.getItem('lgCityTown') ?? null; } catch { /* blocked */ }
-  return { where, dom, picker, session, hero };
+  let fcOk = false; try { fcOk = fc && !!win.LGFairCatsCity; } catch { /* none */ }
+  return { where, dom, picker, session, hero, fc: fcOk };
 }
 
 /** city.js townMeta(): finished constructions become levels, the rest stay in `building`. */

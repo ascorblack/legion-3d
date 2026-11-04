@@ -7,6 +7,8 @@ import map from '../test/fixtures/fair-map.json';
 import jailFx from '../test/fixtures/fair-jail.json';
 import camp from '../test/fixtures/camp-map.json';
 import village from '../test/fixtures/village-map.json';
+import faircats from '../test/fixtures/faircats-map.json';
+import { fairCatsScene, fairCatsBuildings, fairCatsLayout, type FairCatsLayout, type FcSiteMap } from '../src/net/faircats';
 import { campScene, villageScene } from '../src/net/town';
 import { soonOf } from '../src/net/site';
 
@@ -146,4 +148,70 @@ export function withJail(L: CityLayout): CityLayout {
     low: { ...L.low!, benches: fx.benches, decor: fx.decor, jail: { ...J, door: [...J.door] as [number, number], seats: J.seats.map((s) => [...s] as [number, number]), walk: [...J.walk!] as [number, number, number, number] } },
     free, nearest,
   };
+}
+
+/**
+ * The new cats fair (site 04.11, hero flag me.fc; test/fixtures/faircats-map.json, scripts/fixture-faircats.mjs from the
+ * site's fc-map.js): the same layout the extension builds from window.LGFairCats / LGFairCatsCity at runtime
+ * (src/net/site.ts buildFairCatsLayout) — the walk grid's levels (0 blocked, 1 town, 2 plateau, 3 stairs), free / nearest /
+ * clear / path with the site's level rule (a step changes level only over stairs), the old fair's titles (fc-city.js meta).
+ * `?fc=1` in dist-dev/game.html and dist-dev/world.html.
+ */
+export function fairCatsFixtureMap(o: { jail?: boolean; magic?: boolean } = {}): FcSiteMap & { G: Uint8Array; C: number; cols: number; rows: number } {
+  const m = faircats as any;
+  const { C, cols, rows } = m.grid as { C: number; cols: number; rows: number };
+  const G = new Uint8Array(cols * rows);
+  const src: string = m.grid.G;
+  for (let i = 0; i < G.length; i++) G[i] = src.charCodeAt(i) - 48;
+  if (o.jail) for (const [i, n, v] of m.grid.jailPatch as [number, number, number][]) for (let j = 0; j < n; j++) G[i + j] = v;
+  const lv = (x: number, y: number) => { const c = Math.floor(x / C), r = Math.floor(y / C); return c >= 0 && r >= 0 && c < cols && r < rows ? G[r * cols + c] : 0; };
+  const compat = (a: number, b: number) => a === b || a === 3 || b === 3;
+  const free = (x: number, y: number) => lv(x, y) > 0;
+  const clear = (a: [number, number], b: [number, number]) => {
+    let lp = lv(a[0], a[1]); if (!lp) return false;
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(d / 4));
+    for (let i = 1; i <= n; i++) { const t = i / n, l = lv(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t); if (!l || !compat(lp, l)) return false; lp = l; }
+    return true;
+  };
+  const nearest = (x: number, y: number): [number, number] => {
+    if (free(x, y)) return [Math.round(x), Math.round(y)];
+    const c0 = Math.floor(x / C), r0 = Math.floor(y / C);
+    for (let d = 1; d < 80; d++) for (let r = r0 - d; r <= r0 + d; r++) for (let c = c0 - d; c <= c0 + d; c++) {
+      if (Math.max(Math.abs(c - c0), Math.abs(r - r0)) !== d) continue;
+      if (c >= 0 && r >= 0 && c < cols && r < rows && G[r * cols + c]) return [c * C + C / 2, r * C + C / 2];
+    }
+    return [m.home.x, m.home.y];
+  };
+  const path = (a: [number, number], b: [number, number]): [number, number][] => {
+    const A = nearest(a[0], a[1]), B = nearest(b[0], b[1]);
+    if (clear(A, B)) return [A, B];
+    const s = Math.floor(A[1] / C) * cols + Math.floor(A[0] / C), t = Math.floor(B[1] / C) * cols + Math.floor(B[0] / C);
+    const prev = new Int32Array(cols * rows).fill(-1); prev[s] = s;
+    const q = [s];
+    for (let i = 0; i < q.length && prev[t] < 0; i++) {
+      const u = q[i], c = u % cols, r = (u / cols) | 0;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr, v = nr * cols + nc;
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows || !G[v] || prev[v] >= 0 || !compat(G[u], G[v])) continue;
+        prev[v] = u; q.push(v);
+      }
+    }
+    if (prev[t] < 0) return [A];
+    const out: [number, number][] = [];
+    for (let u = t; u !== s; u = prev[u]) out.push([(u % cols) * C + C / 2, ((u / cols) | 0) * C + C / 2]);
+    out.push(A); out.reverse();
+    const pts = out.filter((_, i) => i === 0 || i === out.length - 1 || i % 3 === 0);
+    pts[pts.length - 1] = B;   // ends on the goal itself, not its cell centre
+    return pts;
+  };
+  return { W: m.W, H: m.H, OBST: m.OBST, BUILDINGS: [], free, nearest, clear, path, levelAt: lv, G, C, cols, rows };
+}
+export function fairCatsFixtureLayout(o: { styleId?: string; jail?: boolean; magic?: boolean } = {}): FairCatsLayout {
+  const sc = fairCatsScene(faircats)!;
+  const meta = (id: string) => (map as any).BUILDINGS.find((b: any) => b.id === id) || null;
+  const blds = fairCatsBuildings(sc, meta, { jail: !!o.jail, magic: !!o.magic }).map((b) => ({ ...b, ...soonOf(b, false, false, false) }));
+  const fm = fairCatsFixtureMap(o);
+  const L = fairCatsLayout(sc, fm, blds, { styleId: o.styleId ?? 'cats', jail: !!o.jail });
+  L.sky = 'linear-gradient(#0f0d2a 0%, #1d1a4a 40%, #3a2f6e 75%, #5a3a7a 100%)';
+  return L;
 }

@@ -647,6 +647,77 @@
       "re": "/api/mine/hall\\?c=",
       "severity": "degrade",
       "why": "the hall stays «soon» in citymap.js but city.js openPanel never checks soon and b-hall.js is a real window — src/net/site.ts soonOf lets E open it (hybrid room 'hall')"
+    },
+    {
+      "id": "LGFairCats (new fair geometry, fc-map.js)",
+      "kind": "global",
+      "name": "LGFairCats",
+      "file": "fc-map.js",
+      "keys": [
+        "make",
+        "W",
+        "H",
+        "FACE",
+        "MFACE",
+        "RAIL",
+        "RIM",
+        "MRIM",
+        "TOWN",
+        "PLATEAU",
+        "MOUNT",
+        "STAIRS",
+        "STREETS",
+        "PATHS",
+        "RAILS",
+        "POND",
+        "PIER",
+        "BUILDINGS",
+        "HOUSES",
+        "ITEMS",
+        "WALL",
+        "JAIL"
+      ],
+      "type": "any",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "the new cats fair (04.11, me.fc): town polygon, rim / plateau / mountain, stairs, streets, buildings vis/foot/door, decor, wall, jail — the 3D terrain and props (src/net/faircats.ts fairCatsScene, src/world/faircats.ts)"
+    },
+    {
+      "id": "LGFairCatsCity (new fair map, fc-city.js)",
+      "kind": "global",
+      "name": "LGFairCatsCity",
+      "file": "fc-city.js",
+      "keys": [
+        "build",
+        "map",
+        "spawn",
+        "jailWalk"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "the new fair's walk grid and building list map({ jail, magic }) (free / nearest / path / clear / levelAt, old fair titles) and spawn — src/net/site.ts buildFairCatsLayout"
+    },
+    {
+      "id": "city.js fcWant / buildCats (data-town fairc)",
+      "file": "city.js",
+      "re": "^(?=[\\s\\S]*const fcWant = \\(\\) => [^;]*X\\.fcOn)(?=[\\s\\S]*function buildCats\\()(?=[\\s\\S]*LGFairCatsCity\\.build\\()(?=[\\s\\S]*dataset\\.town = 'fairc')(?=[\\s\\S]*town: S\\.cats \\? 'fairc')",
+      "severity": "degrade",
+      "why": "the site replaces the fair with the new one for a hero with me.fc (Pixi only; FC_OFF / town_closed fall back) and marks it .cy[data-town=\"fairc\"] — src/net/town.ts detectTown, src/net/site.ts buildLayout"
+    },
+    {
+      "id": "app.js fcOn = ME.fc",
+      "file": "app.js",
+      "re": "fcOn: \\(\\) => !!\\(ME && ME\\.fc\\)",
+      "severity": "degrade",
+      "why": "/api/me `fc` turns the new fair on (src/net/site.ts meFc → town detection before the City is built)"
+    },
+    {
+      "id": "app.js City stub in an expedition (.city-quest)",
+      "file": "app.js",
+      "re": "city-quest",
+      "severity": "degrade",
+      "why": "04.11: the City tab is no longer aria-disabled during an expedition, it opens the stub «Ты в походе…» (cityStub) — src/net/city-tab.ts cityTab reads it as locked"
     }
   ]
 }

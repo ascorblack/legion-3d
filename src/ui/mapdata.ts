@@ -3,6 +3,7 @@
  * building pins, view (pan/zoom) math and collision-avoiding label placement. No DOM — test/ui-map.test.ts.
  * City px → metres: x × 0.01, (y − 800) × 0.02 (src/world/coords.ts) → the fair city is 55 m × 22 m.
  */
+import { fairCatsOf } from '../net/faircats';
 import type { CityLayout, Building } from '../contracts';
 import { toX, toZ } from '../world/coords';
 
@@ -29,17 +30,21 @@ export interface MapFeatures {
 export const BLOCK_DEPTH = 4.2;
 
 export function mapFeatures(L: CityLayout): MapFeatures {
-  const A = L.area, low = L.low;
+  const A = L.area, low = L.low && L.low.edge ? L.low : undefined;
+  // the new cats fair: free-standing buildings all over the map — each block is its foot (src/net/faircats.ts)
+  const fc = fairCatsOf(L);
   const edgeY0 = low ? low.edge[0] : Infinity, edgeY1 = low ? low.edge[1] : Infinity;
   const lowTop = low ? low.top : Infinity;
-  const isLower = (b: Building) => b.door.y > lowTop;
+  const isLower = (b: Building) => !!fc || b.door.y > lowTop;
   let xMin = toX(A.x0), xMax = toX(A.x1);
   for (const b of L.buildings) { xMin = Math.min(xMin, toX(b.hit[0])); xMax = Math.max(xMax, toX(b.hit[1])); }
-  const bounds: Rect = { x0: xMin - 1, z0: -BLOCK_DEPTH - 1.2, x1: xMax + 1, z1: toZ(A.y1) + 0.8 };
+  const bounds: Rect = { x0: xMin - 1, z0: fc ? toZ(A.y0) : -BLOCK_DEPTH - 1.2, x1: xMax + 1, z1: toZ(A.y1) + 0.8 };
 
   const blocks: MapFeatures['blocks'] = [];
   for (const b of L.buildings) {
     const x0 = toX(b.hit[0]), x1 = toX(b.hit[1]);
+    const ft = fc?.buildings.find((x) => x.id === b.id)?.foot;
+    if (ft) { blocks.push({ id: b.id, soon: !!b.soon, x0: toX(ft[0]), x1: toX(ft[2]), z0: toZ(ft[1]), z1: toZ(ft[3]) }); continue; }
     if (isLower(b)) {
       const z0 = toZ(Math.max(edgeY1 === Infinity ? b.hit[2] : edgeY1, b.hit[2])), z1 = toZ(b.hit[3]);
       blocks.push({ id: b.id, soon: !!b.soon, x0, x1, z0: Math.min(z0, z1 - 0.6), z1 });

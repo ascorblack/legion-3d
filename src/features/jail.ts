@@ -18,6 +18,7 @@
  *    the hero steps out next to the jail door (city.js does the same).
  * Without the site's jail (old site, dev pages without ?jail) nothing here does anything.
  */
+import { isFairId } from '../net/faircats';
 import type { CityLayout } from '../contracts';
 import type { CoreContext } from '../core/context';
 import { setModal, type ModalInput } from '../core/modal';
@@ -44,7 +45,7 @@ export const jailHubOf = (ctx: Pick<CoreContext, 'site'>): JailHub | null => {
 
 /** The cage seat of a prisoner's own hero (px) on this layout, or null (no jail here: district towns, the camp). */
 export function mySeat(L: CityLayout | null, st: JailState): [number, number] | null {
-  if (!st.me || !L || L.id !== 'fair') return null;
+  if (!st.me || !L || !isFairId(L.id)) return null;
   const b = L.buildings.find((x) => x.jail || x.id === 'jail');
   const J = b ? jailGeoOf(b, L.low) : null;
   return J && J.seats[0] ? [J.seats[0][0], J.seats[0][1]] : null;
@@ -52,7 +53,7 @@ export function mySeat(L: CityLayout | null, st: JailState): [number, number] | 
 
 /** Where a prisoner's own hero may walk on this layout (px [x0, y0, x1, y1], LOW.jail.walk), or null (no jail here). */
 export function myWalk(L: CityLayout | null, st: JailState): [number, number, number, number] | null {
-  if (!st.me || !L || L.id !== 'fair') return null;
+  if (!st.me || !L || !isFairId(L.id)) return null;
   const b = L.buildings.find((x) => x.jail || x.id === 'jail');
   const J = b ? jailGeoOf(b, L.low) : null;
   return J ? jailWalkOf(J) : null;

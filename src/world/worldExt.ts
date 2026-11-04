@@ -47,7 +47,7 @@ export interface MapImage { url: string; width: number; height: number; x0: numb
  * encoded to a WebP (PNG fallback) data URL.
  */
 export async function renderMapImage(renderer: THREE.WebGLRenderer, root: THREE.Object3D, L: CityLayout, pxPerMetre = 12): Promise<MapImage> {
-  const x0 = toX(L.area.x0) - 2.5, x1 = toX(L.area.x1) + 2.5, z0 = -8, z1 = toZ(L.area.y1) + 2.2;
+  const x0 = toX(L.area.x0) - 2.5, x1 = toX(L.area.x1) + 2.5, z0 = Math.min(-8, toZ(L.area.y0) - 2), z1 = toZ(L.area.y1) + 2.2;
   const maxTex = Math.min(4096, renderer.capabilities?.maxTextureSize || 4096);
   const ppm = Math.max(2, Math.min(pxPerMetre, maxTex / (x1 - x0), maxTex / (z1 - z0)));
   const W = Math.round((x1 - x0) * ppm), H = Math.round((z1 - z0) * ppm);

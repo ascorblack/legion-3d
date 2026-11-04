@@ -32,7 +32,7 @@ export const TRAVEL_CHECKS = ['LGCity.town (travel)', 'DOM .cy-town (town picker
 
 /** Where a layout is called in the UI: the camp by the channel's style, the fair, a district town by its name. */
 export function layoutName(L: Pick<CityLayout, 'id' | 'styleId'> & { title?: string }, cached?: string): string {
-  if (L.id === FAIR) return 'Ярмарка';
+  if (L.id === FAIR || L.id === 'fairc') return 'Ярмарка';
   if (L.id === CAMP) return campName(L.styleId, W.MDDoodle?.names).name;
   return cached || String(L.title || L.id);
 }

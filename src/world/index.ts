@@ -13,7 +13,7 @@ import { SolidMap, collectSolids, makeSolidTop } from './solid';
 import { doorInteractables, renderMapImage, type MapImage } from './worldExt';
 import { toX, toZ, fromX, fromZ } from './coords';
 import { Batch, type BatchKey } from './batch';
-import { groundSpec, makeGroundAt } from './ground';
+import { groundSpec } from './ground';
 import { paletteOf, parseGradient } from './palette';
 import { SignAtlas, rng, dotTexture, moonTexture } from './textures';
 import { Instancer } from './instancer';
@@ -33,13 +33,15 @@ import { toZ as _toZ } from './coords';
 import { campOf, type CampLayout } from './camp';
 import { campThemeOf } from './camp-themes';
 import { villageOf, villageGround, VK } from './village';
+import { fairCatsOf } from '../net/faircats';
 import type { SitePals } from './palette';
 
 /** The city palette of a layout: its style + the page's own quarter colours (layout.sitePals, read by the site adapter). */
 export const layoutPalette = (L: CityLayout) => paletteOf(L.styleId, (L as CityLayout & { sitePals?: SitePals }).sitePals);
 
 export { createSvgArt } from './svgArt';
-export { groundSpec, makeGroundAt } from './ground';
+export { groundSpec, makeGroundAt, layoutGroundAt } from './ground';
+import { layoutGroundAt } from './ground';
 
 const MAX_LIGHTS = 6;
 const BULB_COLS = ['#ffcf4a', '#ff8fa3', '#5fbfa8', '#7fb0e8', '#b79be0', '#f0903a', '#8fe07a'].map((c) => new THREE.Color(c));
@@ -77,6 +79,7 @@ function buildGarlands(spans: THREE.Vector3[][], glowTex: THREE.Texture): THREE.
 function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.Material> {
   const P = layoutPalette(L), camp = !!campOf(L), CT = camp ? campThemeOf(L.styleId) : null;
   const V = villageOf(L), VG = V ? villageGround(V.biome) : null;   // a hand village: the biome's grass and road soil
+  const FCm = !!fairCatsOf(L);   // the new cats fair: cobbled streets ('paving') on a meadow ('lowPaving' = grass)
   const std = (kind: TexKind, o: { rough?: number; ns?: number; colors?: string[]; neutral?: boolean; seed?: number; side?: THREE.Side; size?: number; sd?: SurfaceOpts } = {}) => {
     const t = getTexture(kind, { neutral: o.neutral ?? true, colors: o.colors, seed: o.seed, size: o.size });
     const m = new THREE.MeshStandardMaterial({
@@ -111,7 +114,8 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
     // the camp / villages: 'paving' = night grass, 'lowPaving' = trodden dirt of the trails and roads
     paving: camp || VG ? std('grass', { neutral: false, colors: VG ? VG[0] : CT ? [...CT.grass] : ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.5, sd: { macro: 0.22, hue: 0.16 } })
       : std('cobble', { neutral: false, colors: [P.ground, shade(P.ground, 0.08), P.mortar, P.groundL], rough: 1, ns: 0.7, size: 1024, sd: { macro: 0.16, hue: 0.12, ids: 0.14, moss: soot ? 0 : 0.1, roughVar: 0.15 } }),
-    lowPaving: camp || VG ? std('path', { neutral: false, colors: VG ? VG[1] : CT ? [...CT.soil] : ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.8, seed: 3, sd: { macro: 0.18, hue: 0.12 } })
+    lowPaving: FCm ? std('grass', { neutral: false, colors: ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.5, seed: 3, sd: { macro: 0.22, hue: 0.16 } })
+      : camp || VG ? std('path', { neutral: false, colors: VG ? VG[1] : CT ? [...CT.soil] : ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.8, seed: 3, sd: { macro: 0.18, hue: 0.12 } })
       : std('cobble', { neutral: false, colors: [P.lowA, P.lowB, P.lowMortar, P.groundL], rough: 1, ns: 0.7, seed: 3, size: 1024, sd: { macro: 0.16, hue: 0.12, ids: 0.14, moss: soot ? 0 : 0.15, roughVar: 0.15 } }),
     leaf: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),
     flat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
@@ -171,7 +175,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
 
   const spec = groundSpec(L);
   setupSurfaces(opts.quality, maxAniso, spec.hasLow ? toZ(spec.wallY) || 1e6 : 1e6, spec.lowH, P);
-  const groundAt = makeGroundAt(spec);
+  const groundAt = layoutGroundAt(L);
   const signs = new SignAtlas(P);
   const inst = new Instancer();
   registerProtoProps(inst, P);
@@ -272,10 +276,10 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
     }
   }
   // contact blob shadows under every placed prop (one instanced quad draw, multiply-darkening radial texture)
-  const BLOB_R: Record<string, number> = { lamp: 0.55, bench: 0.9, barrel: 0.5, crate: 0.55, bed: 1.1, tree: 1.5, bush: 0.8, mast: 0.4,
+  const BLOB_R: Record<string, number> = { pine: 1.1, blossom: 1.4, lamp: 0.55, bench: 0.9, barrel: 0.5, crate: 0.55, bed: 1.1, tree: 1.5, bush: 0.8, mast: 0.4,
     fountain: 1.9, well: 1.5, statue: 1.2, dummy: 0.6, signpost: 0.5, cart: 1.4, noticeBoard: 1.0, chest: 0.6, planter: 0.6, stall: 1.8 };
   let blobN = 0;
-  const blobR = (kind: string) => BLOB_R[kind.replace(/^v:/, '')];
+  const blobR = (kind: string) => BLOB_R[kind.replace(/^(v|fc):/, '')];   // village aliases, the new fair's own kinds
   for (const [kind, list] of inst.placed) if (blobR(kind)) blobN += list.length;
   const xb = k.blobs ?? [];
   blobN += Math.floor(xb.length / 5);
@@ -357,7 +361,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const dot = dotTexture();
   const glowTex = getTexture('glow').map;
   // floating motes round the camera: fireflies over grass (camp, villages), warm dust in the paved city (motes.ts)
-  const motes = createMotes(campOf(L) || villageOf(L) ? 'fireflies' : 'dust', glowTex);
+  const motes = createMotes(campOf(L) || villageOf(L) || fairCatsOf(L) ? 'fireflies' : 'dust', glowTex);
   root.add(motes.points);
   const glows = glowPoints(k.glows, 7, glowTex, { flicker: 0.1, intensity: 0.55, near: 2.6 });   // halos stay under the bloom threshold; a lamp right at the eye fades instead of filling the view
   root.add(glows);

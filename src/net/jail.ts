@@ -53,7 +53,7 @@ export function jailList(d: unknown): { list: JailEntry[]; n: number } | null {
 /** LOW.jail of the layout, or the same numbers derived from the building's hit box (the site's 31.10 values: hit =
  *  [x0, c1, ct − 56, fy], the house and the cage 214 px deep from `back` to the bars). */
 export function jailGeoOf(b: Pick<Building, 'hit'> | null | undefined, low?: LowerStreet | null): JailGeo | null {
-  const J = low?.jail;
+  const J = low?.jail ?? (b as { jailGeo?: JailGeo } | null | undefined)?.jailGeo;
   if (J && [J.x0, J.x1, J.base, J.c0, J.c1, J.fy].every((v) => typeof v === 'number' && Number.isFinite(v)) && J.c1 > J.c0 && J.x1 > J.x0
     && Array.isArray(J.door) && Array.isArray(J.seats)) return J;
   if (!b) return null;

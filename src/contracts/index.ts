@@ -108,6 +108,8 @@ export interface Building {
   /** Drawn under construction (the site's art keeps the «скоро» plank / scaffold) although it opens: the Ратуша — city.js
    *  openPanel never checks `soon`, and b-hall.js is a real window (treasury, mayor, «Пожертвовать» ore, 03.11). */
   scaffold?: boolean;
+  /** The jail's own numbers when the layout has no lower street (the new cats fair, src/net/faircats.ts fairCatsJailGeo). */
+  jailGeo?: JailGeo;
 }
 
 /** The jail on the lower street (site citymap.js LOW.jail, 30.10; 31.10 moved beyond the canal, by the lower fence):

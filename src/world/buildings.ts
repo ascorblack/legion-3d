@@ -302,7 +302,7 @@ const board: BuildFn = (k, b, x0, x1, zf, h) => {
   const r = k.rnd;
   for (let i = 0; i < 9; i++) {
     const px = cx - w / 2 + 0.45 + (w - 0.9) * (i % 3 + r() * 0.3) / 2.6, py = 1.05 + (top - 1.9) * (Math.floor(i / 3) + r() * 0.2) / 2.4;
-    rbox(k, 'flat', r() < 0.2 ? '#fff2b8' : '#f2e2b4', px, py + 0.2, bz + 0.03 + i * 0.007, 0.45 + r() * 0.12, 0.5 + r() * 0.15, 0.01, 0, 0, (r() - 0.5) * 0.25);
+    rbox(k, 'flat', r() < 0.2 ? '#fff2b8' : '#f2e2b4', px, py + 0.2, bz + 0.03 + i * 0.007, 0.45 + r() * 0.12, 0.5 + r() * 0.15, 0.002, 0, 0, (r() - 0.5) * 0.25);   // paper-thin: two notes overlapping in a narrow board stay > 4 mm apart (double-sided)
     ball(k, 'flat', '#d8433a', px, py + 0.42, bz + 0.1, 0.03);
   }
   signF(k, b.title, cx, top - 0.42, bz + 0.12, Math.min(2.4, w - 0.4));

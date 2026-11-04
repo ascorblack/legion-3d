@@ -66,7 +66,7 @@ export function envFromCtx(ctx: RoomContext): RoomEnv {
     toast: (t, bad) => ctx.ui.toast(t, bad), exit: () => ctx.exit(),
     showSitePanel: (o) => ctx.showSitePanel(o), hideSitePanel: () => ctx.hideSitePanel(),
     player: () => ({ x: ctx.player.x, z: ctx.player.z }),
-    town: L && L.id && L.id !== 'fair' ? { id: L.id, foreignK: +((L as any).foreignK || 1) || 1 } : null,
+    town: L && L.id && L.id !== 'fair' && L.id !== 'fairc' ? { id: L.id, foreignK: +((L as any).foreignK || 1) || 1 } : null,
     variant: def && def.scene ? def.scene : undefined,
   };
 }

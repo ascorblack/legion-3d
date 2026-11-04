@@ -22,6 +22,8 @@ import { cityWalls } from './terrain';
 import { ledgeDressing } from './ledge';
 import { JAIL_GEO } from './jail';
 import { jailGeoOf } from '../net/jail';
+import { fairCatsOf, type FairCatsLayout } from '../net/faircats';
+import { registerFairCatsKinds, buildFairCatsTerrain, buildFairCatsBuildings, fairCatsSolids, placeFairCatsProps } from './faircats';
 
 /** A building; on a layout without the lower street (camp, district towns) the lower-street models (storage barn,
  *  mine…) get a virtual retaining wall 3 m behind their front, so they keep their depth instead of collapsing to 0. */
@@ -64,6 +66,18 @@ function slabHook(k: Ctx, groundAt: (x: number, y: number) => number): (mat: Bat
 
 export function buildStatic(k: Ctx, L: CityLayout, spec: GroundSpec, groundAt: (x: number, y: number) => number, lampHead: number): Placed {
   const P = k.pal;
+  const fc = fairCatsOf(L);
+  if (fc) {
+    // the new cats fair (site 04.11, me.fc): its own terrain, buildings on their foot bands, the site's decor (faircats.ts)
+    const FL = L as FairCatsLayout;
+    registerFairCatsKinds(k);
+    buildFairCatsTerrain(k, L, fc, groundAt);
+    k.b.onAdd = slabHook(k, groundAt);
+    try { buildFairCatsBuildings(k, FL, groundAt); } finally { k.b.onAdd = null; }
+    fairCatsSolids(k, fc, FL.siteObst ?? [], groundAt);
+    k.b.tag = 'props';
+    try { return placeFairCatsProps(k, FL, groundAt, lampHead); } finally { k.b.tag = ''; }
+  }
   const camp = campOf(L);
   if (L.id !== 'fair') fitFronts(L);
   for (const b of L.buildings) if (b.id === 'jail') { const J = jailGeoOf(b, L.low); if (J) JAIL_GEO.set(b, J); }   // LOW.jail → the jail builder

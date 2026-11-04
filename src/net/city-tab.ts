@@ -8,8 +8,11 @@ export type CityTab = 'open' | 'locked' | 'missing';
 export function cityTab(doc: Document = document): CityTab {
   const b = doc.querySelector<HTMLElement>('.tabs button[data-tab="city"]');
   if (!b || b.hidden) return 'missing';
+  // app.js 04.11: during an expedition the tab is no longer aria-disabled — it opens the stub «Ты в походе - Город
+  // откроется после похода» (`#tab-city .city-quest`, cityStub) and keeps the `tab-lock` class
+  if (doc.querySelector('#tab-city.on .city-quest')) return 'locked';
   if (doc.querySelector('#tab-city.on')) return 'open';
-  return b.getAttribute('aria-disabled') === 'true' ? 'locked' : 'open';
+  return b.getAttribute('aria-disabled') === 'true' || (!!b.classList?.contains?.('tab-lock') && !!doc.querySelector('#tab-city .city-quest')) ? 'locked' : 'open';
 }
 
 /** A district town the party stands in (q.town) that the site lets this hero enter: quest.js tabHtml shows

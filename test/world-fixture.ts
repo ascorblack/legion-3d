@@ -1,9 +1,9 @@
 /** Test helper: the static city built in node (no DOM): fake sign atlas, every Batch piece recorded. */
-import { fixtureLayout, campFixtureLayout, villageFixtureLayout } from '../dev/fixtures';
+import { fixtureLayout, campFixtureLayout, villageFixtureLayout, fairCatsFixtureLayout } from '../dev/fixtures';
 import type * as THREE from 'three';
 import type { CityLayout } from '../src/contracts';
 import { Batch } from '../src/world/batch';
-import { groundSpec, makeGroundAt } from '../src/world/ground';
+import { groundSpec, layoutGroundAt } from '../src/world/ground';
 import { paletteOf } from '../src/world/palette';
 import { rng } from '../src/world/textures';
 import { Instancer } from '../src/world/instancer';
@@ -16,7 +16,7 @@ import { ZRecorder } from '../src/world/zfight';
 /** `onPiece`: an extra recorder that sees every piece too (with its final UVs: test/world-texmap.test.ts). */
 export function staticCity(debug = false, layout?: CityLayout, onPiece?: (mat: string, g: THREE.BufferGeometry, tag: string) => void) {
   const L = layout ?? fixtureLayout();
-  const spec = groundSpec(L), groundAt = makeGroundAt(spec), P = paletteOf(L.styleId);
+  const spec = groundSpec(L), groundAt = layoutGroundAt(L), P = paletteOf(L.styleId);
   const signs = { add: () => ({ uv: [0, 0, 1, 1] as [number, number, number, number], aspect: 4 }), texture: null } as unknown as SignAtlas;
   const rec = new ZRecorder(); rec.keepBoxes = debug;
   const k: Ctx = {
@@ -35,3 +35,6 @@ export const staticCamp = (debug = false) => staticCity(debug, campFixtureLayout
 
 /** A hand-made village ★1 (test/fixtures/village-map.json) built the same way. */
 export const staticVillage = (debug = false, styleId = 'cats') => staticCity(debug, villageFixtureLayout(styleId));
+
+/** The new cats fair (test/fixtures/faircats-map.json) built the same way; jail / magic shop on by default. */
+export const staticFairCats = (debug = false, o: { jail?: boolean; magic?: boolean } = { jail: true, magic: true }) => staticCity(debug, fairCatsFixtureLayout(o));

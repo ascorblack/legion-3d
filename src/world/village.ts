@@ -87,7 +87,8 @@ const _b3 = new THREE.Box3(), _v = new THREE.Vector3(), IDENT = new THREE.Matrix
  * lights, pools, wires, bulbs, instanced props) is carried too; solids are clamped into the band and to x0..x1 (m).
  * Returns the depth map (source z → world z) for door hit boxes.
  */
-export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb: number; zf: number; zFace: number; flip?: boolean; clampX?: [number, number] }, build: () => void): (z: number) => number {
+export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb: number; zf: number; zFace: number; flip?: boolean; clampX?: [number, number]; dy?: number; shift?: boolean }, build: () => void): (z: number) => number {
+  const dy = o.dy ?? 0;   // lifted onto a higher level (the new fair's plateau, src/world/faircats.ts)
   const calls: Call[] = [];
   const add0 = k.b.add;
   const n0 = { col: k.colliders.length, sol: (k.solids ||= []).length, glo: k.glows.length, li: k.lights.length, bu: k.bulbs.length, wi: k.wires.length, po: (k.pools ||= []).length };
@@ -120,7 +121,8 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
   let C = 0; for (const [a, b] of cl) C += b - a;
   const gaps = (zMax - zMin) - C;
   const src: number[] = [], dst: number[] = [];
-  if (cl.length && gaps > 1e-6) {
+  if (o.shift) { src.push(zMin, zMax); dst.push(o.zf - (zMax - zMin), o.zf); }   // no squash: the model as it is, front on zf
+  else if (cl.length && gaps > 1e-6) {
     // clusters at slope kc (1 when they fit in 85 % of the band), the gaps share the rest
     const kc = Math.min(1, Lb * 0.85 / C), g = Math.min(1, (Lb - C * kc) / gaps);
     let z = zMin, w = o.zb; src.push(z); dst.push(w);
@@ -154,7 +156,7 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
     for (let i = 0; i < pos.count; i++) {
       const z = pos.getZ(i), kz = slope(z) * szs, w = f(z);
       za = Math.min(za, z); zb = Math.max(zb, z); wa = Math.min(wa, w); wb = Math.max(wb, w);
-      pos.setXYZ(i, X(pos.getX(i)), pos.getY(i) * o.sy, w);
+      pos.setXYZ(i, X(pos.getX(i)), pos.getY(i) * o.sy + dy, w);
       _v.set(nor.getX(i) / sxs, nor.getY(i) / o.sy, nor.getZ(i) / kz).normalize();
       nor.setXYZ(i, _v.x, _v.y, _v.z);
     }
@@ -166,16 +168,16 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
     g.dispose();
   }
   // what the builder pushed into the context
-  const pt = (a: number[], i: number) => { a[i] = X(a[i]); a[i + 1] *= o.sy; a[i + 2] = f(a[i + 2]); };
+  const pt = (a: number[], i: number) => { a[i] = X(a[i]); a[i + 1] = a[i + 1] * o.sy + dy; a[i + 2] = f(a[i + 2]); };
   const zClamp = (z: number) => Math.min(o.zf, Math.max(o.zb, z));
   const xs = (a: number[], i: number) => { const p = X(a[i]), q = X(a[i + 1]); a[i] = Math.min(p, q); a[i + 1] = Math.max(p, q); };
   const zs = (a: number[], i: number, clamp: boolean) => { const p = f(a[i]), q = f(a[i + 1]); a[i] = Math.min(p, q); a[i + 1] = Math.max(p, q); if (clamp) { a[i] = zClamp(a[i]); a[i + 1] = zClamp(a[i + 1]); } };
-  for (let i = n0.col; i + 5 < k.colliders.length; i += 6) { xs(k.colliders, i); k.colliders[i + 2] *= o.sy; k.colliders[i + 3] *= o.sy; zs(k.colliders, i + 4, true); }
+  for (let i = n0.col; i + 5 < k.colliders.length; i += 6) { xs(k.colliders, i); k.colliders[i + 2] = k.colliders[i + 2] * o.sy + dy; k.colliders[i + 3] = k.colliders[i + 3] * o.sy + dy; zs(k.colliders, i + 4, true); }
   const S = k.solids!;
   for (let i = n0.sol; i + 4 < S.length; i += 5) {
     xs(S, i); zs(S, i + 2, true);
     if (o.clampX) { S[i] = Math.max(S[i], o.clampX[0]); S[i + 1] = Math.min(S[i + 1], o.clampX[1]); if (S[i + 1] < S[i]) S[i + 1] = S[i]; }
-    if (isFinite(S[i + 4])) S[i + 4] *= o.sy;
+    if (isFinite(S[i + 4])) S[i + 4] = S[i + 4] * o.sy + dy;
   }
   for (let i = n0.glo; i + 6 < k.glows.length; i += 7) { pt(k.glows, i); k.glows[i + 3] *= o.sy; }
   for (let i = n0.li; i + 2 < k.lights.length; i += 3) pt(k.lights, i);
@@ -186,7 +188,7 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
   for (const [kind, a] of k.inst.placed) {
     const i0 = inst0.get(kind) ?? 0;
     for (let i = i0; i < a.length; i++) {
-      const p = a[i]; p.x = X(p.x); p.y *= o.sy; p.z = f(p.z); p.scale *= o.sy; p.sy *= o.sy; if (o.flip) p.rotY += Math.PI;
+      const p = a[i]; p.x = X(p.x); p.y = p.y * o.sy + dy; p.z = f(p.z); p.scale *= o.sy; p.sy *= o.sy; if (o.flip) p.rotY += Math.PI;
     }
     // the depth map squeezes the gaps: two props of a kind set apart in depth (the storage barn's barrels) can land in
     // one spot — keep the first (two identical meshes inside each other z-fight: test/world-village.test.ts)

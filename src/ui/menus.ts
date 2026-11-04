@@ -514,7 +514,7 @@ export class Menus {
   /* ------------------------------------------------------------ Карта */
   private pMap(): string {
     const L = this.c.host.store.layout;
-    const name = !L ? 'Город' : L.id === 'fair' ? 'Ярмарка' : 'Город';
+    const name = !L ? 'Город' : L.id === 'fair' || L.id === 'fairc' ? 'Ярмарка' : 'Город';
     const size = L ? `${Math.round((L.area.x1 - L.area.x0) * 0.01)} × ${Math.round((L.area.y1 - L.area.y0) * 0.02)} м` : '';
     const n = this.c.host.store.walkers.size;
     const legend = `<span><i class="lg me"></i>Ты</span><span><i class="lg pl"></i>Игроки</span><span><i class="lg bd"></i>Здания</span><span><i class="lg st"></i>Лестницы</span><span><i class="lg wa"></i>Канал</span>`;

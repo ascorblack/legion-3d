@@ -12,7 +12,11 @@ const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
 const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
-const SHOTS = opt.set === '064' ? [
+const SHOTS = opt.set === '067' ? [
+  ['game', 'fc=1&magic=1&bots=6&hwc=off', 'fc-gate', 14000, at(2880, 2700, 'tp', 0, -0.12)],
+  ['game', 'fc=1&magic=1&bots=6&hwc=off', 'fc-plaza', 14000, at(2880, 2350, 'tp', 0.25, -0.5, 'g.rig.dist=24;')],
+  ['game', 'fc=1&magic=1&bots=4&hwc=off', 'fc-stairs-hall', 14000, at(3606, 1500, 'tp', 0.6, -0.1)],
+] : opt.set === '064' ? [
   ['expedition', 'demo=travel&ter=' + encodeURIComponent('Тыквенное поле'), 'pumpkin', 9000, 'clean'],
   ['expedition', 'demo=travel&ter=' + encodeURIComponent('Кладбище'), 'graveyard', 9000, 'clean'],
   ['expedition', 'demo=travel&ter=' + encodeURIComponent('Мельница'), 'mill', 9000, 'clean'],

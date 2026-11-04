@@ -16,7 +16,8 @@ import CONTRACT from '../data/site-contract.json';
 import { runtimeContract, describeFails, type ContractCheck } from './contract';
 import { reportDrift } from '../core/drift';
 import { npcPlaces, makeOpts } from '../events/halloween/hwnpc';
-import { CAMP, campScene, detectTown, readTownSignals, townMeta, villageScene, type CampScene, type HeroTownFlags } from './town';
+import { CAMP, FAIRC, campScene, detectTown, readTownSignals, townMeta, villageScene, type CampScene, type HeroTownFlags } from './town';
+import { fairCatsScene, fairCatsLayout, isFairId, type FcSiteMap } from './faircats';
 import { readSitePals } from '../world/palette';
 import { createJailHub, jailFromMe, jailList, jailSeats, jailGeoOf, type JailHub } from './jail';
 
@@ -87,8 +88,8 @@ export function restyleApps(list: Iterable<{ login: string; app: Appearance; raw
 
 /* ------------------------------------------------------------------ layout */
 /** Current town id of the site's City (src/net/town.ts: DOM, picker, sessionStorage, hero flags). */
-export function currentTown(hero: Hero | null, jailed = false): { id: string; via: string } {
-  return detectTown({ ...readTownSignals(W, document, hero as HeroTownFlags | null), jailed });
+export function currentTown(hero: Hero | null, jailed = false, fc = false): { id: string; via: string } {
+  return detectTown({ ...readTownSignals(W, document, hero as HeroTownFlags | null, fc), jailed });
 }
 /** Districts list (GET /api/city/towns — the same read the site's own town picker does), cached for a minute. */
 let townsCache: { at: number; list: any[] } | null = null;
@@ -104,6 +105,7 @@ async function townsList(force = false): Promise<any[]> {
 function buildLayout(hero: Hero | null, town: string, townMetaOf: any, jl = false): CityLayout | null {
   const M = W.LGCityMap, D = W.MDDoodle; if (!M || !D) return null;
   if (town === CAMP) return buildCampLayout(hero);
+  if (town === FAIRC) return buildFairCatsLayout(hero, jl);
   if (town !== 'fair') return townMetaOf ? buildTownLayout(hero, town, townMetaOf) : null;
   let L: any = null; try { L = D.location('fair', { esc: (s: unknown) => String(s ?? '') }); } catch { /* none */ }
   if (!L) return null;
@@ -195,6 +197,29 @@ function buildTownLayout(hero: Hero | null, id: string, meta: any): CityLayout |
       sitePals: safe(() => readSitePals(W.LGCityArt?.PAL), undefined),
     } as CityLayout;
   } catch (e) { console.warn('[legion-3d] district town layout', id, e); return null; }
+}
+/**
+ * The new cats fair (site 04.11, /api/me `fc`, src/net/faircats.ts): LGFairCats (fc-map.js) for the geometry,
+ * LGFairCatsCity.map({ jail, magic }) for the site's walk grid and building list (old fair titles), as city.js buildCats.
+ */
+function buildFairCatsLayout(hero: Hero | null, jl: boolean): CityLayout | null {
+  try {
+    const F = W.LGFairCats, C = W.LGFairCatsCity;
+    if (!F || !C || typeof C.map !== 'function') return null;
+    const sc = fairCatsScene(F); if (!sc) return null;
+    const h = (hero || {}) as any, mn = !!(h.mn && Object.keys(h.mn).length), MS = !!h.ms;
+    const map = C.map({ jail: !!jl, magic: MS }) as FcSiteMap;
+    if (!map || typeof map.free !== 'function' || typeof map.nearest !== 'function') return null;
+    const buildings: Building[] = (map.BUILDINGS || []).map((b: any) => ({
+      ...b, door: { ...b.door }, hit: [...b.hit] as Building['hit'],
+      title: b.id === 'magic' && h.ms ? String(h.ms) : b.title,
+      ...soonOf(b, !!h.au, !!h.sg, mn),
+    }));
+    const sp = safe(() => C.spawn?.() as [number, number] | undefined, undefined);
+    const L = fairCatsLayout(sc, map, buildings, { styleId: styleId(), jail: !!jl, ...(Array.isArray(sp) ? { spawn: [+sp[0], +sp[1]] as [number, number] } : {}) });
+    (L as CityLayout & { sitePals?: unknown }).sitePals = safe(() => readSitePals(W.LGCityArt?.PAL), undefined);
+    return L;
+  } catch (e) { console.warn('[legion-3d] new fair layout', e); return null; }
 }
 /** The start camp «Перепутье» (campmap.js, loaded by city.js on demand): same building ids as the fair, own scene. */
 function buildCampLayout(hero: Hero | null): CityLayout | null {
@@ -292,7 +317,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   function syncJail(): void {
     const sims0 = store.walkers as Map<string, Sim>;
     const st = jail.get(), L = mapRef;
-    const J = st.on && L && L.id === 'fair' ? jailGeoOf(L.buildings.find((b) => b.jail || b.id === 'jail'), L.low) : null;
+    const J = st.on && L && isFairId(L.id) ? jailGeoOf(L.buildings.find((b) => b.jail || b.id === 'jail'), L.low) : null;
     const keep = new Set<string>();
     let changed = false;
     if (J && L!.buildings.some((b) => b.id === 'jail')) {
@@ -315,6 +340,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   }
   const store = createStore();
   store.setHero(me.hero);
+  // /api/me `fc` (site 04.11): the new cats fair is on for this hero (app.js fcOn) — town detection without a built City
+  let meFc = !!me.fc;
 
   // City tab must be open for presence. The site blocks it while our party is on an expedition.
   say('Открываем город…');
@@ -328,7 +355,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   if (!inMine && !document.querySelector('#tab-city.on')) cityBtn.click();
   else if (!inMine && B && !B.last['city:enter'] && cityReplayAllowed()) await replayCityEnter(cityBtn, B);
   const ok = await waitFor(() => W.LGCity && W.LGCityMap && W.MDDoodle && (inMine || (W.LGCity.debug && W.LGCity.debug())), 30000, 200);
-  if (!ok) return { error: document.querySelector('#tab-city.on') ? 'site_changed' : 'city_locked' };
+  // app.js 04.11: in an expedition the City tab opens the stub `.city-quest` instead of the City (cityStub)
+  if (!ok) return { error: document.querySelector('#tab-city.on') && !document.querySelector('#tab-city .city-quest') ? 'site_changed' : 'city_locked' };
   { const g = siteGuard(inMine ? 'page' : 'city'); if (g.breaks.length) return { error: 'site_changed', missing: g.breaks }; }
 
   // Hide the 2D layer, keep interiors. Others hidden in the site client = it stops drawing them (we draw them).
@@ -349,17 +377,17 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   const townRetry: Record<string, number> = {};
   const refreshLayout = () => {
     const h = store.hero;
-    const t = currentTown(h, !!jail.get().me); townNow = t.id; townVia = t.via;
+    const t = currentTown(h, !!jail.get().me, meFc); townNow = t.id; townVia = t.via;
     const jl = jail.get().on;
     const key = `${t.id}|${!!h?.ms}|${!!(h?.mn && Object.keys(h.mn as object).length)}|${!!h?.au}|${!!h?.sg}|${jl}|${styleId()}`;
     if (key === layoutKey) return;
-    if (t.id !== 'fair' && t.id !== CAMP) {
+    if (!isFairId(t.id) && t.id !== CAMP) {
       // district town: its entry of /api/city/towns (GET, the same read as the site's town picker) → towngen.js
       if (townWant === key) return;
       townWant = key;
       void townsList(true).then((list) => {
         townWant = '';
-        if (currentTown(store.hero, !!jail.get().me).id !== t.id) return;   // switched again meanwhile
+        if (currentTown(store.hero, !!jail.get().me, meFc).id !== t.id) return;   // switched again meanwhile
         const meta = list.find((x) => x && x.id === t.id);
         const L = meta && buildLayout(store.hero, t.id, meta);
         if (!L) {
@@ -405,7 +433,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   const follow = (w: Sim, fx: number, fy: number, tx: number, ty: number, ago: number, fresh: boolean) => {
     const L = siteMap();
     if (!L || !M?.follow || !L.path) { w.x = tx; w.y = ty; w.path = null; return; }
-    if (mapLikeOf !== L || !mapLike) { mapLikeOf = L; mapLike = { path: (a, b) => L.path!(a, b), free: (x, y) => L.free(x, y), clear: (a, b) => clearLine(L, a, b) }; }
+    // the new fair's own clear() keeps a straight move on one level (stairs excepted): fc-map.js clear
+    if (mapLikeOf !== L || !mapLike) { const own = (L as CityLayout & { clear?: (a: [number, number], b: [number, number]) => boolean }).clear; mapLikeOf = L; mapLike = { path: (a, b) => L.path!(a, b), free: (x, y) => L.free(x, y), clear: own ? (a, b) => own(a, b) : (a, b) => clearLine(L, a, b) }; }
     try {
       const r = M.follow(mapLike, [w.x, w.y], [fx, fy], [tx, ty], ago, { fresh });
       w.x = r.x; w.y = r.y; w.path = r.path; w.lag = r.lag;
@@ -493,7 +522,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     unsubs.push(B.on('sse:me', onHero));
     unsubs.push(B.on('me', (d: any) => {
       // a full /api/me answer (the site re-reads it when this hero is jailed / released, app.js «jail» listener): jail + jl
-      if (d && d.user) { const was = jail.get(); jail.setMe(jailFromMe(d)); const now = jail.get(); if (was.on !== now.on || !was.me !== !now.me) refreshLayout(); }
+      if (d && d.user) { const was = jail.get(); jail.setMe(jailFromMe(d)); const now = jail.get(); const fc = !!d.fc, fcCh = fc !== meFc; meFc = fc; if (was.on !== now.on || !was.me !== !now.me || fcCh) refreshLayout(); }
       onHero(d);
     }));
     // the cage's list: the SSE «jail» event and the City's own GET /api/jail (bridge tee 'jail:list')
@@ -516,7 +545,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   { // the City's own GET /api/jail (teed) when it opened under us, else the same GET once (city.js jailLoad) — the fair only
     const seen = B ? jailList(B.last['jail:list']) : null;
     if (seen) jail.setList(seen);
-    else if (jail.get().on && townNow === 'fair' && cityLive()) void api<any>('/api/jail').then((r) => { const v = jailList(r); if (v) jail.setList(v); });
+    else if (jail.get().on && isFairId(townNow) && cityLive()) void api<any>('/api/jail').then((r) => { const v = jailList(r); if (v) jail.setList(v); });
   }
 
   /* ---------------- own movement → site ---------------- */

@@ -7,7 +7,7 @@ import type { SiteSession } from '../src/contracts/modules';
 import { createStore } from '../src/store/store';
 import { appearanceFrom } from '../src/avatar';
 import { startGame } from '../src/content/game';
-import { fixtureLayout, campFixtureLayout, villageFixtureLayout, withJail } from './fixtures';
+import { fixtureLayout, campFixtureLayout, villageFixtureLayout, withJail, fairCatsFixtureLayout } from './fixtures';
 import { createJailHub, jailSeats, jailDay, type JailEntry } from '../src/net/jail';
 import { SX, SZ } from '../src/world/coords';
 import me from '../test/fixtures/me.json';
@@ -32,7 +32,9 @@ const MAGIC = new URLSearchParams(location.search).get('magic') === '1';   // ?m
 // ?jail=1: the channel's jail is open (6 prisoners in the cage, «+5»); ?jail=me: and the hero is one of them, walking on the
 // cage floor (site 30.10 / 31.10: beyond the canal by the lower fence)
 const JAIL = new URLSearchParams(location.search).get('jail');
-const layout = TOWN === 'camp' ? campFixtureLayout('cats', MAGIC) : TOWN === 'village' ? villageFixtureLayout() : JAIL ? withJail(fixtureLayout()) : fixtureLayout();
+// ?fc=1: the new cats fair (site 04.11, hero flag me.fc; test/fixtures/faircats-map.json) — with ?jail=1 / ?magic=1 as well
+const FC = new URLSearchParams(location.search).get('fc') === '1';
+const layout = FC ? fairCatsFixtureLayout({ jail: !!JAIL, magic: MAGIC }) : TOWN === 'camp' ? campFixtureLayout('cats', MAGIC) : TOWN === 'village' ? villageFixtureLayout() : JAIL ? withJail(fixtureLayout()) : fixtureLayout();
 // ?sky=dusk: an evening sky for photos (the site's own style sky otherwise)
 if (new URLSearchParams(location.search).get('sky') === 'dusk') layout.sky = 'linear-gradient(#1b1640 0%, #3e2f6e 38%, #9a5a86 72%, #f0a070 100%)';
 const SPAWN: [number, number] = (layout as any).spawn || [layout.QW + 660, 1010];
@@ -197,8 +199,9 @@ if (new URLSearchParams(location.search).get('debug') === '1') { try { localStor
 /* ---- the jail (?jail=1|me): the hub the site adapter keeps (src/net/jail.ts), prisoners on the seats, a stand-in Jail window ---- */
 const JLIST: JailEntry[] = Array.from({ length: 11 }, (_, i) => ({ l: `zek${i + 1}`, n: `Узник${i + 1}`, lv: 3 + i, lk: (raw[(i + 3) % raw.length] || {}).lk, g: (raw[(i + 3) % raw.length] || {}).g, u: i % 3 ? Date.now() + (i + 1) * 3.6e6 : null }));
 const jailHub = JAIL ? createJailHub({ on: true, me: JAIL === 'me' ? { reason: 'спам в чате', until: Date.now() + 3 * 3.6e6, untilText: 'до 31 октября, 15:00' } : null, list: JLIST.slice(0, 6), n: 11 }) : null;
-if (jailHub && layout.low?.jail) {
-  for (const s0 of jailSeats(jailHub.get(), layout.low.jail, hero.login)) {
+const JGEO = layout.low?.jail ?? layout.buildings.find((b) => b.jail || b.id === 'jail')?.jailGeo;   // the new fair: on the building
+if (jailHub && JGEO) {
+  for (const s0 of jailSeats(jailHub.get(), JGEO, hero.login)) {
     if (s0.self || !s0.entry) continue;
     const e = s0.entry;
     store.upsertWalker({ login: e.l, app: appearanceFrom(e.l, { ...e, l: e.l }, STYLE), x: s0.x, y: s0.y, face: Math.PI + (s0.flip < 0 ? 0.45 : -0.45), speed: 0, alpha: 1 });

@@ -39,7 +39,7 @@ describe('current town detection (LGCity.where is gone since 26.10)', () => {
       querySelector: (sel: string) => sel === '#tab-city .cy' ? { dataset: { town: 'camp' } } : null,
     } as unknown as Document;
     const win = { LGCity: { go() {} }, sessionStorage: { getItem: () => 'camp' } };
-    expect(readTownSignals(win, doc, { cp: 1 })).toEqual({ where: null, dom: 'camp', picker: null, session: 'camp', hero: { cp: 1 } });
+    expect(readTownSignals(win, doc, { cp: 1 })).toEqual({ where: null, dom: 'camp', picker: null, session: 'camp', hero: { cp: 1 }, fc: false });
     const doc2 = { querySelector: () => null } as unknown as Document;
     expect(detectTown(readTownSignals({}, doc2, null))).toEqual({ id: 'fair', via: 'default' });
   });

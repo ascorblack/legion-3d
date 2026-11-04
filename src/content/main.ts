@@ -205,7 +205,7 @@ function gpuNotice(on: boolean) {
 W.__l3dContract = (phase: 'page' | 'city' = 'city') => { try { return siteGuard(phase); } catch (e) { return { breaks: ['guard crashed: ' + String(e)], degrades: [] }; } };
 /** Which town the site's City shows (src/net/town.ts), from the page + the hero the bridge saw (/api/me, SSE me). */
 W.__l3dTownNow = () => {
-  try { const B = W.__L3D_BUS, d = B?.last?.['sse:me'] || B?.last?.me, h = d ? (d.hero || (d.login ? d : null)) : null; return currentTown(h); } catch (e) { return { id: '?', via: String(e) }; }
+  try { const B = W.__L3D_BUS, d = B?.last?.['sse:me'] || B?.last?.me, h = d ? (d.hero || (d.login ? d : null)) : null; return currentTown(h, false, !!(B?.last?.me as { fc?: unknown } | undefined)?.fc); } catch (e) { return { id: '?', via: String(e) }; }
 };
 
 /* ------------------------------------------------------------------ boot */

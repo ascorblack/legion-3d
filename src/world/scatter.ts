@@ -15,6 +15,8 @@ import type { GroundSpec } from './ground';
 import { SpotList, clump } from './foliage';
 import type { Ctx } from './kit';
 import { villageOf } from './village';
+import { fairCatsOf, inPoly } from '../net/faircats';
+import { onPaving } from './faircats';
 
 const FLOWERS = ['#ff7f9a', '#ffd84d', '#d0b0ff', '#ffb070', '#fff2e0', '#8fc8ff', '#ff9fd0'].map((c) => new THREE.Color(c));
 const EMBERS = ['#ff6a2a', '#ffb040', '#ff8a3a', '#ffd070'].map((c) => new THREE.Color(c));
@@ -65,6 +67,23 @@ export function scatterFoliage(k: Ctx, L: CityLayout, s: GroundSpec, groundAt: (
       const p = edge ? 0.95 : free ? 0.32 + 0.55 * c : 0.6 + 0.4 * c;
       if (S.rnd() > p) continue;
       tuft(x, z, (edge ? 0.7 : 0.65) + S.rnd() * 0.45, free ? 0.06 : 0.14);
+    }
+    return S.a;
+  }
+
+  const FC = fairCatsOf(L);
+  if (FC) {
+    // ------------------------------------------------ the new cats fair: a meadow off the streets, lanes and the pond
+    const A = L.area;
+    for (let y = A.y0; y < A.y1; y += 22) for (let x = A.x0; x < A.x1; x += 44) {
+      const px = x + (S.rnd() - 0.5) * 40, py = y + (S.rnd() - 0.5) * 20;
+      if (onPaving(FC, px, py, 6) || inPoly(FC.pond, px, py) || inPoly(FC.mount, px, py)) continue;
+      const free = L.free(px, py), c = clump(toX(px), toZ(py));
+      const p = free ? 0.18 + 0.4 * c : 0.5 + 0.4 * c;
+      if (S.rnd() > p) continue;
+      const X = toX(px), Z = toZ(py), yy = G(X, Z);
+      if (!ok(X, Z, yy)) continue;
+      tuft(X, Z, 0.6 + S.rnd() * 0.45, free ? 0.08 : 0.18);
     }
     return S.a;
   }

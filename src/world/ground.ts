@@ -4,6 +4,8 @@
  * bridges over the canal have a gentle hump; the canal itself is the water surface (not walkable).
  */
 import type { CityLayout } from '../contracts';
+import { fairCatsOf } from '../net/faircats';
+import { fairCatsGround } from './fcground';
 
 export const LOW_H = -1.4;          // lower street height (m)
 export const CANAL_WATER = -0.45;   // water surface relative to the lower street (m)
@@ -69,4 +71,10 @@ export function makeGroundAt(s: GroundSpec): (x: number, y: number) => number {
     }
     return lowH;
   };
+}
+
+/** The ground of a layout: the new cats fair has its own (plateau, bank, stairs, pond — fcground.ts). */
+export function layoutGroundAt(L: CityLayout): (x: number, y: number) => number {
+  const fc = fairCatsOf(L);
+  return fc ? fairCatsGround(fc) : makeGroundAt(groundSpec(L));
 }

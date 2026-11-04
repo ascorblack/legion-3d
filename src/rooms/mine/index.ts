@@ -45,7 +45,7 @@ export { MineModel } from './state';
 export { MineScene } from './scene';
 
 /** Mine id of the current city: district towns have their own mine, the fair (home city) — 'home'. */
-export function mineIdOf(layoutId: string | undefined): string { return !layoutId || layoutId === 'fair' ? 'home' : layoutId; }
+export function mineIdOf(layoutId: string | undefined): string { return !layoutId || layoutId === 'fair' || layoutId === 'fairc' ? 'home' : layoutId; }
 
 export interface MineRoomOpts {
   /** Inject a client (dev page / tests with a fake API). */

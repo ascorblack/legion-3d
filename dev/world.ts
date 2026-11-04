@@ -14,7 +14,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { fixtureLayout, campFixtureLayout, villageFixtureLayout } from './fixtures';
+import { fixtureLayout, campFixtureLayout, villageFixtureLayout, fairCatsFixtureLayout } from './fixtures';
 import { buildCity } from '../src/world';
 import { toX, toZ, fromX, fromZ, EYE } from '../src/world/coords';
 import type { QualityLevel } from '../src/contracts';
@@ -38,7 +38,7 @@ const app = document.getElementById('app')!;
   camera.rotation.order = 'YXZ';
 
   const st = qs.get('style') || 'cats';
-  const layout = qs.get('town') === 'camp' ? campFixtureLayout(st) : qs.get('town') === 'village' ? villageFixtureLayout(st) : fixtureLayout();
+  const layout = qs.get('fc') === '1' ? fairCatsFixtureLayout({ styleId: st }) : qs.get('town') === 'camp' ? campFixtureLayout(st) : qs.get('town') === 'village' ? villageFixtureLayout(st) : fixtureLayout();
   layout.styleId = st;
   const t0 = performance.now();
   const world = await buildCity(layout, { quality: q, renderer });

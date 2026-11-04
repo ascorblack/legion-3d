@@ -52,6 +52,9 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   `.cy[data-town]`, picker, sessionStorage `lgCityTown`, hero `hm`/`cp`/`tw`) — `LGCity.where/towns` no longer exist.
   The camp is real 3D (`src/world/camp.ts`, layout from `window.LGCampMap`); district towns get their layout and walk grid
   from `LGTownGen` + GET `/api/city/towns` but are drawn with the generic street (no river/plazas art yet).
+  The new cats fair (site 04.11, /api/me `fc`, `.cy[data-town="fairc"]`, layout id `fairc`) is real 3D from `window.LGFairCats` /
+  `LGFairCatsCity` (`src/net/faircats.ts`, `src/world/faircats.ts`); `LGCity.where()` says 'fair' for both fairs — the DOM decides.
+  Fixture `test/fixtures/faircats-map.json` (`node scripts/fixture-faircats.mjs <site copy>`), dev `dist-dev/game.html?fc=1`.
 - Site contract: `src/data/site-contract.json` is checked statically (`npm run drift`) and at runtime (boot guard in
   `src/net/site.ts` via `src/net/contract.ts`; `node e2e/contract.mjs` against the live page).
 - Buildings open through the room manager: 3D shops (`shop3d`), 3D interiors with the site's panel over them
