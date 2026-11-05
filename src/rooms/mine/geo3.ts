@@ -93,11 +93,11 @@ export function mine3Geo(info: Floor3Info): MineGeom {
   const hx = X0 + hb[0] * CW, hy = Y0 + hb[1] * RH, hw = hb[2] * CW, hh = hb[3] * RH;
   const ZONE: Rect = [hx + 12, hy + 40, hx + hw - 12, hy + hh - 10];
   const inHall = (i: number) => { if (i < 0) return false; const gx = i % w, gy = Math.floor(i / w); return gx >= hb[0] && gx < hb[0] + hb[2] && gy >= hb[1] && gy < hb[1] + hb[3]; };
-  // hall objects (from the hall's top-left corner, 512 × 384): lift cage top centre, supplier top left, buyer bottom left, board bottom right
+  // hall objects (from the hall's top-left corner, 512 × 384; site 05.11 moved the lift right, liftX = hx + 326): lift cage top, supplier top left, buyer bottom left, board bottom right
   const FOOT: Foot[] = [
-    { k: 'lift', r: [hx + 196, hy + 60, hx + 316, hy + 168], s: [hx + 196, hy, hx + 316, hy + 168], z: hy + 164 },
-    { k: 'lamp', lamp: 1, r: [hx + 20, hy + 92, hx + 150, hy + 150], s: [hx + 20, hy + 40, hx + 150, hy + 150], z: hy + 146, at: [hx + 96, hy + 186] },
-    { k: 'npcLamp', npc: 'lamp', lamp: 1, r: [hx + 150, hy + 118, hx + 186, hy + 150], s: [hx + 150, hy + 118, hx + 186, hy + 150], z: hy + 146 },
+    { k: 'lift', r: [hx + 266, hy + 60, hx + 386, hy + 168], s: [hx + 266, hy, hx + 386, hy + 168], z: hy + 164 },
+    { k: 'lamp', lamp: 1, r: [hx + 20, hy + 92, hx + 138, hy + 150], s: [hx + 20, hy + 40, hx + 138, hy + 150], z: hy + 146, at: [hx + 96, hy + 186] },
+    { k: 'npcLamp', npc: 'lamp', lamp: 1, r: [hx + 138, hy + 118, hx + 174, hy + 150], s: [hx + 138, hy + 118, hx + 174, hy + 150], z: hy + 146 },
     { k: 'buyer', r: [hx + 20, hy + 280, hx + 176, hy + 344], s: [hx + 20, hy + 220, hx + 176, hy + 344], z: hy + 340, at: [hx + 120, hy + 366] },
     { k: 'npcBuy', npc: 'buy', r: [hx + 176, hy + 312, hx + 212, hy + 344], s: [hx + 176, hy + 312, hx + 212, hy + 344], z: hy + 340 },
     { k: 'board', r: [hx + 356, hy + 300, hx + 492, hy + 350], s: [hx + 356, hy + 230, hx + 492, hy + 350], z: hy + 346, at: [hx + 424, hy + 370] },

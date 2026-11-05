@@ -779,6 +779,20 @@
       "re": "tnOn: \\(\\) => !!\\(ME && ME\\.tn\\)",
       "severity": "degrade",
       "why": "/api/me `tn` lets the site load Town Kit towns (city.js townPrep) — the City DOM `n-<id>` is what src/net/town.ts reads"
+    },
+    {
+      "id": "world.js hall lift FOOT (mine 3.0)",
+      "file": "world.js",
+      "re": "k: 'lift', r: \\[hx \\+ 266, hy \\+ 60, hx \\+ 386, hy \\+ 168\\]",
+      "severity": "degrade",
+      "why": "site 05.11 moved the hall lift (liftX = hx + 326); src/rooms/mine/geo3.ts FOOT mirrors the hall objects — on a change copy the FOOT rects again"
+    },
+    {
+      "id": "city.js WASD skips aria-modal",
+      "file": "city.js",
+      "re": "getAttribute\\('aria-modal'\\) === 'true'\\) return true",
+      "severity": "break",
+      "why": "the site's City WASD/E runs hidden under our canvas and stands down only while a visible [aria-modal=true] is on the page (kwModal); #l3d-host relies on it (src/content/game.ts) — otherwise the hero walks twice"
     }
   ]
 }
