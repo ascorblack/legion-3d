@@ -8,6 +8,7 @@
  */
 import type { FairCatsScene } from '../net/faircats';
 import { inPoly, rimY } from '../net/faircats';
+import { kitOf, kitTierH, type KitInfo } from '../net/townkit';
 
 export const FC_H = 2.4;      // plateau above the town (m)
 export const FC_MH = 3.4;     // mountain top above the plateau (m)
@@ -17,7 +18,42 @@ export const FC_POND = -0.32; // pond water surface (m)
 /** x of the plateau's west cliff (fc-map.js PLATEAU starts at x 2150). */
 export const plateauX0 = (sc: FairCatsScene): number => (sc.plateau.length ? Math.min(...sc.plateau.map((p) => p[0])) : sc.rim[0][0]);
 
+/** A rim polyline's x range (px). */
+const rimSpan = (rim: readonly [number, number][]): [number, number] => (rim.length ? [rim[0][0], rim[rim.length - 1][0]] : [Infinity, -Infinity]);
+
+/**
+ * Ground of a Town Kit town (src/net/townkit.ts kit): every tier polygon stands kitTierH(lv) above the town; under its rim
+ * the cliff face is a bank from the tier (rim) down to rim + face; stairs ramp from the rim of the tier they climb to
+ * their foot; bridges (the site's `over` rects) are a plank above the ground; water polygons are the pond surface; a
+ * rock (not walkable) stands on whatever is under it — its body is drawn by the terrain, the ground stays.
+ */
+export function townKitGround(sc: FairCatsScene, kit: KitInfo): (x: number, y: number) => number {
+  const R = sc.rail, tiers = kit.tiers.map((t) => ({ ...t, h: kitTierH(t.lv, FC_H), span: rimSpan(t.rim) }));
+  const stairs = sc.stairs.map((s) => {
+    const xc = (s.x0 + s.x1) / 2;
+    const t = tiers.find((q) => q.rim.length >= 2 && xc >= q.span[0] && xc <= q.span[1] && Math.abs(rimY(q.rim, xc) - (s.y0 + s.y1) / 2) < (s.y1 - s.y0) / 2 + q.face) ?? null;
+    return { s, t, r: t ? rimY(t.rim, xc) : s.y0 };
+  });
+  const bridges = kit.bridges.flatMap((b) => b.rects);
+  return (x: number, y: number): number => {
+    for (let i = 0; i < stairs.length; i++) {
+      const { s, t, r } = stairs[i];
+      if (t && x >= s.x0 + R && x <= s.x1 - R && y >= s.y0 && y <= s.y1) return y <= r ? t.h : t.h * Math.max(0, 1 - (y - r) / Math.min(s.y1 - r, t.face));
+    }
+    for (let i = 0; i < tiers.length; i++) {
+      const t = tiers[i];
+      if (inPoly(t.poly, x, y)) return t.h;
+      if (t.rim.length >= 2 && x >= t.span[0] && x <= t.span[1]) { const r = rimY(t.rim, x); if (y >= r && y < r + t.face) return t.h * (1 - (y - r) / t.face); }
+    }
+    for (let i = 0; i < bridges.length; i++) { const q = bridges[i]; if (x >= q[0] && x <= q[2] && y >= q[1] && y <= q[3]) return FC_PIER; }
+    for (let i = 0; i < kit.water.length; i++) if (inPoly(kit.water[i].poly, x, y)) return FC_POND;
+    return 0;
+  };
+}
+
 export function fairCatsGround(sc: FairCatsScene): (x: number, y: number) => number {
+  const kit = kitOf(sc);
+  if (kit) return townKitGround(sc, kit);
   const X0 = plateauX0(sc), F = sc.face, stairs = sc.stairs, pier = sc.pier, R = sc.rail;
   return (x: number, y: number): number => {
     for (let i = 0; i < stairs.length; i++) {

@@ -27,11 +27,14 @@ export function questTown(v: unknown, hero: unknown): QuestTown | null {
   return { id: String(id), name: String(q.town.name || id) };
 }
 
-/** The site's current City town id when its City panel is open (city.js `.cy[data-town]`), else null. */
+/** The site's current City town id when its City panel is open (city.js `.cy[data-town]`), else null. A Town Kit town
+ *  (`n-<id>`, city.js buildKit 05.11) is its district id. */
 export function cityTownShown(doc: Document = document): string | null {
   if (!doc.querySelector('#tab-city.on')) return null;
   const cy = doc.querySelector<HTMLElement>('#tab-city .cy');
-  return cy ? (cy.dataset.town || 'fair') : null;
+  if (!cy) return null;
+  const t = cy.dataset.town || 'fair';
+  return t.startsWith('n-') && t.length > 2 ? t.slice(2) : t;
 }
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

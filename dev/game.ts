@@ -7,7 +7,7 @@ import type { SiteSession } from '../src/contracts/modules';
 import { createStore } from '../src/store/store';
 import { appearanceFrom } from '../src/avatar';
 import { startGame } from '../src/content/game';
-import { fixtureLayout, campFixtureLayout, villageFixtureLayout, withJail, fairCatsFixtureLayout } from './fixtures';
+import { fixtureLayout, campFixtureLayout, villageFixtureLayout, withJail, fairCatsFixtureLayout, kitFixtureLayout } from './fixtures';
 import { createJailHub, jailSeats, jailDay, type JailEntry } from '../src/net/jail';
 import { SX, SZ } from '../src/world/coords';
 import me from '../test/fixtures/me.json';
@@ -34,7 +34,9 @@ const MAGIC = new URLSearchParams(location.search).get('magic') === '1';   // ?m
 const JAIL = new URLSearchParams(location.search).get('jail');
 // ?fc=1: the new cats fair (site 04.11, hero flag me.fc; test/fixtures/faircats-map.json) — with ?jail=1 / ?magic=1 as well
 const FC = new URLSearchParams(location.search).get('fc') === '1';
-const layout = FC ? fairCatsFixtureLayout({ jail: !!JAIL, magic: MAGIC }) : TOWN === 'camp' ? campFixtureLayout('cats', MAGIC) : TOWN === 'village' ? villageFixtureLayout() : JAIL ? withJail(fixtureLayout()) : fixtureLayout();
+// ?tk=<id>: a «Town Kit» district town (site 05.11; test/fixtures/townkit-map.json) under that district id, ?biome=… to repaint
+const TK = new URLSearchParams(location.search).get('tk');
+const layout = TK ? kitFixtureLayout({ id: TK, biome: new URLSearchParams(location.search).get('biome') || undefined, magic: MAGIC }) : FC ? fairCatsFixtureLayout({ jail: !!JAIL, magic: MAGIC }) : TOWN === 'camp' ? campFixtureLayout('cats', MAGIC) : TOWN === 'village' ? villageFixtureLayout() : JAIL ? withJail(fixtureLayout()) : fixtureLayout();
 // ?sky=dusk: an evening sky for photos (the site's own style sky otherwise)
 if (new URLSearchParams(location.search).get('sky') === 'dusk') layout.sky = 'linear-gradient(#1b1640 0%, #3e2f6e 38%, #9a5a86 72%, #f0a070 100%)';
 const SPAWN: [number, number] = (layout as any).spawn || [layout.QW + 660, 1010];

@@ -13,7 +13,12 @@
  *   6. a prisoner of the channel's jail (/api/me `jail`, 30.10) is always on the fair, by the cage.
  * The new cats fair (site 04.11, `fairc`, src/net/faircats.ts): the City DOM says `data-town="fairc"` (city.js buildCats); without
  * a built City (the fair being prepared) the fair counts as the new one when /api/me has `fc` and fc-city.js is loaded.
+ * «Town Kit» district towns (site 05.11, src/net/townkit.ts): city.js buildKit marks the City `data-town="n-<id>"` — the
+ * district town <id> drawn by the kit (`kit: true`); without that mark (old LGTownGen town, KIT_OFF / town_closed) the same
+ * id is the old town. The id stays the district id everywhere (travel, the towns list, rooms, prices).
  */
+import { KIT_PREFIX, kitTownOf } from './townkit';
+
 export const CAMP = 'camp';
 export const FAIR = 'fair';
 
@@ -46,9 +51,16 @@ export const campOpen = (h?: HeroTownFlags | null): boolean => !!(h && (h.cp || 
 
 const clean = (v: unknown): string | null => (typeof v === 'string' && /^[\w-]{1,40}$/.test(v) ? v : null);
 
-/** The current town id from whatever the page shows, strongest signal first. 'fairc' = the new cats fair. */
-export function detectTown(s: TownSignals): { id: string; via: TownSource } {
+/** The current town id from whatever the page shows, strongest signal first. 'fairc' = the new cats fair; `kit` = a
+ *  district town the site draws with the Town Kit (City DOM `n-<id>`). */
+export function detectTown(s: TownSignals): { id: string; via: TownSource; kit?: boolean } {
   const t = detectTown0(s);
+  const k = kitTownOf(s.dom ?? null);
+  if (k && clean(k)) {
+    // the DOM says kit: its id wins over a stale picker / session; LGCity.where() names the same id (TOWN.id)
+    if (t.id === KIT_PREFIX + k || t.id === k || t.via !== 'where') return { id: k, via: t.via === 'where' && t.id === k ? 'where' : 'dom', kit: true };
+    return t;
+  }
   if (t.id !== FAIR) return t;
   // LGCity.where() is back (04.11) but says 'fair' for both fairs (TOWN.id): the City DOM tells them apart
   // (city.js buildCats: data-town="fairc"; the old fair has none — FC_OFF / SVG / town_closed)

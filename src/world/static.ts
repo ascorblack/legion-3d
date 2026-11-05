@@ -23,6 +23,8 @@ import { ledgeDressing } from './ledge';
 import { JAIL_GEO } from './jail';
 import { jailGeoOf } from '../net/jail';
 import { fairCatsOf, type FairCatsLayout } from '../net/faircats';
+import { kitOf } from '../net/townkit';
+import { buildKitTerrain } from './townkit';
 import { registerFairCatsKinds, buildFairCatsTerrain, buildFairCatsBuildings, fairCatsSolids, placeFairCatsProps } from './faircats';
 
 /** A building; on a layout without the lower street (camp, district towns) the lower-street models (storage barn,
@@ -71,7 +73,9 @@ export function buildStatic(k: Ctx, L: CityLayout, spec: GroundSpec, groundAt: (
     // the new cats fair (site 04.11, me.fc): its own terrain, buildings on their foot bands, the site's decor (faircats.ts)
     const FL = L as FairCatsLayout;
     registerFairCatsKinds(k);
-    buildFairCatsTerrain(k, L, fc, groundAt);
+    // a Town Kit district town (site 05.11, src/net/townkit.ts): the kit's tiers / rocks / water / bridges (townkit.ts)
+    const kit = kitOf(fc);
+    if (kit) buildKitTerrain(k, fc, kit, groundAt); else buildFairCatsTerrain(k, L, fc, groundAt);
     k.b.onAdd = slabHook(k, groundAt);
     try { buildFairCatsBuildings(k, FL, groundAt); } finally { k.b.onAdd = null; }
     fairCatsSolids(k, fc, FL.siteObst ?? [], groundAt);

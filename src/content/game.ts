@@ -120,11 +120,13 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
     // the site's walk speed (px/s along x): 230 on the old fair, 260 on the new one when this 3D was tuned; 04.11 the
     // site sped both up ×1.5 — follow it (the server allows what the site walks; other players move at that pace)
     const siteWalk = () => {
-      const W = window as any, fc = W.LGFairCats, cm = W.LGCityMap;
-      const r = fc && cityIsFc() && +fc.SPEED > 0 ? +fc.SPEED / 260 : cm && +cm.SPEED > 0 ? +cm.SPEED / 230 : 1;
+      const W = window as any, fc = W.LGFairCats, cm = W.LGCityMap, tk = W.LGTownKitCity;
+      // a Town Kit district town (05.11, .cy[data-town="n-<id>"]) walks at LGTownKitCity.SPEED (the new fair's scale)
+      const r = tk && cityIsKit() && +tk.SPEED > 0 ? +tk.SPEED / 260 : fc && cityIsFc() && +fc.SPEED > 0 ? +fc.SPEED / 260 : cm && +cm.SPEED > 0 ? +cm.SPEED / 230 : 1;
       return 2.3 * Math.max(0.6, Math.min(2.5, r));
     };
     const cityIsFc = () => { try { return !!document.querySelector('.cy[data-town="fairc"]'); } catch { return false; } };
+    const cityIsKit = () => { try { return !!document.querySelector('.cy[data-town^="n-"]'); } catch { return false; } };
     ctl.setWalk(siteWalk());
     const meAv = kit.create(me.app);
     engine.scene.add(meAv.root);

@@ -159,7 +159,8 @@ export interface FcSiteMap {
   free(x: number, y: number): boolean; nearest(x: number, y: number): P2; path?(a: P2, b: P2): P2[];
   clear?(a: P2, b: P2): boolean; levelAt?(x: number, y: number): number;
 }
-export function fairCatsLayout(sc: FairCatsScene, map: FcSiteMap, buildings: Building[], o: { styleId: string; spawn?: P2; jail?: boolean }): FairCatsLayout {
+/** `id`: a Town Kit district town (src/net/townkit.ts) is built the same way under its district id. */
+export function fairCatsLayout(sc: FairCatsScene, map: FcSiteMap, buildings: Building[], o: { styleId: string; spawn?: P2; jail?: boolean; id?: string }): FairCatsLayout {
   const g = sc.buildings.find((b) => b.id === 'gate');
   const spawn: P2 = o.spawn ?? (g ? [g.door.x, g.door.y - 170] : [sc.W / 2, sc.H * 0.8]);
   const J = o.jail ? fairCatsJailGeo(sc) : null;
@@ -174,7 +175,7 @@ export function fairCatsLayout(sc: FairCatsScene, map: FcSiteMap, buildings: Bui
   }
   return {
     // area: the town's box (the minimap, solidTop's outside, the default spawn); the site's map is 5760 × 3240
-    id: FAIRC, styleId: o.styleId, W: sc.W, H: sc.H, QW: 0, area: townBox(sc),
+    id: o.id ?? FAIRC, styleId: o.styleId, W: sc.W, H: sc.H, QW: 0, area: townBox(sc),
     obstacles, buildings,
     free: (x, y) => map.free(x, y), nearest: (x, y) => map.nearest(x, y),
     ...(map.path ? { path: (a: P2, b: P2) => map.path!(a, b) } : {}),

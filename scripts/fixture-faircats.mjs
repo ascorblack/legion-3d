@@ -13,9 +13,12 @@ import vm from 'node:vm';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dir = process.argv[2];
 if (!dir) { console.error('usage: node scripts/fixture-faircats.mjs <dir with fc-map.js>'); process.exit(1); }
-const module = { exports: {} };
-vm.runInNewContext(readFileSync(join(dir, 'fc-map.js'), 'utf8'), { module, exports: module.exports, console, Math, JSON, Date, Map, Uint8Array, Uint32Array, Int32Array, Float32Array, Object, Array }, { timeout: 10000 });
-const F = module.exports;
+const G0 = { console, Math, JSON, Date, Map, Set, Uint8Array, Uint32Array, Int32Array, Float32Array, Object, Array, Number, String, Infinity, NaN };
+const load = (file, req) => { const module = { exports: {} }; vm.runInNewContext(readFileSync(join(dir, file), 'utf8'), { ...G0, module, exports: module.exports, require: req }, { timeout: 10000 }); return module.exports; };
+// since 05.11 fc-map.js is built on the Town Kit (node: require('../townkit/tkmap.js') = tk-map.js, window.LGTownKitMap)
+let K = null;
+try { K = load('tk-map.js'); } catch { /* an older site copy: fc-map.js stands alone */ }
+const F = load('fc-map.js', (p) => { if (K && /tkmap|tk-map/.test(p)) return K; throw new Error('require ' + p); });
 if (!F || typeof F.make !== 'function') { console.error('fc-map.js did not export LGFairCats'); process.exit(1); }
 const m0 = F.make({}), m1 = F.make({ jail: true });
 const patch = [];

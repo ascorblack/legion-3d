@@ -32,9 +32,11 @@ function siteDir(): string | null {
 }
 const SITE = siteDir();
 function realFc(): any {
-  const module = { exports: {} as any };
-  vm.runInNewContext(readFileSync(join(SITE!, 'fc-map.js'), 'utf8'), { module, exports: module.exports, Math, JSON, Map, Uint8Array, Uint32Array, Int32Array, Float32Array, Object, Array }, { timeout: 10000 });
-  return module.exports;
+  const G0 = { Math, JSON, Map, Set, Uint8Array, Uint32Array, Int32Array, Float32Array, Object, Array, Number, String, Infinity, NaN };
+  const load = (f: string, req?: (p: string) => unknown) => { const module = { exports: {} as any }; vm.runInNewContext(readFileSync(join(SITE!, f), 'utf8'), { ...G0, module, exports: module.exports, require: req }, { timeout: 10000 }); return module.exports; };
+  // since 05.11 fc-map.js is built on the Town Kit: node require('../townkit/tkmap.js') = tk-map.js
+  const K = existsSync(join(SITE!, 'tk-map.js')) ? load('tk-map.js') : null;
+  return load('fc-map.js', (p) => { if (K && /tkmap|tk-map/.test(p)) return K; throw new Error('require ' + p); });
 }
 
 const sc = fairCatsScene(fx)!;
@@ -65,6 +67,13 @@ describe('new cats fair — layout data (src/net/faircats.ts)', () => {
   it.skipIf(!SITE)('equals the real fc-city.js map({ jail, magic }) building list', () => {
     const F = realFc();
     const win: any = { LGFairCats: F, LGFairCatsArt: {}, LGCityMap: { BUILDINGS: (fairMap as any).BUILDINGS } };
+    // since 05.11 fc-city.js uses the Town Kit's tk-city.js (LGTownKitCity.buildings / wrap)
+    if (existsSync(join(SITE!, 'tk-city.js'))) {
+      const module = { exports: {} as any };
+      vm.runInNewContext(readFileSync(join(SITE!, 'tk-map.js'), 'utf8'), { module, exports: module.exports, Math, JSON, Map, Set, Uint8Array, Uint32Array, Int32Array, Float32Array, Object, Array, Number, String });
+      win.LGTownKitMap = module.exports; win.LGTownKitArt = {};
+      vm.runInNewContext(readFileSync(join(SITE!, 'tk-city.js'), 'utf8'), { window: win, Math, JSON, Map, Object, Array, Date, Number, String });
+    }
     vm.runInNewContext(readFileSync(join(SITE!, 'fc-city.js'), 'utf8'), { window: win, Math, JSON, Map, Uint8Array, Uint32Array, Int32Array, Float32Array, Object, Array }, { timeout: 10000 });
     const C = win.LGFairCatsCity;
     expect(typeof C.map).toBe('function'); expect(typeof C.build).toBe('function');

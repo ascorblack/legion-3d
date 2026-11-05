@@ -633,6 +633,9 @@ export function buildBuilding(k: Ctx, b: Building): void {
     (k.solids ||= []).push(x0, x1, zf - 6, solid, Infinity);
   }
   if ((b.soon || b.scaffold) && (b.id === 'hall')) scaffolding(k, x0 + 1.2, x1, zf, Math.min(h * 0.62, 4));
+  // a Town Kit building under construction (tk-city.js build.until > now, src/net/townkit.ts kitBuildState): scaffolding
+  // over its front (no other town sets `scaffold` on anything but the hall)
+  else if (b.scaffold && upper) scaffolding(k, x0 + 0.3, x1 - 0.3, zf, Math.min(h * 0.62, 4));
 }
 
 /**

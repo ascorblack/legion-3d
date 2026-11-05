@@ -55,6 +55,11 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   The new cats fair (site 04.11, /api/me `fc`, `.cy[data-town="fairc"]`, layout id `fairc`) is real 3D from `window.LGFairCats` /
   `LGFairCatsCity` (`src/net/faircats.ts`, `src/world/faircats.ts`); `LGCity.where()` says 'fair' for both fairs — the DOM decides.
   Fixture `test/fixtures/faircats-map.json` (`node scripts/fixture-faircats.mjs <site copy>`), dev `dist-dev/game.html?fc=1`.
+  «Town Kit» district towns (site 05.11, /api/me `tn` + towns entry `nw`, `.cy[data-town="n-<id>"]`, layout id = the district id):
+  `window.LGTownKitTowns[id]` + `LGTownKitMap` / `LGTownKitCity` → `src/net/townkit.ts` townKitScene → the cats fair's 3D
+  builder (`src/world/faircats.ts`, terrain `src/world/townkit.ts`, ground `fcground.ts townKitGround`); levels shrink plots,
+  a running construction is closed with scaffolding. Fixture `test/fixtures/townkit-map.json` (`node scripts/fixture-townkit.mjs
+  <site copy> [--kit=<towns file>]`), dev `dist-dev/game.html?tk=<id>[&biome=ice]`. Old LGTownGen towns are unchanged.
 - Site contract: `src/data/site-contract.json` is checked statically (`npm run drift`) and at runtime (boot guard in
   `src/net/site.ts` via `src/net/contract.ts`; `node e2e/contract.mjs` against the live page).
 - Buildings open through the room manager: 3D shops (`shop3d`), 3D interiors with the site's panel over them

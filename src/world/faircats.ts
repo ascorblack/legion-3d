@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import type { Building, CityLayout } from '../contracts';
 import type { FairCatsScene, FairCatsLayout, FcItem } from '../net/faircats';
 import { fairCatsOf, inPoly, rimY } from '../net/faircats';
+import { kitOf } from '../net/townkit';
 import { toX, toZ, SX, SZ } from './coords';
 import { GEO, M } from './batch';
 import { type Ctx, box, rbox, cyl, ball, cone, shade } from './kit';
@@ -72,7 +73,7 @@ export function registerFairCatsKinds(k: Ctx): void {
 /* ------------------------------------------------------------------ helpers */
 const zOf = (y: number) => toZ(y);
 /** A horizontal polygon (px) at height y as a ShapeGeometry in world metres (holes optional). */
-function polyGeo(poly: readonly P2[], y: number, holes: (readonly P2[])[] = []): THREE.BufferGeometry {
+export function polyGeo(poly: readonly P2[], y: number, holes: (readonly P2[])[] = []): THREE.BufferGeometry {
   const sh = new THREE.Shape(poly.map(([px, py]) => new THREE.Vector2(toX(px), -toZ(py))));
   for (const h of holes) sh.holes.push(new THREE.Path(h.map(([px, py]) => new THREE.Vector2(toX(px), -toZ(py)))));
   const g = new THREE.ShapeGeometry(sh);
@@ -80,7 +81,7 @@ function polyGeo(poly: readonly P2[], y: number, holes: (readonly P2[])[] = []):
   return g;
 }
 /** A strip of quads between two polylines (world points), each [x, y, z]; faces towards `out` (the strip's normal side). */
-function stripGeo(top: number[][], bot: number[][]): THREE.BufferGeometry {
+export function stripGeo(top: number[][], bot: number[][]): THREE.BufferGeometry {
   const pos: number[] = [];
   for (let i = 0; i + 1 < top.length; i++) {
     const a = top[i], b = top[i + 1], c = bot[i + 1], d = bot[i];
@@ -90,9 +91,9 @@ function stripGeo(top: number[][], bot: number[][]): THREE.BufferGeometry {
   return g;
 }
 /** Low-poly lumps (20 / 80 tris) for small round props and rocks — a UV sphere is 192. */
-const ICO0 = new THREE.IcosahedronGeometry(0.5, 0), ICO1 = new THREE.IcosahedronGeometry(0.5, 1);
+export const ICO0 = new THREE.IcosahedronGeometry(0.5, 0), ICO1 = new THREE.IcosahedronGeometry(0.5, 1);
 const lump = (k: Ctx, mat: Parameters<Ctx['b']['add']>[0], col: string, x: number, y: number, z: number, r: number, sy = 1) => k.b.add(mat, ICO0, M(x, y, z, r * 2, r * 2 * sy, r * 2, 0, (x * 7.3 + z * 3.1 + y * 5.7) % 6.28, 0), col, 1);
-const hash = (x: number, y: number) => { const h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return h - Math.floor(h); };
+export const hash = (x: number, y: number) => { const h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return h - Math.floor(h); };
 
 /** Is a point (px) on a street / square / plaza / lane (no grass there)? */
 export function onPaving(sc: FairCatsScene, x: number, y: number, margin = 0): boolean {
@@ -198,6 +199,34 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
       for (const xc of [x0 + rl / 2, x1 - rl / 2]) rbox(k, 'stone', shade(P.stone, -0.18), xc, FC_H / 2 + 0.1, (z0 + z1) / 2, rl, 0.9, len, 0, ang, 0, 0.8); }
     for (const x of [x0 + rl / 2, x1 - rl / 2]) { cyl(k, 'stone', shade(P.stone, -0.25), x, FC_H, zOf(r) + 0.05, 0.13, 0.75, 8, 0.6); ball(k, 'emit', '#ffcf4a', x, FC_H + 0.86, zOf(r) + 0.05, 0.1); k.glows.push(x, FC_H + 0.86, zOf(r) + 0.05, 0.6, 1, 0.75, 0.4); }
   }
+  fcRails(k, sc, groundAt);
+  fcStreets(k, sc, groundAt);
+  // ---- pond: water, a soil bank skirt, the pier
+  k.b.tag = 'terrain:pond';
+  if (sc.pond.length >= 3) {
+    const g = polyGeo(sc.pond, FC_POND); k.b.add('water', g, M(0, 0, 0), '#ffffff', 3); g.dispose();
+    const t: number[][] = [], b: number[][] = [];
+    for (const [x, y] of [...sc.pond, sc.pond[0]]) { t.push([toX(x), 0.0, zOf(y)]); b.push([toX(x), FC_POND - 0.25, zOf(y)]); }
+    const gs = stripGeo(t, b); k.b.add('rock', gs, M(0, 0, 0), shade(P.rock, -0.2), 1.2); gs.dispose();
+    const pr = sc.pier;
+    if ([pr.x0, pr.x1, pr.y0, pr.y1].every(Number.isFinite)) {
+      const deck = (x0: number, x1: number, y0: number, y1: number) => {
+        const n = Math.max(2, Math.round(toX(x1 - x0) / 0.22));
+        for (let i = 0; i < n; i++) box(k, 'wood', i % 2 ? P.woodL : shade(P.woodL, -0.08), toX(x0 + (x1 - x0) * i / n) + 0.01, toX(x0 + (x1 - x0) * (i + 1) / n) - 0.01, FC_PIER - 0.06, FC_PIER, zOf(y0), zOf(y1), 0.6);
+        for (const [x, y] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) box(k, 'wood', P.woodD, toX(x) - 0.06, toX(x) + 0.06, FC_POND - 0.3, FC_PIER - 0.061, zOf(y) - 0.06, zOf(y) + 0.06, 0.5);
+      };
+      const endOk = pr.end.every(Number.isFinite);
+      deck(endOk ? Math.max(pr.x0, pr.end[2]) : pr.x0, pr.x1, pr.y0, pr.y1);
+      if (endOk) deck(pr.end[0], pr.end[2], pr.end[1], pr.end[3]);
+    }
+  }
+  fcWall(k, sc);
+  k.b.tag = '';
+}
+
+/** Cart rails along sc.rails, following the ground (shared with the Town Kit, src/world/townkit.ts). */
+export function fcRails(k: Ctx, sc: FairCatsScene, groundAt: (x: number, y: number) => number): void {
+  const P = k.pal;
   // cart rails from the mine down the ramp
   k.b.tag = 'terrain:rails';
   for (let i = 0; i + 1 < sc.rails.length; i++) {
@@ -210,6 +239,10 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
       rbox(k, 'wood', P.woodD, X, (ya + yb) / 2 + 0.015, Z, 0.12, 0.04, 0.62, yaw, 0, 0, 0.5);
     }
   }
+}
+/** Streets, squares, the plaza, lanes of a scene (shared with the Town Kit). */
+export function fcStreets(k: Ctx, sc: FairCatsScene, groundAt: (x: number, y: number) => number): void {
+  const P = k.pal;
   // ---- streets, squares, the plaza, lanes (each class its own height: no coplanar overlaps)
   k.b.tag = 'terrain:streets';
   sc.streets.forEach((s, i) => {
@@ -235,25 +268,11 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
       rbox(k, 'paving', '#d8c8b8', toX(mx), ga + 0.002, zOf(my), len + w * 0.5, 0.008, w, -Math.atan2(dz, dx), 0, 0, 1.6);
     }
   }
-  // ---- pond: water, a soil bank skirt, the pier
-  k.b.tag = 'terrain:pond';
-  if (sc.pond.length >= 3) {
-    const g = polyGeo(sc.pond, FC_POND); k.b.add('water', g, M(0, 0, 0), '#ffffff', 3); g.dispose();
-    const t: number[][] = [], b: number[][] = [];
-    for (const [x, y] of [...sc.pond, sc.pond[0]]) { t.push([toX(x), 0.0, zOf(y)]); b.push([toX(x), FC_POND - 0.25, zOf(y)]); }
-    const gs = stripGeo(t, b); k.b.add('rock', gs, M(0, 0, 0), shade(P.rock, -0.2), 1.2); gs.dispose();
-    const pr = sc.pier;
-    if ([pr.x0, pr.x1, pr.y0, pr.y1].every(Number.isFinite)) {
-      const deck = (x0: number, x1: number, y0: number, y1: number) => {
-        const n = Math.max(2, Math.round(toX(x1 - x0) / 0.22));
-        for (let i = 0; i < n; i++) box(k, 'wood', i % 2 ? P.woodL : shade(P.woodL, -0.08), toX(x0 + (x1 - x0) * i / n) + 0.01, toX(x0 + (x1 - x0) * (i + 1) / n) - 0.01, FC_PIER - 0.06, FC_PIER, zOf(y0), zOf(y1), 0.6);
-        for (const [x, y] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) box(k, 'wood', P.woodD, toX(x) - 0.06, toX(x) + 0.06, FC_POND - 0.3, FC_PIER - 0.061, zOf(y) - 0.06, zOf(y) + 0.06, 0.5);
-      };
-      const endOk = pr.end.every(Number.isFinite);
-      deck(endOk ? Math.max(pr.x0, pr.end[2]) : pr.x0, pr.x1, pr.y0, pr.y1);
-      if (endOk) deck(pr.end[0], pr.end[2], pr.end[1], pr.end[3]);
-    }
-  }
+}
+/** The city wall along the bottom with towers, open at the gate (shared with the Town Kit; none without numbers). */
+export function fcWall(k: Ctx, sc: FairCatsScene): void {
+  const P = k.pal;
+  if (![sc.wall.x0, sc.wall.x1, sc.wall.y0, sc.wall.y1, sc.wall.gate[0], sc.wall.gate[1]].every(Number.isFinite)) return;
   // ---- the city wall along the bottom with towers, open at the gate
   k.b.tag = 'terrain:wall';
   {
@@ -270,10 +289,9 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
       k.colliders.push(toX(x) - 1.1, toX(x) + 1.1, 0, hh + 2.5, (za + zb) / 2 - 1.1, (za + zb) / 2 + 1.1);
     }
   }
-  k.b.tag = '';
 }
 
-function roundRect(x0: number, y0: number, x1: number, y1: number, r: number): P2[] {
+export function roundRect(x0: number, y0: number, x1: number, y1: number, r: number): P2[] {
   const out: P2[] = [], c: [number, number, number][] = [[x1 - r, y1 - r, 0], [x0 + r, y1 - r, 0.5], [x0 + r, y0 + r, 1], [x1 - r, y0 + r, 1.5]];
   for (const [cx, cy, a0] of c) for (let j = 0; j <= 5; j++) { const a = (a0 + j / 10) * Math.PI; out.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
   return out;
@@ -282,7 +300,7 @@ function roundRect(x0: number, y0: number, x1: number, y1: number, r: number): P
 /* ------------------------------------------------------------------ buildings + houses */
 /** Every site building on its foot band (see the header). */
 export function buildFairCatsBuildings(k: Ctx, L: FairCatsLayout, groundAt: (x: number, y: number) => number): void {
-  const sc = L.faircats;
+  const sc = L.faircats, kit = kitOf(sc);
   for (const b of L.buildings) {
     const fb = sc.buildings.find((x) => x.id === b.id);
     k.b.tag = b.id;
@@ -306,7 +324,9 @@ export function buildFairCatsBuildings(k: Ctx, L: FairCatsLayout, groundAt: (x: 
     }
     const foot = fb?.foot ?? [b.hit[0], b.hit[2], b.hit[1], b.hit[3]];
     const vis = fb?.vis ?? [b.hit[0], b.hit[2], b.hit[1], b.hit[3]];
-    const hgt = Math.max(vis[3] - vis[1], OLD_H[b.id] ?? 0);
+    // a Town Kit building below level 5 has a smaller plot (tk-map.js plotOf): the model shrinks in height with it
+    const v5 = kit?.vis5[b.id], shr = v5 ? Math.max(0.4, Math.min(1, (vis[3] - vis[1]) / Math.max(1, v5[3] - v5[1]))) : 1;
+    const hgt = Math.max(vis[3] - vis[1], (OLD_H[b.id] ?? 0) * shr);
     const cx = (vis[0] + vis[2]) / 2, flip = b.id === 'gate';
     const virt: Building = { ...b, title: L.signs[b.id] ? signText(L.signs[b.id]) : b.title, hit: [vis[0], vis[2], 800 - hgt, 800], door: { x: b.door.x, y: 822 } };
     let zb = toZ(foot[1]) + 0.03, zf = toZ(foot[3]) - 0.03;
@@ -343,7 +363,9 @@ const TOP: Record<string, number> = { bench: 0.46, flowers: 0.35, box: 0.45, pot
 export function fairCatsSolids(k: Ctx, sc: FairCatsScene, obst: readonly any[], groundAt: (x: number, y: number) => number): void {
   const S = (k.solids ||= []);
   const pier = sc.pier;
-  const onPier = (x: number, y: number) => (x >= pier.x0 && x <= pier.x1 && y >= pier.y0 && y <= pier.y1) || (x >= pier.end[0] && x <= pier.end[2] && y >= pier.end[1] && y <= pier.end[3]);
+  const BR = kitOf(sc)?.bridges.flatMap((b) => b.rects) ?? [];   // a Town Kit town: every bridge crosses its water
+  const onPier = (x: number, y: number) => (x >= pier.x0 && x <= pier.x1 && y >= pier.y0 && y <= pier.y1) || (x >= pier.end[0] && x <= pier.end[2] && y >= pier.end[1] && y <= pier.end[3])
+    || BR.some((q) => x >= q[0] && x <= q[2] && y >= q[1] && y <= q[3]);
   for (const o of obst) {
     const tag = String(o.tag || '');
     if (tag === 'jail' || tag === 'building:jail' || tag === 'building:mine') continue;   // the jail builder's own (cage floor)
@@ -362,7 +384,7 @@ export function fairCatsSolids(k: Ctx, sc: FairCatsScene, obst: readonly any[], 
         for (let i = 0; i + 1 < xs.length; i += 2) {
           if (tag === 'water') {   // the pier crosses the pond: not water there
             let x = xs[i] + 2;
-            for (let xx = x; xx <= xs[i + 1] - 2; xx += 4) { if (onPier(xx, yc)) { if (xx - 4 > x) S.push(toX(x), toX(xx - 4), toZ(y), toZ(y + 10), Infinity); x = xx + 4; } }
+            for (let xx = x; xx <= xs[i + 1] - 2; xx += 4) { if (onPier(xx, yc) || BR.some((q) => xx >= q[0] && xx <= q[2] && y + 10 >= q[1] && y <= q[3])) { if (xx - 4 > x) S.push(toX(x), toX(xx - 4), toZ(y), toZ(y + 10), Infinity); x = xx + 4; } }
             if (xs[i + 1] - 2 > x) S.push(toX(x), toX(xs[i + 1] - 2), toZ(y), toZ(y + 10), Infinity);
           } else {
             // the stairs / ramp cross the cliff faces: their walkable part (between the rails) is cut out
@@ -390,22 +412,32 @@ export function placeFairCatsProps(k: Ctx, L: FairCatsLayout, groundAt: (x: numb
   k.b.tag = 'forest';
   let s = 77;
   const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const town = sc.town, X0 = plateauX0(sc);
+  const town = sc.town, X0 = plateauX0(sc), kit = kitOf(sc);
+  const rocks = kit ? kit.rocks.map((r) => r.poly) : [sc.mount];
+  // a Town Kit town: the biome's trees (tk-art.js NATURE: pines in the north, broadleaf in the woods, none in the sands)
+  const kind = kit ? (kit.biome === 'desert' ? '' : ['forest', 'meadow', 'coast', 'ruin', 'swamp'].includes(kit.biome) ? VK.tree : 'fc:pine') : 'fc:pine';
   const tryTree = (x: number, y: number, sc0: number) => {
-    if (inPoly(town, x, y) || L.free(x, y) || inPoly(sc.mount, x, y)) return;
+    if (!kind || inPoly(town, x, y) || L.free(x, y) || rocks.some((r) => inPoly(r, x, y))) return;
     for (let d = 0; d < 60; d += 20) if (L.free(x + d, y) || L.free(x - d, y) || L.free(x, y + d) || L.free(x, y - d)) return;
     if (y > sc.wall.y0 - 60 && y < sc.wall.y1 + 120 && x > sc.wall.x0 - 60 && x < sc.wall.x1 + 60) return;
-    k.inst.add('fc:pine', toX(x), groundAt(x, y), toZ(y), rnd() * 6.28, sc0);
+    k.inst.add(kind, toX(x), groundAt(x, y), toZ(y), rnd() * 6.28, kind === 'fc:pine' ? sc0 : sc0 * 0.9);
   };
   // ≈ 150 pines (≈ 66 tris each): a belt on the west / east edges, north of the low west quarter, beyond the wall, and on
   // the plateau's back; the hills ring of the backdrop does the rest
-  for (let y = 1000; y < sc.H + 500; y += 280 + rnd() * 110) {
+  if (kit) {
+    // any town shape: a ring of cells round the town polygon's box (tryTree keeps them off the walk area)
+    const xs = town.map((p) => p[0]), ys = town.map((p) => p[1]);
+    const bx0 = Math.min(...xs) - 900, bx1 = Math.max(...xs) + 900, by0 = Math.min(...ys) - 700, by1 = Math.max(...ys) + 600;
+    for (let y = by0; y < by1; y += 300 + rnd() * 110) for (let x = bx0; x < bx1; x += 320 + rnd() * 140) tryTree(x, y, 1.3 + rnd() * 0.6);
+  } else for (let y = 1000; y < sc.H + 500; y += 280 + rnd() * 110) {
     for (let x = -600; x < 300; x += 300 + rnd() * 140) tryTree(x, y, 1.3 + rnd() * 0.6);
     for (let x = 5520; x < sc.W + 600; x += 300 + rnd() * 140) tryTree(x, y, 1.3 + rnd() * 0.6);
   }
-  for (let x = -500; x < X0 - 40; x += 230 + rnd() * 100) for (let y = 300; y < 880; y += 240 + rnd() * 90) tryTree(x, y, 1.3 + rnd() * 0.6);
-  for (let x = 0; x < sc.W; x += 330 + rnd() * 160) for (let y = sc.wall.y1 + 180; y < sc.H + 400; y += 300 + rnd() * 100) tryTree(x, y, 1.3 + rnd() * 0.7);
-  for (let x = X0 + 100; x < 4200; x += 300 + rnd() * 150) for (let y = -300; y < 180; y += 260 + rnd() * 100) tryTree(x, y, 1.4 + rnd() * 0.7);
+  if (!kit) {
+    for (let x = -500; x < X0 - 40; x += 230 + rnd() * 100) for (let y = 300; y < 880; y += 240 + rnd() * 90) tryTree(x, y, 1.3 + rnd() * 0.6);
+    for (let x = 0; x < sc.W; x += 330 + rnd() * 160) for (let y = sc.wall.y1 + 180; y < sc.H + 400; y += 300 + rnd() * 100) tryTree(x, y, 1.3 + rnd() * 0.7);
+    for (let x = X0 + 100; x < 4200; x += 300 + rnd() * 150) for (let y = -300; y < 180; y += 260 + rnd() * 100) tryTree(x, y, 1.4 + rnd() * 0.7);
+  }
   void P;
   k.b.tag = '';
   // wires the building builders collected (tent pennants, shop beams) → garland spans

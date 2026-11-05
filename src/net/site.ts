@@ -18,6 +18,7 @@ import { reportDrift } from '../core/drift';
 import { npcPlaces, makeOpts } from '../events/halloween/hwnpc';
 import { CAMP, FAIRC, campScene, detectTown, readTownSignals, townMeta, villageScene, type CampScene, type HeroTownFlags } from './town';
 import { fairCatsScene, fairCatsLayout, isFairId, type FcSiteMap } from './faircats';
+import { townKitScene, kitOf, kitBuildState, kitSiteBuildings } from './townkit';
 import { readSitePals } from '../world/palette';
 import { createJailHub, jailFromMe, jailList, jailSeats, jailGeoOf, type JailHub } from './jail';
 
@@ -88,7 +89,7 @@ export function restyleApps(list: Iterable<{ login: string; app: Appearance; raw
 
 /* ------------------------------------------------------------------ layout */
 /** Current town id of the site's City (src/net/town.ts: DOM, picker, sessionStorage, hero flags). */
-export function currentTown(hero: Hero | null, jailed = false, fc = false): { id: string; via: string } {
+export function currentTown(hero: Hero | null, jailed = false, fc = false): { id: string; via: string; kit?: boolean } {
   return detectTown({ ...readTownSignals(W, document, hero as HeroTownFlags | null, fc), jailed });
 }
 /** Districts list (GET /api/city/towns — the same read the site's own town picker does), cached for a minute. */
@@ -102,11 +103,11 @@ async function townsList(force = false): Promise<any[]> {
 }
 /** Town layout the 3D world can be built from, or null (not available yet / not this town). `townMetaOf` = an entry of
  *  /api/city/towns for district towns. */
-function buildLayout(hero: Hero | null, town: string, townMetaOf: any, jl = false): CityLayout | null {
+function buildLayout(hero: Hero | null, town: string, townMetaOf: any, jl = false, kit = false): CityLayout | null {
   const M = W.LGCityMap, D = W.MDDoodle; if (!M || !D) return null;
   if (town === CAMP) return buildCampLayout(hero);
   if (town === FAIRC) return buildFairCatsLayout(hero, jl);
-  if (town !== 'fair') return townMetaOf ? buildTownLayout(hero, town, townMetaOf) : null;
+  if (town !== 'fair') return townMetaOf ? (kit ? buildKitLayout(hero, town, townMetaOf) : buildTownLayout(hero, town, townMetaOf)) : null;
   let L: any = null; try { L = D.location('fair', { esc: (s: unknown) => String(s ?? '') }); } catch { /* none */ }
   if (!L) return null;
   const ms = !!(hero && hero.ms), mn = !!(hero && hero.mn && Object.keys(hero.mn as object).length);
@@ -220,6 +221,34 @@ function buildFairCatsLayout(hero: Hero | null, jl: boolean): CityLayout | null 
     (L as CityLayout & { sitePals?: unknown }).sitePals = safe(() => readSitePals(W.LGCityArt?.PAL), undefined);
     return L;
   } catch (e) { console.warn('[legion-3d] new fair layout', e); return null; }
+}
+/**
+ * A «Town Kit» district town (site 05.11, src/net/townkit.ts): the page's kit input `LGTownKitTowns[id]` (loaded by city.js
+ * townPrep from /site/towns/<id>.js — no request of ours), the same calls as city.js buildKit / tk-city.js build:
+ * mapLevels(townMeta levels, building) → levelled plots + townAt() walk grid, LGTownKitCity.buildings / wrap for the
+ * site's building list and map object (magic filtered by hero.ms). Null until the kit is on the page (retry).
+ */
+function buildKitLayout(hero: Hero | null, id: string, meta: any): CityLayout | null {
+  try {
+    const K = W.LGTownKitMap, C = W.LGTownKitCity, T = W.LGTownKitTowns?.[id];
+    if (!K || !C || !T || typeof K.townAt !== 'function' || typeof C.wrap !== 'function') { console.info('[legion-3d] town kit not loaded yet:', id); return null; }
+    const tm = townMeta(meta), now = Date.now(), h = (hero || {}) as any, MS = !!h.ms, mn = !!(h.mn && Object.keys(h.mn).length);
+    const lvMap = K.mapLevels(tm.levels || {}, tm.building || {}, now);
+    const Lk = K.layoutOf(T), M = K.townAt(T, lvMap), lev = K.levelled(T, lvMap);
+    const siteB = (C.buildings(lev, tm.building || {}, now) as any[]).filter((b) => !b.magic || MS);
+    const map = C.wrap(M, siteB, Lk.W, Lk.H) as FcSiteMap;
+    const sc = townKitScene(Lk, lev, { building: tm.building || {}, now, rail: +K.RAIL || 18, owner: typeof meta?.oc === 'string' ? meta.oc : '' });
+    if (!sc || !map || typeof map.free !== 'function') return null;
+    const kit = kitOf(sc);
+    const buildings: Building[] = kitSiteBuildings(siteB).map((b) => ({
+      ...b, title: b.id === 'magic' && h.ms ? String(h.ms) : b.title,
+      ...soonOf(b, !!h.au, !!h.sg, mn), ...kitBuildState(b as any, kit, now),
+    }));
+    const sp = safe(() => C.spawn?.(T) as [number, number] | undefined, undefined);
+    const L = fairCatsLayout(sc, map, buildings, { styleId: styleId(), id, ...(Array.isArray(sp) ? { spawn: [+sp[0], +sp[1]] as [number, number] } : {}) });
+    (L as CityLayout & { sitePals?: unknown }).sitePals = safe(() => readSitePals(W.LGCityArt?.PAL), undefined);
+    return L;
+  } catch (e) { console.warn('[legion-3d] town kit layout', id, e); return null; }
 }
 /** The start camp «Перепутье» (campmap.js, loaded by city.js on demand): same building ids as the fair, own scene. */
 function buildCampLayout(hero: Hero | null): CityLayout | null {
@@ -379,7 +408,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     const h = store.hero;
     const t = currentTown(h, !!jail.get().me, meFc); townNow = t.id; townVia = t.via;
     const jl = jail.get().on;
-    const key = `${t.id}|${!!h?.ms}|${!!(h?.mn && Object.keys(h.mn as object).length)}|${!!h?.au}|${!!h?.sg}|${jl}|${styleId()}`;
+    const key = `${t.id}|${t.kit ? 'kit' : ''}|${!!h?.ms}|${!!(h?.mn && Object.keys(h.mn as object).length)}|${!!h?.au}|${!!h?.sg}|${jl}|${styleId()}`;
     if (key === layoutKey) return;
     if (!isFairId(t.id) && t.id !== CAMP) {
       // district town: its entry of /api/city/towns (GET, the same read as the site's town picker) → towngen.js
@@ -389,7 +418,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
         townWant = '';
         if (currentTown(store.hero, !!jail.get().me, meFc).id !== t.id) return;   // switched again meanwhile
         const meta = list.find((x) => x && x.id === t.id);
-        const L = meta && buildLayout(store.hero, t.id, meta);
+        const L = meta && buildLayout(store.hero, t.id, meta, false, !!t.kit);
         if (!L) {
           console.warn('[legion-3d] district town not available:', t.id);
           // e.g. the hand village's file is still loading on the page: look again a few times (no requests of our own)

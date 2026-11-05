@@ -34,6 +34,7 @@ import { campOf, type CampLayout } from './camp';
 import { campThemeOf } from './camp-themes';
 import { villageOf, villageGround, VK } from './village';
 import { fairCatsOf } from '../net/faircats';
+import { kitOf } from '../net/townkit';
 import type { SitePals } from './palette';
 
 /** The city palette of a layout: its style + the page's own quarter colours (layout.sitePals, read by the site adapter). */
@@ -80,6 +81,8 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
   const P = layoutPalette(L), camp = !!campOf(L), CT = camp ? campThemeOf(L.styleId) : null;
   const V = villageOf(L), VG = V ? villageGround(V.biome) : null;   // a hand village: the biome's grass and road soil
   const FCm = !!fairCatsOf(L);   // the new cats fair: cobbled streets ('paving') on a meadow ('lowPaving' = grass)
+  // a Town Kit district town (src/net/townkit.ts): the same, the grass in the biome's colours (village.ts BIOME_GROUND)
+  const KB = kitOf(fairCatsOf(L))?.biome, KG = KB && KB !== 'meadow' ? villageGround(KB)[0] : null;
   const std = (kind: TexKind, o: { rough?: number; ns?: number; colors?: string[]; neutral?: boolean; seed?: number; side?: THREE.Side; size?: number; sd?: SurfaceOpts } = {}) => {
     const t = getTexture(kind, { neutral: o.neutral ?? true, colors: o.colors, seed: o.seed, size: o.size });
     const m = new THREE.MeshStandardMaterial({
@@ -114,7 +117,7 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
     // the camp / villages: 'paving' = night grass, 'lowPaving' = trodden dirt of the trails and roads
     paving: camp || VG ? std('grass', { neutral: false, colors: VG ? VG[0] : CT ? [...CT.grass] : ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.5, sd: { macro: 0.22, hue: 0.16 } })
       : std('cobble', { neutral: false, colors: [P.ground, shade(P.ground, 0.08), P.mortar, P.groundL], rough: 1, ns: 0.7, size: 1024, sd: { macro: 0.16, hue: 0.12, ids: 0.14, moss: soot ? 0 : 0.1, roughVar: 0.15 } }),
-    lowPaving: FCm ? std('grass', { neutral: false, colors: ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.5, seed: 3, sd: { macro: 0.22, hue: 0.16 } })
+    lowPaving: FCm ? std('grass', { neutral: false, colors: KG ?? ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.5, seed: 3, sd: { macro: 0.22, hue: 0.16 } })
       : camp || VG ? std('path', { neutral: false, colors: VG ? VG[1] : CT ? [...CT.soil] : ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.8, seed: 3, sd: { macro: 0.18, hue: 0.12 } })
       : std('cobble', { neutral: false, colors: [P.lowA, P.lowB, P.lowMortar, P.groundL], rough: 1, ns: 0.7, seed: 3, size: 1024, sd: { macro: 0.16, hue: 0.12, ids: 0.14, moss: soot ? 0 : 0.15, roughVar: 0.15 } }),
     leaf: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),

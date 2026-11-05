@@ -11,6 +11,8 @@ import faircats from '../test/fixtures/faircats-map.json';
 import { fairCatsScene, fairCatsBuildings, fairCatsLayout, type FairCatsLayout, type FcSiteMap } from '../src/net/faircats';
 import { campScene, villageScene } from '../src/net/town';
 import { soonOf } from '../src/net/site';
+import townkit from '../test/fixtures/townkit-map.json';
+import { townKitScene, kitOf, kitBuildState } from '../src/net/townkit';
 
 /** free / nearest over a walk grid of the fair fixture (cells C px from AREA.y0, 1 = walkable). */
 function fairGrid(G: ArrayLike<number>): Pick<CityLayout, 'free' | 'nearest'> {
@@ -158,12 +160,15 @@ export function withJail(L: CityLayout): CityLayout {
  * `?fc=1` in dist-dev/game.html and dist-dev/world.html.
  */
 export function fairCatsFixtureMap(o: { jail?: boolean; magic?: boolean } = {}): FcSiteMap & { G: Uint8Array; C: number; cols: number; rows: number } {
-  const m = faircats as any;
+  return gridSiteMap(faircats as any, o.jail ? (faircats as any).grid.jailPatch : null);
+}
+/** A level grid fixture ({ grid: { C, cols, rows, G }, home, W, H, OBST }) as the site map object, with a run patch on top. */
+export function gridSiteMap(m: any, patch: [number, number, number][] | null): FcSiteMap & { G: Uint8Array; C: number; cols: number; rows: number } {
   const { C, cols, rows } = m.grid as { C: number; cols: number; rows: number };
   const G = new Uint8Array(cols * rows);
   const src: string = m.grid.G;
   for (let i = 0; i < G.length; i++) G[i] = src.charCodeAt(i) - 48;
-  if (o.jail) for (const [i, n, v] of m.grid.jailPatch as [number, number, number][]) for (let j = 0; j < n; j++) G[i + j] = v;
+  if (patch) for (const [i, n, v] of patch) for (let j = 0; j < n; j++) G[i + j] = v;
   const lv = (x: number, y: number) => { const c = Math.floor(x / C), r = Math.floor(y / C); return c >= 0 && r >= 0 && c < cols && r < rows ? G[r * cols + c] : 0; };
   const compat = (a: number, b: number) => a === b || a === 3 || b === 3;
   const free = (x: number, y: number) => lv(x, y) > 0;
@@ -212,6 +217,36 @@ export function fairCatsFixtureLayout(o: { styleId?: string; jail?: boolean; mag
   const blds = fairCatsBuildings(sc, meta, { jail: !!o.jail, magic: !!o.magic }).map((b) => ({ ...b, ...soonOf(b, false, false, false) }));
   const fm = fairCatsFixtureMap(o);
   const L = fairCatsLayout(sc, fm, blds, { styleId: o.styleId ?? 'cats', jail: !!o.jail });
+  L.sky = 'linear-gradient(#0f0d2a 0%, #1d1a4a 40%, #3a2f6e 75%, #5a3a7a 100%)';
+  return L;
+}
+
+/**
+ * A «Town Kit» district town (site 05.11; test/fixtures/townkit-map.json, scripts/fixture-townkit.mjs from the site's
+ * tk-map.js): the layout src/net/site.ts buildKitLayout builds from window.LGTownKitTowns[id] / LGTownKitMap /
+ * LGTownKitCity — levelled plots (a building below level 5 is smaller), one construction running (scaffolding, closed),
+ * the kit's walk grid. `?tk=<id>` in dist-dev/game.html and dist-dev/world.html (`?tk=1` keeps the fixture's id);
+ * `?biome=ice` etc. repaints it in another biome.
+ */
+export function kitFixtureLayout(o: { styleId?: string; id?: string; biome?: string; magic?: boolean } = {}): FairCatsLayout {
+  const m = townkit as any, now = m.cfg.now;
+  const T = { ...m.T, ...(o.biome ? { biome: o.biome } : {}) };
+  const sc = townKitScene(T, m.levelled, { building: m.cfg.building, now, rail: m.RAIL, owner: 'demo' })!;
+  const kit = kitOf(sc);
+  const meta = (id: string) => (map as any).BUILDINGS.find((b: any) => b.id === id) || null;
+  // tk-city.js buildings(): hit from vis, titles from LGCityMap, `build` while a construction runs, then the magic filter
+  const blds: Building[] = [];
+  for (const b of m.levelled as any[]) {
+    const mt = meta(b.id) || {};
+    if (mt.magic && !o.magic) continue;
+    const [x0, y0, x1, y1] = b.vis, bt = m.cfg.building[b.id];
+    const one: Building & { build?: unknown } = { id: b.id, title: mt.title || b.title, sub: mt.sub || '', icon: mt.icon || '🏠', hit: [x0, x1, y0, y1], door: { x: b.door.x, y: b.door.y },
+      ...(mt.soon ? { soon: true } : {}), ...(mt.magic ? { magic: true } : {}), ...(mt.mine ? { mine: true } : {}), ...(bt && bt.until > now ? { build: { to: bt.to, until: bt.until } } : {}) };
+    blds.push({ ...one, ...soonOf(one, false, false, false), ...kitBuildState(one as any, kit, now) });
+  }
+  const fm = gridSiteMap(m, null);
+  const id = o.id && o.id !== '1' ? o.id : String(m.T.id);
+  const L = fairCatsLayout(sc, fm, blds, { styleId: o.styleId ?? 'cats', id, spawn: m.spawn });
   L.sky = 'linear-gradient(#0f0d2a 0%, #1d1a4a 40%, #3a2f6e 75%, #5a3a7a 100%)';
   return L;
 }
