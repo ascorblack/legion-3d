@@ -793,6 +793,13 @@
       "re": "getAttribute\\('aria-modal'\\) === 'true'\\) return true",
       "severity": "break",
       "why": "the site's City WASD/E runs hidden under our canvas and stands down only while a visible [aria-modal=true] is on the page (kwModal); #l3d-host relies on it (src/content/game.ts) — otherwise the hero walks twice"
+    },
+    {
+      "id": "app.js free bag sg.sx || sg.fb",
+      "file": "app.js",
+      "re": "h\\.sg\\.sx \\|\\| h\\.sg\\.fb",
+      "severity": "degrade",
+      "why": "site 06.11: hero.sg.fb turns on the free bag layout (sg.lay.b) without the storage layout; src/ui/data.ts bagLay mirrors it — otherwise the 3D bag shows packed cells in a different order than the site"
     }
   ]
 }

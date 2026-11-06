@@ -178,10 +178,11 @@ export function layCells(cs: Cell[], L: readonly unknown[] | null | undefined, t
   for (let i = 0; i < Math.max(total || 0, pos.length); i++) if (!pos[i]) pos[i] = null;
   return pos;
 }
-/** hero.sg.sx (site 03.11): the bag keeps free positions (sg.lay.b) — null when the hero has the classic packed bag. */
+/** hero.sg.sx (site 03.11) or sg.fb (site 06.11, free bag without the storage layout): the bag keeps free positions
+ *  (sg.lay.b) — null when the hero has the classic packed bag. */
 export function bagLay(h: Hero | null): string[] | null {
   const sg = h && (h.sg as any);
-  if (!sg || !sg.sx) return null;
+  if (!sg || !(sg.sx || sg.fb)) return null;
   const b = sg.lay && sg.lay.b;
   return Array.isArray(b) ? b : [];
 }
