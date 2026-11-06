@@ -4,7 +4,7 @@ import type { Building } from '../contracts';
 import { toX, toZ } from './coords';
 import { GEO, GEO2, M, archWallGeo } from './batch';
 import {
-  type Ctx, box, rbox, cyl, cone, ball, gableRoof, gableRoofZ, pyramidRoof, windowZ, doorZ, signZ, timberZ, wallLamp, flag,
+  type Ctx, box, rbox, cyl, cone, ball, gableRoof, gableRoofZ, pyramidRoof, windowZ, doorZ, markDoor, signZ, timberZ, wallLamp, flag,
   stripeColors, awning, shade,
 } from './kit';
 import { mine as lowMine, mineboard as lowMineboard, storage as lowStorage, lowEntranceZ } from './lowstreet';
@@ -188,9 +188,11 @@ function ivy(k: Ctx, rd: () => number, x0: number, x1: number, zf: number, y0: n
 function scaffolding(k: Ctx, x0: number, x1: number, zf: number, h: number): void {
   const P = k.pal, col = shade(P.woodL, -0.1);
   const n = Math.max(2, Math.round((x1 - x0) / 1.4));
+  // the posts carry the top guard rail (it stood 0.2 m above them: geometry lint «float»)
+  let top = h; for (let y = 1.2; y < h; y += 1.4) top = Math.max(top, y + 0.8);
   for (let i = 0; i <= n; i++) {
     const x = x0 + (x1 - x0) * i / n;
-    box(k, 'wood', col, x - 0.05, x + 0.05, 0, h, zf + 0.55, zf + 0.65);
+    box(k, 'wood', col, x - 0.05, x + 0.05, 0, top, zf + 0.55, zf + 0.65);
   }
   for (let y = 1.2; y < h; y += 1.4) {
     box(k, 'wood', col, x0 - 0.1, x1 + 0.1, y, y + 0.08, zf + 0.15, zf + 0.75, 0.5);   // planks
@@ -294,6 +296,7 @@ const trainer: BuildFn = (k, b, x0, x1, zf, h) => {
 const board: BuildFn = (k, b, x0, x1, zf, h) => {
   const P = k.pal, cx = (x0 + x1) / 2, w = (x1 - x0) * 0.85, bz = zf + 0.4;
   const top = Math.min(3.4, h * 0.9);
+  markDoor(k, 'arch', cx - w / 2 - 0.12, cx + w / 2 + 0.12, 0, top + 0.1, bz - 0.14, bz + 0.14);   // the outline traces the board
   for (const px of [cx - w / 2, cx + w / 2]) box(k, 'wood', P.woodD, px - 0.1, px + 0.1, 0, top, bz - 0.1, bz + 0.1, 0.6);
   box(k, 'wood', P.wood, cx - w / 2 + 0.1, cx + w / 2 - 0.1, 0.8, top - 0.5, bz - 0.06, bz + 0.02, 0.6);
   box(k, 'wood', P.woodD, cx - w / 2 - 0.01, cx + w / 2 + 0.01, 0.72, 0.82, bz - 0.11, bz + 0.11);
@@ -335,16 +338,24 @@ const anvil: BuildFn = (k, b, x0, x1, zf, h) => {
   box(k, 'brick', shade(P.brick, -0.25), hx - 0.35, hx + 0.35, 0.98, rh + 1.6, zb + 0.1, zb + 0.7, 1.2);
   k.glows.push(hx, 1.2, zb + 0.7, 2.6, 1, 0.45, 0.15);
   k.lights.push(hx, 1.4, zb + 1.2);
-  // anvil
+  // anvil on its block: a whole London-pattern anvil (stepped foot, waist, face with a heel and a conical horn), every
+  // part resting on the one below (bug 06.11 #3: the face and horn read as half-built / floating); the hover outline
+  // follows the anvil and its block (the shed has no door)
   const ax = (x0 + x1) / 2 + 0.3, az = zFront - 0.6;
-  box(k, 'wood', P.woodD, ax - 0.2, ax + 0.2, 0, 0.45, az - 0.2, az + 0.2, 0.5);
-  box(k, 'metal', '#4a4658', ax - 0.12, ax + 0.12, 0.45, 0.62, az - 0.1, az + 0.1);
-  box(k, 'metal', '#5a566a', ax - 0.32, ax + 0.28, 0.62, 0.78, az - 0.14, az + 0.14);
-  rbox(k, 'metal', '#5a566a', ax + 0.36, 0.72, az, 0.2, 0.08, 0.1, 0, 0, -0.2);
+  box(k, 'wood', P.woodD, ax - 0.22, ax + 0.22, 0, 0.45, az - 0.22, az + 0.22, 0.5);
+  for (let i = 0; i < 3; i++) box(k, 'metal', '#2e2a36', ax - 0.23 + i * 0.2, ax - 0.19 + i * 0.2, 0.45, 0.46, az - 0.23, az + 0.23);   // iron band
+  box(k, 'metal', '#3e3a4a', ax - 0.17, ax + 0.17, 0.46, 0.52, az - 0.13, az + 0.13);   // foot
+  box(k, 'metal', '#4a4658', ax - 0.1, ax + 0.1, 0.52, 0.64, az - 0.08, az + 0.08);     // waist
+  box(k, 'metal', '#5a566a', ax - 0.26, ax + 0.22, 0.64, 0.8, az - 0.12, az + 0.12);    // face
+  box(k, 'metal', '#5a566a', ax - 0.34, ax - 0.26, 0.68, 0.8, az - 0.09, az + 0.09);    // heel
+  k.b.add('metal', GEO.cone16, M(ax + 0.34, 0.74, az, 0.2, 0.25, 0.2, 0, 0, -Math.PI / 2), '#5a566a', 0.5);   // horn: base on the face
+  box(k, 'metal', '#8a8a9e', ax - 0.25, ax + 0.21, 0.8, 0.805, az - 0.11, az + 0.11);   // polished face
+  markDoor(k, 'arch', ax - 0.36, ax + 0.48, 0, 0.82, az - 0.24, az + 0.24);
   // tools on the back wall
   for (let i = 0; i < 3; i++) {
-    rbox(k, 'wood', P.woodD, x1 - 0.5 - i * 0.3, 1.6, zb + 0.05, 0.05, 0.6, 0.04);
-    rbox(k, 'metal', '#4a4658', x1 - 0.5 - i * 0.3, 1.95, zb + 0.06, 0.2, 0.12, 0.05);
+    rbox(k, 'wood', P.woodD, x1 - 0.5 - i * 0.3, 1.6, zb + 0.02, 0.05, 0.6, 0.04);
+    rbox(k, 'metal', '#4a4658', x1 - 0.5 - i * 0.3, 1.95, zb + 0.025, 0.2, 0.12, 0.05);
+    box(k, 'metal', '#2a2630', x1 - 0.52 - i * 0.3, x1 - 0.48 - i * 0.3, 2.0, 2.06, zb, zb + 0.05);   // the peg it hangs on
   }
   signF(k, b.title, (x0 + x1) / 2, rh - 0.75, zFront + 0.15, Math.min(1.9, x1 - x0 - 0.3), { hang: false });
 };
@@ -358,15 +369,24 @@ const forge: BuildFn = (k, b, x0, x1, zf, h) => {
   timberZ(k, x0 + 0.05, x1 - 0.05, 0.4, bh - 0.05, zf, 3, P.woodD);
   // big asymmetric roof (two tones), ridge along Z
   gableRoofZ(k, '#e3b07a', 'wood', P.woodL, x0, x1, zf - 5, zf, bh, h - bh, 0.45);
-  // two arched openings: glowing forge mouth + door
-  // the forge mouth goes on the side of the door with more room, never overlapping it (narrow camp forge)
+  // ONE door (the site's door point) + the glowing forge mouth as a raised hearth window with a brick surround and a
+  // stone sill — never a second ground-level arch next to the door (bug 06.11 #2: a closed door + an open glowing arch
+  // side by side read as two doors). The mouth goes on the side with more room, ≥ 0.45 m clear of the door frame.
   const dx = toX(b.door.x), leftRoom = dx - x0, rightRoom = x1 - dx;
+  const mw = 0.9, mh = 0.75, my = 0.6;
   let mx = x0 + w * 0.3;
-  if (Math.abs(mx - dx) < 1.25) mx = leftRoom >= rightRoom ? Math.max(x0 + 0.7, dx - 1.3) : Math.min(x1 - 0.7, dx + 1.3);
-  const mouth = Math.abs(mx - dx) >= 1.15;
-  if (mouth) doorZ(k, mx, 0, zf, 1.1, 1.9, { arch: true, open: true, glow: '#c84a1a' });
+  if (Math.abs(mx - dx) < 1.65) mx = leftRoom >= rightRoom ? Math.max(x0 + 0.7, dx - 1.65) : Math.min(x1 - 0.7, dx + 1.65);
+  const mouth = Math.abs(mx - dx) >= 1.6 && mx - mw / 2 - 0.2 > x0 + 0.1 && mx + mw / 2 + 0.2 < x1 - 0.1;
+  if (mouth) {
+    box(k, 'brick', shade(P.brick, -0.15), mx - mw / 2 - 0.18, mx + mw / 2 + 0.18, my - 0.12, my + mh + mw / 2 + 0.16, zf - 0.02, zf + 0.05, 1.2);   // surround
+    box(k, 'stone', shade(P.stone, 0.1), mx - mw / 2 - 0.24, mx + mw / 2 + 0.24, my - 0.2, my - 0.08, zf - 0.02, zf + 0.16, 0.6);            // sill
+    box(k, 'emit', '#c84a1a', mx - mw / 2, mx + mw / 2, my, my + mh, zf + 0.05, zf + 0.058);
+    k.b.add('emit', GEO2.arch, M(mx, my + mh - mw / 2, zf + 0.058, mw, mw, 0.02), '#c84a1a', 1);
+    k.glows.push(mx, my + mh * 0.6, zf + 0.3, mw * 2.2, 1, 0.55, 0.25);
+    markDoor(k, 'hearth', mx - mw / 2 - 0.18, mx + mw / 2 + 0.18, my - 0.2, my + mh + mw / 2 + 0.16, zf - 0.02, zf + 0.16);
+  }
   doorZ(k, dx, 0, zf, 0.9, 1.8, { arch: true, color: '#4a2c1e' });
-  if (mouth) k.lights.push(mx, 1.0, zf + 0.8);
+  if (mouth) k.lights.push(mx, my + 0.4, zf + 0.8);
   windowZ(k, (x0 + x1) / 2, bh + 0.6, zf + 0.0, 0.7, 0.8, true, { arch: true });
   signF(k, b.title, (x0 + x1) / 2, Math.max(bh - 1.15, 2.35), zf + 0.02, Math.min(3.0, w - 0.5));   // always above the arched door (≈2.3 m)
   // «ХРУПКОЕ» stamp and paw emblem
@@ -402,6 +422,7 @@ const gate: BuildFn = (k, b, x0, x1, zf, h) => {
     rbox(k, 'stone', i === 4 ? '#ffcf4a' : shade(P.stone, 0.35), cx + Math.cos(a) * R, ycen + Math.sin(a) * R, zf + 0.03, 0.3, 0.22, 0.12, 0, 0, a - Math.PI / 2, 0.6);
   }
   for (const s of [-1, 1]) box(k, 'stone', shade(P.stone, 0.35), cx + s * (ow / 2 + 0.12) - 0.13, cx + s * (ow / 2 + 0.12) + 0.13, 0, ycen, zf - 0.05, zf + 0.07, 0.6);
+  markDoor(k, 'arch', cx - ow / 2 - 0.28, cx + ow / 2 + 0.28, 0, oh + 0.26, zf - 0.06, zf + 0.15);
   // the portal inside: dim violet-pink veil at the back + floor glow
   k.b.add('emit', GEO2.arch, M(cx, 0, zf - depth + 0.45, ow, oh, 0.02), '#6a2a8a', 1);
   box(k, 'emit', '#4a2266', cx - ow / 2, cx + ow / 2, 0.005, 0.02, zf - depth + 0.45, zf - 0.4);
@@ -449,6 +470,7 @@ const tent: BuildFn = (k, b, x0, x1, zf, h) => {
   flag(k, cx, wallH + roofH + 0.2, cz, 1.0, P.flag);
   // entrance vestibule with drapes
   const ez = cz + R, ew = 1.4;
+  markDoor(k, 'arch', cx - ew / 2 - 0.12, cx + ew / 2 + 0.12, 0, 2.3, ez + 0.55, ez + 0.75);
   box(k, 'canvas', P.tent2, cx - ew / 2 - 0.1, cx + ew / 2 + 0.1, 0, 2.3, ez - 0.3, ez + 0.6);
   box(k, 'emit', '#b8603a', cx - ew / 2 + 0.15, cx + ew / 2 - 0.15, 0, 1.75, ez + 0.6, ez + 0.62);
   k.b.add('canvas', GEO2.gable, M(cx, 2.3, ez + 0.15, ew + 0.6, 0.7, 1.2, 0, Math.PI / 2, 0), P.tent, 1);
@@ -476,9 +498,14 @@ const shop: BuildFn = (k, b, x0, x1, zf, h) => {
     house(k, x + 0.05, x + hw - 0.05, zf - 1.2, 4, 3.6 + k.rnd() * 1.6, { wall: k.rnd() < 0.5 ? 'brick' : 'plaster', lit: 0.5, door: false, roofCol: k.rnd() < 0.5 ? P.roof : P.roof2 });
     x += hw;
   }
-  // stalls
+  // stalls (the counters at the door point are what the hover outline traces)
   const n = Math.max(1, Math.floor(w / 3.4));
   const sw = w / n;
+  { const dx = toX(b.door.x), i = Math.max(0, Math.min(n - 1, Math.round((dx - x0) / sw - 0.5))), s0 = x0 + i * sw + 0.25, s1 = x0 + (i + 1) * sw - 0.25;
+    // the whole counter when its middle is near the door point (a box cut through the counter outlines only the goods:
+    // Town Kit 2 %), else the old ±1.6 m slice (worldExt.ts drawnDoor takes marks centred ≤ 1 m off the door point)
+    const near = Math.abs((s0 + s1) / 2 - dx) < 0.9;
+    markDoor(k, 'arch', near ? s0 - 0.07 : Math.max(s0 - 0.07, dx - 1.6), near ? s1 + 0.07 : Math.min(s1 + 0.07, dx + 1.6), 0, 1.07, zStall - 0.77, zStall + 0.1); }
   const names = ['Валерьянка', 'Молоко', 'Рыба', 'Колбаса', 'Сыр', 'Зелья', 'Травы', 'Мёд'];
   for (let i = 0; i < n; i++) {
     const s0 = x0 + i * sw + 0.25, s1 = x0 + (i + 1) * sw - 0.25, sc = (s0 + s1) / 2;

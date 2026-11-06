@@ -30,6 +30,7 @@ import { ScenePlayer } from './scenes';
 import { DebugPanel, type PanelState } from './panel';
 import { PerfHud, GridOverlay, Wireframe } from './overlays';
 import { FreeCam, Bots, EventForce, type ForcedEvent, type ForcedHwc } from './tools';
+import { setTodForce, todForce, todSource } from '../world/daynight';
 import { buildReport, pickSettings, preview, siteScripts } from './report';
 import { demoData, demoStock, stubActions, worldRoom, siteCampLayout, siteDistrictLayout, demoRoomCtx, buildingFor } from './places';
 
@@ -395,7 +396,7 @@ export class DebugMode {
       dim: { inside: this.inside && !!d, blocked: this.space.active ? '' : this.space.blocked(), sections: d ? d.sectionList() : [], tod: d ? d.todTarget : 18.5,
         info: st ? `Разделов построено ${st.built}/${st.sections} · предметов ${st.items} · обликов ${st.looks} · врагов ${st.foes} · порталов ${st.portals} · склейка ${st.bakedFrom}→${st.bakedTo} вызовов · сейчас ${ctx.engine.stats().calls} вызовов` : 'Войди — разделы строятся, когда подходишь к ним.' },
       scenes: { playing: sc.playing, open: sc.active, paused: sc.paused, speed: sc.speed, plan: sc.planSec, dur: sc.duration, segs: sc.segments(), ...sc.status() },
-      world: { freecam: this.freecam.on, quality: setting, level: ctx.quality() as number, event: this.force.event, hwc: this.force.hwc, bots: this.bots.count, eventMode: settingValue<string>(EVENT_SETTING, 'auto') },
+      world: { freecam: this.freecam.on, quality: setting, level: ctx.quality() as number, event: this.force.event, hwc: this.force.hwc, bots: this.bots.count, eventMode: settingValue<string>(EVENT_SETTING, 'auto'), ctod: todForce() == null ? null : todForce()! / 60, ctodSrc: todSource() },
       over: { perf: !!this.perf, grid: !!this.grid, wire: !!this.wire?.on },
       site: { version: VERSION, dev: isDev(), phase: this.contract!.phase, checked: this.contract!.checked, fails: this.contract!.fails, okIds: this.contract!.ok,
         drift: driftList().map((x) => x.kind + ':' + x.id), scripts: siteScripts([...document.scripts].map((x) => x.src).filter(Boolean), location.origin).slice(0, 16), town, report: this.reportText },
@@ -408,6 +409,8 @@ export class DebugMode {
       case 'dim-exit': this.exitAll(); break;
       case 'dim-go': this.goSection(v || ''); this.showPanel(false); break;
       case 'tod': this.setTime(+(v || 12), false); break;
+      case 'ctod': setTodForce(Math.round(+(v || 12) * 60)); break;   // the city's day / night (src/world/daynight.ts)
+      case 'ctod-clock': setTodForce(null); break;
       case 'sc-auto': this.playAuto(0); break;
       case 'sc-mock': this.playMock(v || ''); break;
       case 'sc-close': this.closeScene(true); break;

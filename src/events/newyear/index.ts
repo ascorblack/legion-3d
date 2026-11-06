@@ -17,6 +17,7 @@ import type { SeasonalEvent, EventContext } from '../types';
 import type { QualityLevel } from '../../contracts';
 import { inWindow, windowDistance } from '../calendar';
 import { glowPoints } from '../../world/sky';
+import { DN_U } from '../../world/dnUniforms';
 import { placeCity, garland, recolourBulbs, selfLit, staticMeshes, tintColor, reducedMotion, pointScale, glowTexture, groundQuad } from '../common';
 import { planNewYear, snowCoverMesh, type NewYearPlan } from './placement';
 import { firTreeGeometry, starGeometry, treeLights, snowCapGeometry, TREE_RADIUS } from './geo';
@@ -115,7 +116,7 @@ function build(ctx: EventContext, undo: (() => void)[]): () => void {
     star = new THREE.Mesh(starGeo, starMat); star.name = 'newyear:star'; star.position.copy(tree.position); group.add(star);
     const world = [T.x, T.y + 3.08, T.z, 1.1, 0.9, 0.75, 0.35];   // the star's own halo first, then the spiral
     for (let i = 0; i < lightData.length; i += 7) world.push(lightData[i] + T.x, lightData[i + 1] + T.y, lightData[i + 2] + T.z, lightData[i + 3], lightData[i + 4], lightData[i + 5], lightData[i + 6]);
-    lights = glowPoints(world, 7, glowTex, { flicker: 0.35, intensity: 0.9 }); lights.name = 'newyear:lights'; lights.frustumCulled = false;
+    lights = glowPoints(world, 7, glowTex, { flicker: 0.35, intensity: 0.9, lit: DN_U.lit, litMin: 0.4 }); lights.name = 'newyear:lights'; lights.frustumCulled = false;
     own.push(lights.geometry, lights.material as THREE.Material); group.add(lights);
     const poolGeo = groundQuad(); own.push(poolGeo);
     const poolMat = new THREE.MeshBasicMaterial({ map: glowTex, color: new THREE.Color(1, 0.72, 0.38), transparent: true, opacity: 0.5, depthWrite: false,

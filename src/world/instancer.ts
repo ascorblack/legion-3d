@@ -22,6 +22,8 @@ export class Instancer {
   /** Another name for a registered kind (same parts; e.g. village props whose solids come from the site's footprints). */
   alias(kind: string, of: string): void { const p = this.kinds.get(of); if (p) this.kinds.set(kind, p); }
   has(kind: string): boolean { return this.kinds.has(kind); }
+  /** The parts of a registered kind (read-only: the geometry lint, src/world/lint). */
+  partsOf(kind: string): readonly PartDef[] | undefined { return this.kinds.get(kind); }
 
   /** Placements (any kind name; resolved at build time by the kit or the placeholder kinds). */
   readonly placed = new Map<string, { x: number; y: number; z: number; rotY: number; scale: number; sy: number }[]>();

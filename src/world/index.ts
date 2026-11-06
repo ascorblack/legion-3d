@@ -34,7 +34,9 @@ import { campOf, type CampLayout } from './camp';
 import { campThemeOf } from './camp-themes';
 import { villageOf, villageGround, VK } from './village';
 import { fairCatsOf } from '../net/faircats';
+import { FC_GRASS, FC_MOOD } from './faircats';
 import { kitOf } from '../net/townkit';
+import { createDayNight, makeKey, skyStops, tickDayNight, DN_U, type DayNight } from './daynight';
 import type { SitePals } from './palette';
 
 /** The city palette of a layout: its style + the page's own quarter colours (layout.sitePals, read by the site adapter). */
@@ -66,7 +68,7 @@ function buildGarlands(spans: THREE.Vector3[][], glowTex: THREE.Texture): THREE.
   const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
   const cable = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: '#2a2440' })); cable.name = 'fx:cable';
   g.add(cable);
-  g.add(glowPoints(bulbs, 7, glowTex, { flicker: 0.05, intensity: 1.0 }));
+  g.add(glowPoints(bulbs, 7, glowTex, { flicker: 0.05, intensity: 1.0, lit: DN_U.lit, litMin: 0.35 }));   // unlit coloured glass by day
   g.children[1].name = 'fx:bulbs';
   return g;
 }
@@ -117,7 +119,7 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
     // the camp / villages: 'paving' = night grass, 'lowPaving' = trodden dirt of the trails and roads
     paving: camp || VG ? std('grass', { neutral: false, colors: VG ? VG[0] : CT ? [...CT.grass] : ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.5, sd: { macro: 0.22, hue: 0.16 } })
       : std('cobble', { neutral: false, colors: [P.ground, shade(P.ground, 0.08), P.mortar, P.groundL], rough: 1, ns: 0.7, size: 1024, sd: { macro: 0.16, hue: 0.12, ids: 0.14, moss: soot ? 0 : 0.1, roughVar: 0.15 } }),
-    lowPaving: FCm ? std('grass', { neutral: false, colors: KG ?? ['#3a5c40', '#31503a', '#4a6e4c'], rough: 1, ns: 0.5, seed: 3, sd: { macro: 0.22, hue: 0.16 } })
+    lowPaving: FCm ? std('grass', { neutral: false, colors: KG ?? [...FC_GRASS], rough: 1, ns: 0.5, seed: 3, sd: { macro: 0.22, hue: 0.16 } })
       : camp || VG ? std('path', { neutral: false, colors: VG ? VG[1] : CT ? [...CT.soil] : ['#5a4232', '#45311f', '#6e5240'], rough: 1, ns: 0.8, seed: 3, sd: { macro: 0.18, hue: 0.12 } })
       : std('cobble', { neutral: false, colors: [P.lowA, P.lowB, P.lowMortar, P.groundL], rough: 1, ns: 0.7, seed: 3, size: 1024, sd: { macro: 0.16, hue: 0.12, ids: 0.14, moss: soot ? 0 : 0.15, roughVar: 0.15 } }),
     leaf: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),
@@ -185,7 +187,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const batch = new Batch(14); batch.maxChunk = Math.max(1, Math.floor(toX(L.W) / 14));
   const k: Ctx = {
     b: batch, pal: P, signs, inst, glows: [], lights: [], bulbs: [], wires: [], rnd: rng(1234), quality: opts.quality,
-    lowH: spec.lowH, wallZ: spec.hasLow ? toZ(spec.wallY) : 0, colliders: [], pools: [], solids: [],
+    lowH: spec.lowH, wallZ: spec.hasLow ? toZ(spec.wallY) : 0, colliders: [], pools: [], solids: [], marks: [],
   };
 
   // ------------------------------------------------ fonts for signs (best effort, never blocks for long)
@@ -325,15 +327,15 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
     const geo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
     // a tight warm core with a long soft skirt (not the glow sprite's broad haze: overlapping hazes lit the whole street)
     const mat = new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog]),
+      uniforms: { ...THREE.UniformsUtils.merge([THREE.UniformsLib.fog]), uLit: DN_U.lit },   // lamps off by day (day / night cycle)
       vertexShader: /* glsl */`varying vec2 vUv; varying vec3 vC;
         #include <fog_pars_vertex>
         void main(){ vUv = uv * 2.0 - 1.0; vC = instanceColor; vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
         }`,
-      fragmentShader: /* glsl */`varying vec2 vUv; varying vec3 vC;
+      fragmentShader: /* glsl */`varying vec2 vUv; varying vec3 vC; uniform float uLit;
         #include <fog_pars_fragment>
-        void main(){ float d = dot(vUv, vUv); float a = pow(max(0.0, 1.0 - d), 3.0) * 0.8 + exp(-d * 18.0) * 0.45;
+        void main(){ float d = dot(vUv, vUv); float a = (pow(max(0.0, 1.0 - d), 3.0) * 0.8 + exp(-d * 18.0) * 0.45) * uLit;
           gl_FragColor = vec4(vC * a, 1.0);
           #include <fog_fragment>
         }`,
@@ -366,11 +368,12 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   // floating motes round the camera: fireflies over grass (camp, villages), warm dust in the paved city (motes.ts)
   const motes = createMotes(campOf(L) || villageOf(L) || fairCatsOf(L) ? 'fireflies' : 'dust', glowTex);
   root.add(motes.points);
-  const glows = glowPoints(k.glows, 7, glowTex, { flicker: 0.1, intensity: 0.55, near: 2.6 });   // halos stay under the bloom threshold; a lamp right at the eye fades instead of filling the view
+  const glows = glowPoints(k.glows, 7, glowTex, { flicker: 0.1, intensity: 0.55, near: 2.6, lit: DN_U.lit, litMin: 0.15 });   // halos stay under the bloom threshold; a lamp right at the eye fades instead of filling the view
   root.add(glows);
 
   const CTh = campOf(L) ? campThemeOf(L.styleId) : null;   // a per-style camp has its own sky and light mood
-  // a themed quarter with its own mood (cherts: crimson «hell» sky) keeps it over the fair's CSS sky
+  // a themed quarter with its own mood (cherts: crimson «hell» sky) keeps it over the fair's CSS sky; this is the NIGHT
+  // look — the day / night cycle (daynight.ts, wired below) blends it with the day key (faircats.ts FC_MOOD)
   const skyCss = CTh?.sky || (P.hell ? P.sky : L.sky) || P.sky;
   const sky = skyDome(skyCss);
   root.add(sky);
@@ -379,7 +382,6 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const moonTex = moonTexture();
   const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, depthWrite: false, fog: false, transparent: true }));
   moon.scale.setScalar(46); moon.renderOrder = -8;
-  const moonDir = new THREE.Vector3(-0.45, 0.55, -0.7).normalize();
   root.add(moon);
 
   const grad = parseGradient(skyCss);
@@ -401,12 +403,31 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   root.add(hemi);
   const amb = new THREE.AmbientLight(new THREE.Color(CTh ? CTh.ambient : '#5a5490'), campLit ? 0.42 : 0.3);
   root.add(amb);
-  const sun = new THREE.DirectionalLight(new THREE.Color('#bcc8ff'), 1.7);
+  const sun = new THREE.DirectionalLight(new THREE.Color('#bcc8ff'), 1.7);   // moon by night, sun by day (day / night cycle)
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -22; sun.shadow.camera.right = 22; sun.shadow.camera.top = 22; sun.shadow.camera.bottom = -22;
   sun.shadow.camera.near = 1; sun.shadow.camera.far = 120;
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
   root.add(sun); root.add(sun.target);
+
+  // ------------------------------------------------ day / night (src/world/daynight.ts): night key = the look built above,
+  // day key = the site's bright map mood (faircats.ts FC_MOOD) for every town; the cherts quarter keeps its own mood
+  const dn: DayNight = (() => {
+    const sk = sky.material as THREE.ShaderMaterial, U = sk.uniforms;
+    const night = makeKey({ sky: { c: [0, 1, 2, 3].map((i) => U['c' + i].value as THREE.Color), p: U.p.value as THREE.Vector4, hz: U.hz.value as THREE.Color }, fog: fogCol,
+      hemi: [hemi.color, hemi.groundColor, hemi.intensity], amb: [amb.color, amb.intensity], key: [sun.color, sun.intensity], rim: pools.uniforms.uL3dRim.value, dimK: 1, emit: 1.3 });
+    // the old fair / camp / villages were tuned for the night (darker paving between the pools, facades lit from the
+    // street): a little more sky light by day and most of the paving darkening released
+    const FCd = !!fairCatsOf(L), lift = FCd ? 1 : 1.2;
+    const day = makeKey({ sky: skyStops(FC_MOOD.sky), hemi: [FC_MOOD.hemi[0], FC_MOOD.hemi[1], FC_MOOD.hemiI * lift], amb: [FC_MOOD.ambient, FC_MOOD.ambI * lift], key: [FC_MOOD.sun, FC_MOOD.sunI],
+      rim: '#5a5448', dimK: FCd ? 1 : 0.2, emit: 0.85, cloud: 0.65 });
+    const wU = (mats.water as THREE.MeshStandardMaterial).userData.l3dWaterU;
+    return createDayNight({ night, day, fixed: !!P.hell }, {
+      sky: sk, fog, bg: zenith, hemi, amb, key: sun, moon, pools: pools.uniforms, water: P.hell ? null : wU ?? null, emit: mats.emit as THREE.MeshBasicMaterial,
+      motes: { u: (motes.points.material as THREE.ShaderMaterial).uniforms.uBright as { value: number }, base: (motes.points.material as THREE.ShaderMaterial).uniforms.uBright.value as number, fireflies: !!(campOf(L) || villageOf(L) || fairCatsOf(L)) },
+    });
+  })();
+  const keyDir = dn.keyDir, moonDir = dn.moonDir;
 
   const lights: THREE.PointLight[] = [];
   for (let i = 0; i < MAX_LIGHTS; i++) {
@@ -460,6 +481,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
       let s: THREE.Object3D = root; while (s.parent) s = s.parent;
       if ((s as THREE.Scene).isScene) { (s as THREE.Scene).fog = fog; (s as THREE.Scene).background = zenith; sceneHooked = true; }
     }
+    tickDayNight(); dn.update();   // the sun / moon of the user's clock (re-evaluated ≤ 2×/s, applied only on change)
     camera.getWorldPosition(_cp);
     camera.getWorldDirection(_cd);
     pools.update(_cp.x, _cp.z, _cd.x, _cd.z, dt);
@@ -480,8 +502,8 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
       if (waterMat.normalMap) waterMat.normalMap.offset.set(-t * 0.02, t * 0.025);
       if (waterMat.emissiveMap) waterMat.emissiveMap.offset.copy(waterMat.map.offset);
     }
-    // moonlight follows the camera so the shadow frustum covers what we see
-    sun.position.set(_cp.x + moonDir.x * 50, moonDir.y * 50, _cp.z + moonDir.z * 50);
+    // sun / moonlight follows the camera so the shadow frustum covers what we see
+    sun.position.set(_cp.x + keyDir.x * 50, keyDir.y * 50, _cp.z + keyDir.z * 50);
     sun.target.position.set(_cp.x, 0, _cp.z - 3);
     // nearest point lights (every 0.25 s)
     lightTimer -= dt;
@@ -503,7 +525,8 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
         l.intensity = 1.6;
       }
     }
-    if (q >= 2) for (let i = 0; i < MAX_LIGHTS; i++) { const l = lights[i]; if (l.intensity > 0) l.intensity = 1.5 + 0.2 * Math.sin(t * 7 + i * 1.7) * Math.sin(t * 2.1 + i); }
+    const lit = dn.fixed ? 1 : DN_U.lit.value;   // lamps off by day
+    if (q >= 2) for (let i = 0; i < MAX_LIGHTS; i++) { const l = lights[i]; if (l.intensity > 0) l.intensity = Math.max(1e-4, (1.5 + 0.2 * Math.sin(t * 7 + i * 1.7) * Math.sin(t * 2.1 + i)) * lit); }
   }
 
   function dispose(): void {
@@ -522,7 +545,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
     inst.dispose();
     disposePropKit();
     disposeTextures();
-    sun.dispose(); hemi.dispose(); amb.dispose(); for (const l of lights) l.dispose();
+    sun.dispose(); hemi.dispose(); amb.dispose(); for (const l of lights) l.dispose(); dn.dispose();
   }
 
   // ------------------------------------------------ jumping (solid tops), door interactables, map image
@@ -532,7 +555,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const world: CityWorld = {
     root, groundAt, doors, spawn: (L as CampLayout).spawn ? [...(L as CampLayout).spawn!] as [number, number] : L.id === 'fair' ? [L.QW + 660, 1010] : L.nearest((L.area.x0 + L.area.x1) / 2, (L.area.y0 + L.area.y1) / 2), update, setQuality, dispose, solidTop,
     onDoor: opts.onDoor,
-    interactables: () => (inter ||= doorInteractables(L, groundAt, () => world.onDoor)),
+    interactables: () => (inter ||= doorInteractables(L, groundAt, () => world.onDoor, k.marks)),
     mapImage(r, o = {}) {
       const ppm = o.pxPerMetre ?? 12;
       let p = mapCache.get(ppm);

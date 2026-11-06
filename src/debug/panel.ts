@@ -13,7 +13,7 @@ import { setHtml, appendHtml } from '../core/html';
 export interface PanelState {
   dim: { inside: boolean; blocked: string; sections: SectionInfo[]; tod: number; info: string };
   scenes: { playing: string; open: boolean; paused: boolean; speed: number; plan: number; dur: number; segs: [string, number, number][]; kind: string; title: string };
-  world: { freecam: boolean; quality: string; level: number; event: string; hwc: string; bots: number; eventMode: string };
+  world: { freecam: boolean; quality: string; level: number; event: string; hwc: string; bots: number; eventMode: string; ctod?: number | null; ctodSrc?: string };
   over: { perf: boolean; grid: boolean; wire: boolean };
   site: { version: string; dev: boolean; phase: string; checked: number; fails: { id: string; severity: string; missing: string[] }[]; okIds: string[]; drift: string[]; scripts: string[]; town: string; report: string };
   bus: { on: boolean; present: boolean; rows: [string, number, string][] };
@@ -151,6 +151,9 @@ export class DebugPanel {
     return `<div class="sec">
       <h3>Камера</h3><div class="row"><button type="button" class="btn${w.freecam ? ' on' : ''}" data-a="freecam">${w.freecam ? '🎥 Свободная камера: вкл' : '🎥 Свободная камера (noclip)'}</button></div>
       <p class="note">WASD + мышь, Пробел / Ctrl — выше / ниже, Shift — быстро. Герой стоит на месте.</p>
+      <h3>Время суток в городе <small>${w.ctod == null ? 'по часам компьютера' : 'зафиксировано'}${w.ctodSrc === 'hold' ? ' · праздник держит ночь' : ''}</small></h3>
+      <label class="rng"><input type="range" min="0" max="24" step="0.25" value="${w.ctod ?? 12}" data-k="ctod"><b data-live="ctod">${w.ctod == null ? '—' : fmtH(w.ctod)}</b></label>
+      <div class="row"><button type="button" class="btn${w.ctod == null ? ' on' : ''}" data-a="ctod-clock">🕒 По часам</button></div>
       <h3>Качество графики <small>сейчас q${w.level}</small></h3>${seg('quality', w.quality, [['auto', 'Авто'], ['0', 'q0'], ['1', 'q1'], ['2', 'q2'], ['3', 'q3']])}
       <h3>Праздник в городе</h3>${seg('event', w.event, [['', 'Как обычно'], ['halloween', '🎃 Хэллоуин'], ['newyear', '🎄 Новый год'], ['summer', '🏮 Лето'], ['aprilfools', '🤡 1 апреля']])}
       ${w.eventMode === 'off' ? '<p class="note bad">В настройках «Праздничное оформление» выключено — сначала включи «Авто» или «Всегда».</p>' : ''}
@@ -206,7 +209,7 @@ export class DebugPanel {
     const el = e.target as HTMLInputElement;
     const k = el.dataset.k; if (!k) return;
     this.api.act(k, el.value);
-    if (k === 'tod') { const b = this.body.querySelector<HTMLElement>('[data-live="tod"]'); if (b) b.textContent = fmtH(+el.value); }
+    if (k === 'tod' || k === 'ctod') { const b = this.body.querySelector<HTMLElement>(`[data-live="${k}"]`); if (b) b.textContent = fmtH(+el.value); }
   }
 }
 

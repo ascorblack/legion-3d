@@ -13,6 +13,7 @@ import type { Interactable, World3DExt } from '../contracts/ext';
 import { toX, toZ } from '../world/coords';
 import { coreFeature } from './types';
 import { fitOutlineProxy } from '../engine/outline';
+import { outlineRegion } from '../world/worldExt';
 
 /** Facade box around a door (world metres): ±0.9 m around the door x (clamped to the building), 2.6 m tall,
  *  from 1.2 m behind the facade line to just before the walkable door point. */
@@ -35,6 +36,13 @@ export function doorwayBox(b: Building, groundY: number, out = new THREE.Box3())
   return out;
 }
 
+/** Region of a door's hover outline: the drawn door when the world knows it, else the facade layer of the hit box. */
+export const outlineRegionOf = outlineRegion;
+/** Batched city meshes that are never part of a door (rock faces, paving, grass, water, foliage): out of the outline. */
+const NOT_DOOR = /^city:(rock|paving|lowPaving|water|leaf|back|glow)$/;
+/** Triangles this close above the region floor are the threshold / step / rails / paving, never the door. */
+export const OUTLINE_FLOOR_LIFT = 0.12;
+
 /**
  * Lazy outline of a door: the city geometry inside `region` (world) as one proxy mesh, built on first use and cached;
  * `dispose` frees it (world rebuilt). Returns null when nothing is there (then nothing is outlined).
@@ -43,7 +51,13 @@ export function doorOutline(root: () => THREE.Object3D | null, region: THREE.Box
   let built = false, proxy: THREE.Mesh | null = null;
   return {
     get: () => {
-      if (!built) { const r = root(); if (!r) return null; built = true; proxy = fitOutlineProxy(r, region, { name: 'door:' + id }).proxy; }
+      if (!built) {
+        const r = root(); if (!r) return null; built = true;
+        // terrain meshes are hidden while the proxy is fitted (traverseVisible skips them), restored right after
+        const hid: THREE.Object3D[] = [];
+        r.traverse((o) => { if (o.visible && NOT_DOOR.test(o.name)) { o.visible = false; hid.push(o); } });
+        try { proxy = fitOutlineProxy(r, region, { name: 'door:' + id, floorLift: OUTLINE_FLOOR_LIFT }).proxy; } finally { for (const o of hid) o.visible = true; }
+      }
       return proxy;
     },
     dispose: () => { proxy?.geometry.dispose(); proxy = null; built = false; },
@@ -75,10 +89,8 @@ export default coreFeature({
           const id = wi.id.replace(/^door:/, '');
           const b = byId.get(id);
           const soon = !!b?.soon;
-          // the door layer of the facade only (leaf, frame, arch: ≤ 0.13 m in front of the entrance plane = hit max − 0.3),
-          // so wall lamps / signs sticking out next to the door stay out of its outline
-          const region = (wi.hit as THREE.Box3).isBox3 ? (wi.hit as THREE.Box3).clone() : null;
-          if (region) region.max.z = Math.min(region.max.z, region.max.z - 0.3 + 0.13);
+          // the drawn door (outlineBox) or the door layer of the facade (outlineRegionOf)
+          const region = outlineRegionOf(wi as Interactable & { outlineBox?: THREE.Box3 });
           const ol = region ? doorOutline(root, region, id) : null;
           if (ol) offs.push(ol.dispose);
           offs.push(ctx.interact.add({

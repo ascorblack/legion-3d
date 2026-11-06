@@ -12,7 +12,13 @@ const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
 const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
-const SHOTS = opt.set === '067' ? [
+const SHOTS = opt.set === '070' ? [
+  ['game', 'fc=1&magic=1&bots=6&hwc=off&tod=12:00', 'fair-day', 14000, at(2880, 2350, 'tp', 0.25, -0.35, 'g.rig.dist=22;')],
+  ['game', 'fc=1&magic=1&bots=6&hwc=off&tod=16:15', 'fair-sunset', 14000, at(2880, 2700, 'tp', 0, -0.12)],
+  ['game', 'fc=1&magic=1&bots=6&hwc=off&tod=23:00', 'fair-night', 14000, at(2880, 2350, 'tp', 0.25, -0.35, 'g.rig.dist=22;')],
+  ['game', 'fc=1&magic=1&bots=4&hwc=off&tod=12:00', 'stairs-magic', 14000, at(3606, 1500, 'tp', 0.6, -0.1)],
+  ['game', 'fc=1&magic=1&bots=2&hwc=off&tod=12:00&jail=1', 'jail', 14000, "js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);const b=g.layout.buildings.find(b=>b.id==='jail');g.player.teleport(b.door.x,b.door.y+260);g.rig.setMode('tp',{instant:true});g.rig.yaw=0;g.rig.pitch=-0.15;"],
+] : opt.set === '067' ? [
   ['game', 'fc=1&magic=1&bots=6&hwc=off', 'fc-gate', 14000, at(2880, 2700, 'tp', 0, -0.12)],
   ['game', 'fc=1&magic=1&bots=6&hwc=off', 'fc-plaza', 14000, at(2880, 2350, 'tp', 0.25, -0.5, 'g.rig.dist=24;')],
   ['game', 'fc=1&magic=1&bots=4&hwc=off', 'fc-stairs-hall', 14000, at(3606, 1500, 'tp', 0.6, -0.1)],

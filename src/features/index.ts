@@ -55,6 +55,8 @@ import restyle from './restyle';
 import friends from './friends';
 import jail from './jail';
 import mineHold from './mine-hold';
+import geomlint from './geomlint';
+import daynight from './daynight';
 
 export const FEATURES: (Feature | CoreFeature)[] = [
   settings, itemModels, menus, camera, crowd, labels, doors, controls, rooms, contentRooms, overlay, classic, quest, photo, debug, whatsnew, seasonal, sound,
@@ -80,6 +82,8 @@ export const FEATURES: (Feature | CoreFeature)[] = [
   friends,
   jail,
   mineHold,
+  geomlint,
+  daynight,
 ];
 
 /** Run every feature's setup in order. A failing feature is logged and skipped (the game still starts). */

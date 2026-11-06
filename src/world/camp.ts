@@ -286,7 +286,8 @@ function prop(k: Ctx, p: CampScene['props'][number], poles: [number, number][]):
     case 'flag': {
       cyl(k, 'wood', P.woodD, X, 0, Z, 0.04, 2.6, 8, 0.5);
       ball(k, 'metal', '#ffcf4a', X, 2.64, Z, 0.06);
-      k.b.add('canvas', GEO.cone4, M(X + 0.32, 2.3, Z, 0.6, 0.05, 0.4, 0, 0, -Math.PI / 2), P.flag, 1);
+      // pennant: its 0.4 m hoist on the pole, the 0.6 m fly pointing +x (it hung 28 cm off the pole: geometry lint «float»)
+      k.b.add('canvas', GEO.cone4, M(X + 0.035 + 0.3, 2.3, Z, 0.4, 0.6, 0.05, 0, 0, -Math.PI / 2), P.flag, 1);
       break;
     }
     case 'pole': cyl(k, 'wood', P.woodD, X, 0, Z, 0.045, 1.95, 8, 0.5); poles.push([X, Z]); break;

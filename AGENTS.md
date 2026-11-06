@@ -62,6 +62,11 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   <site copy> [--kit=<towns file>]`), dev `dist-dev/game.html?tk=<id>[&biome=ice]`. Old LGTownGen towns are unchanged.
 - Site contract: `src/data/site-contract.json` is checked statically (`npm run drift`) and at runtime (boot guard in
   `src/net/site.ts` via `src/net/contract.ts`; `node e2e/contract.mjs` against the live page).
+- Asset models of the new fair / Town Kit (`src/world/fcart/`: registry, civic / shops / houses models) are pinned to the
+  site's SVG assets by fingerprints (`fingerprint.ts`; `node scripts/fcart-fp.mjs <site copy> [--ref]` writes
+  `src/data/fcart-fp.json` and the reference SVG/PNGs in `.local/fcart/ref/`). `npm run drift` prints «assets changed: …»;
+  at runtime `fcart/live.ts` reports «модель X сделана по старой картинке сайта» (l3d:drift, F3). A missing / failing
+  model falls back to the generic builder (`faircats.ts fcModelFor`).
 - Buildings open through the room manager: 3D shops (`shop3d`), 3D interiors with the site's panel over them
   (`hybrid`) and the 3D mine (`mine3d`); a kind whose module is missing or fails falls back to the site's own screen.
 - After a site update run `npm run drift` (docs/EXTENDING.md) — it lists new/removed ids and what we do not support.

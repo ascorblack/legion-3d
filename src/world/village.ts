@@ -76,7 +76,7 @@ export function bandOf(L: CityLayout, x0: number, x1: number, B: number, h = 52)
 }
 
 /* ------------------------------------------------------------------ building at depth */
-interface Call { mat: Parameters<Ctx['b']['add']>[0]; geo: THREE.BufferGeometry; m: THREE.Matrix4; col: THREE.ColorRepresentation | null; uv: number | 'keep' | [number, number] }
+interface Call { mat: Parameters<Ctx['b']['add']>[0]; geo: THREE.BufferGeometry; m: THREE.Matrix4; col: THREE.ColorRepresentation | null; uv: number | 'keep' | [number, number]; role?: string }
 const _b3 = new THREE.Box3(), _v = new THREE.Vector3(), IDENT = new THREE.Matrix4();
 
 /**
@@ -91,9 +91,9 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
   const dy = o.dy ?? 0;   // lifted onto a higher level (the new fair's plateau, src/world/faircats.ts)
   const calls: Call[] = [];
   const add0 = k.b.add;
-  const n0 = { col: k.colliders.length, sol: (k.solids ||= []).length, glo: k.glows.length, li: k.lights.length, bu: k.bulbs.length, wi: k.wires.length, po: (k.pools ||= []).length };
+  const n0 = { mk: (k.marks ||= []).length, col: k.colliders.length, sol: (k.solids ||= []).length, glo: k.glows.length, li: k.lights.length, bu: k.bulbs.length, wi: k.wires.length, po: (k.pools ||= []).length };
   const inst0 = new Map<string, number>(); for (const [kind, a] of k.inst.placed) inst0.set(kind, a.length);
-  k.b.add = (mat, g, m, col, uv = 1) => { calls.push({ mat, geo: g.clone(), m: m.clone(), col, uv }); };
+  k.b.add = (mat, g, m, col, uv = 1) => { calls.push({ mat, geo: g.clone(), m: m.clone(), col, uv, role: k.b.role }); };
   try { build(); } finally { k.b.add = add0; }
   // source depth range of the model
   let zMin = Infinity, zMax = -Infinity;
@@ -164,7 +164,9 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
     // (test/world-texmap.test.ts): box-project it in its new shape instead
     const k2 = zb - za > 0.05 ? (wb - wa) / (zb - za) : 1;
     const uv = (c.uv === 'keep' || Array.isArray(c.uv)) && (k2 < 0.8 || k2 > 1.25) ? 1 : c.uv;
+    const r0 = k.b.role; k.b.role = c.role ?? '';
     add0.call(k.b, c.mat, g, IDENT, c.col, uv);
+    k.b.role = r0;
     g.dispose();
   }
   // what the builder pushed into the context
@@ -183,6 +185,7 @@ export function buildAtDepth(k: Ctx, o: { cx: number; sx: number; sy: number; zb
   for (let i = n0.li; i + 2 < k.lights.length; i += 3) pt(k.lights, i);
   for (let i = n0.bu; i + 5 < k.bulbs.length; i += 6) pt(k.bulbs, i);
   for (let i = n0.wi; i + 5 < k.wires.length; i += 6) { pt(k.wires, i); pt(k.wires, i + 3); }
+  for (let i = n0.mk; i < k.marks!.length; i++) { const bx = k.marks![i].box; xs(bx, 0); bx[2] = bx[2] * o.sy + dy; bx[3] = bx[3] * o.sy + dy; zs(bx, 4, false); }
   const P = k.pools!;
   for (let i = n0.po; i + 7 < P.length; i += 8) { pt(P, i); P[i + 3] *= o.sy; }
   for (const [kind, a] of k.inst.placed) {

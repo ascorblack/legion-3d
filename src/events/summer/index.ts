@@ -14,6 +14,7 @@ import type { SeasonalEvent, EventContext } from '../types';
 import type { QualityLevel } from '../../contracts';
 import { inWindow, windowDistance } from '../calendar';
 import { glowPoints } from '../../world/sky';
+import { DN_U } from '../../world/dnUniforms';
 import { groundSpec, LOW_H, CANAL_WATER } from '../../world/ground';
 import { toX, toZ } from '../../world/coords';
 import { garland, recolourBulbs, reducedMotion, pointScale, glowTexture, mulberry32 } from '../common';
@@ -136,7 +137,7 @@ function setup(ctx: EventContext): () => void {
   group.add(wglow);
 
   /* ---- halos (1 draw) */
-  const halos = glowPoints(new Array(MAX * 7).fill(0), 7, glowTex, { flicker: 0.08, intensity: 0.55 }); halos.name = 'summer:halos'; halos.frustumCulled = false;
+  const halos = glowPoints(new Array(MAX * 7).fill(0), 7, glowTex, { flicker: 0.08, intensity: 0.55, lit: DN_U.lit, litMin: 0.3 }); halos.name = 'summer:halos'; halos.frustumCulled = false;
   own.push(halos.geometry, halos.material as THREE.Material); group.add(halos);
   const hPos = halos.geometry.getAttribute('position') as THREE.BufferAttribute, hSize = halos.geometry.getAttribute('size') as THREE.BufferAttribute, hCol = halos.geometry.getAttribute('color') as THREE.BufferAttribute;
 

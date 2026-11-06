@@ -49,6 +49,15 @@ Everything is real 3D geometry built from the `CityLayout`; the site's 2D art is
 Hero props (fountain, well, statue, dummy, signpost, cart) come from `props/` (the prop kit); textures from `tex/`.
 Camera colliders: one invisible mesh `world:colliders` with `userData.cameraCollider = true` (coarse boxes).
 
+## Every new model must pass lintWorld
+`src/world/lint` (docs/TESTING.md «Geometry lint») runs over every town in `test/geom-lint.test.ts`: nothing floating
+(> 8 cm) or sunk (> 25 cm, foundations ≤ 15 cm), no solid part inside another object, ONE door per building door (draw it
+with `doorZ` or declare it with `markDoor(k, 'door' | 'arch' | 'hearth', …)` — a furnace mouth is a `'hearth'`, never a
+second door; the hover outline follows that mark), steps / ramps / rails on the walk height and not under the bank, no
+prop on a stair footprint, lamp heads framed and attached, no slanted wall slabs, texel density near the material median.
+A count in `test/fixtures/lint-baseline.json` may only go down. Intentional exceptions: `src/world/lint/allow.ts` (with a
+reason) or `k.b.role = 'smoke' | 'hang' | 'found'` around the pieces.
+
 ## No z-fighting (bug #3)
 `test/world-zfight.test.ts` builds the whole static city in node, records every Batch piece (`batch.recorder`) and fails on
 any two pieces whose faces share a plane (< 4 mm), face the same way (either way for double-sided materials), overlap

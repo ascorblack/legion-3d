@@ -23,10 +23,10 @@
  */
 import * as THREE from 'three';
 import type { Building, CityLayout } from '../contracts';
-import type { FairCatsScene, FairCatsLayout, FcItem } from '../net/faircats';
+import type { FairCatsScene, FairCatsLayout, FcItem, FcStair } from '../net/faircats';
 import { fairCatsOf, inPoly, rimY } from '../net/faircats';
 import { kitOf } from '../net/townkit';
-import { toX, toZ, SX, SZ } from './coords';
+import { toX, toZ, SX, SZ, fromX, fromZ } from './coords';
 import { GEO, M } from './batch';
 import { type Ctx, box, rbox, cyl, ball, cone, shade } from './kit';
 import { buildBuilding, house, signF, BUILDING_XF } from './buildings';
@@ -36,14 +36,35 @@ import { JAIL_GEO } from './jail';
 import { jailGeoOf } from '../net/jail';
 import type { Placed } from './place';
 import { part } from './instancer';
-import { LAMP_HEAD_Y } from './protoProps';
+import { LAMP_HEAD_Y, lanternHead } from './protoProps';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Batch } from './batch';
+import { Instancer } from './instancer';
+import { fcModel, type FcModel, type FcPlace } from './fcart/index';
+import * as FC_CIVIC from './fcart/civic';
+import * as FC_HOUSES from './fcart/houses';
+import { noteFcModel, clearFcModels, scheduleFcArtCheck } from './fcart/live';
+import FCART_FP from '../data/fcart-fp.json';
 
 export { fairCatsOf };
 type P2 = [number, number];
 const LOW_IDS = new Set(['storage', 'mine', 'mineboard', 'jail']);
 /** Model heights (px of the 2D art above the base) of the old fair — the street models are tuned to them. */
 const OLD_H: Record<string, number> = { hall: 500, auction: 420, trainer: 440, board: 330, anvil: 200, forge: 570, gate: 560, tent: 580, shop: 500, magic: 650 };
+/** The site's map palette (fc-art.js / tk-art.js P): meadow, forest floor, paving, plaza, rock, wall, the wall towers' plum. */
+export const FC_GRASS = ['#83ad5c', '#6c9a4c', '#9cc56e'] as const;
+/** The DAY key of the day / night cycle (src/world/daynight.ts, wired in src/world/index.ts) for every outdoor town: the
+ *  site's map is a bright, saturated daytime picture — blue sky to a pale horizon, warm sun, bright sky light. Tuned
+ *  against the site's look of the cats fair; the night key is each place's own old night. */
+export const FC_MOOD = {
+  sky: 'linear-gradient(#3f78d0 0%, #6aa2ea 45%, #a8d0f4 80%, #dcecf4 100%)',
+  hemi: ['#f0f4ff', '#9a8a5a'] as [string, string], hemiI: 2.1, ambient: '#b8b0d0', ambI: 0.75, sun: '#fff0d0', sunI: 2.8,
+};
+/** The meadow / plateau grass a little over white (vertex colours are floats): the site's bright lawn under the night light. */
+const MEADOW = new THREE.Color(1.22, 1.32, 1.02), PLAT = new THREE.Color(1.15, 1.28, 1.0);
+const FCP = { forestFloor: '#4f7a4a', plat: '#f0ffe0', pave: '#ffe2c0', plaza: '#efd2a4', plaza2: '#e6c08f', mortar: '#a87650',
+  terra: '#d27b5a', terraD: '#a4553c', terraL: '#e89a78', rock: '#b39a8c', rockD: '#8f766b', rockL: '#cdb7a8', mrock: '#a08c88', mrockD: '#7d6a68',
+  plum: '#7a4a78', plumD: '#5a3458', pink: '#ff8fa3', gold: '#ffcf4a' };
 const ROOF: Record<string, string> = { plum: '#8a4a7e', teal: '#2f8a8a', red: '#b8403a', blue: '#3e5aa8', mustard: '#c8962e', pink: '#d0708e' };
 
 /** Extra instanced kinds of the new fair: a conifer and a blossom tree (2 + 2 draw calls). */
@@ -60,14 +81,30 @@ export function registerFairCatsKinds(k: Ctx): void {
     { mat: 'leaf', castShadow: true, geo: mg([part(ico, '#e88aaa', 0, 1.75, 0, 1.3, 1.0, 1.25), part(ico, '#f4b0c8', 0.3, 2.05, 0.1, 0.8, 0.7, 0.8, 0.3, 0.2, 0), part(ico, '#c86a90', -0.35, 1.6, -0.1, 0.8, 0.6, 0.8)]) },
   ]);
   // a light street lamp (≈ 90 tris; the town has 41 of them): stepped foot, post, lantern with a lit core, cap
-  const bx = new THREE.BoxGeometry(1, 1, 1), c4 = new THREE.ConeGeometry(0.5, 1, 4);
   const LH = LAMP_HEAD_Y;
+  // the framed lantern (protoProps lanternHead: every part touches; a bare emissive box read as a cream slab, bug 06.11 #1)
+  const [lf, lc] = lanternHead(P.metal); lf.translate(0, LH, 0); lc.translate(0, LH, 0);
   k.inst.registerKind('fc:lamp', [
-    { mat: 'metal', castShadow: true, geo: mg([part(cyl6, P.metal, 0, 0.09, 0, 0.34, 0.18, 0.34), part(cyl6, P.metal, 0, LH / 2, 0, 0.09, LH, 0.09),
-      part(bx, P.metal, 0, LH - 0.2, 0, 0.3, 0.05, 0.3), part(c4, P.metal, 0, LH + 0.3, 0, 0.42, 0.22, 0.42, 0, Math.PI / 4, 0), part(cyl6, '#ffcf4a', 0, 1.1, 0, 0.14, 0.05, 0.14)]) },
-    { mat: 'emit', geo: mg([part(bx, '#ffe2a0', 0, LH, 0, 0.2, 0.32, 0.2)]) },
+    { mat: 'metal', castShadow: true, geo: mg([part(cyl6, P.metal, 0, 0.09, 0, 0.34, 0.18, 0.34), part(cyl6, P.metal, 0, (LH - 0.2) / 2, 0, 0.09, LH - 0.2, 0.09),
+      part(cyl6, '#ffcf4a', 0, 1.1, 0, 0.14, 0.05, 0.14), lf]) },
+    { mat: 'emit', geo: lc },
   ]);
-  cone8.dispose(); cyl6.dispose(); ico.dispose(); bx.dispose(); c4.dispose();
+  // the forest round the clearing (fc-art.js forest(): dark broadleaf + 30 % dark pines), as cheap as a tree can be:
+  // open trunks / cones, no shadows (2 kinds × 2 parts = 4 draw calls for the whole ring, ≈ 30 / 50 tris a tree)
+  { const tr = new THREE.CylinderGeometry(0.5, 0.6, 1, 5, 1, true), cn = new THREE.ConeGeometry(0.5, 1, 7, 1, true), ic = new THREE.IcosahedronGeometry(0.5, 0);
+    k.inst.registerKind('fc:fpine', [
+      { mat: 'wood', geo: mg([part(tr, '#5a3c28', 0, 0.45, 0, 0.26, 0.9, 0.26)]) },
+      { mat: 'leaf', geo: mg([part(cn, '#244a2c', 0, 1.25, 0, 2.0, 1.6, 2.0), part(cn, '#2f5e38', 0, 2.05, 0, 1.5, 1.4, 1.5, 0, 0.45, 0), part(cn, '#3f7448', 0, 2.8, 0, 0.95, 1.2, 0.95, 0, 0.9, 0)]) },
+    ]);
+    k.inst.registerKind('fc:foak', [
+      { mat: 'wood', geo: mg([part(tr, '#5a3c28', 0, 0.55, 0, 0.3, 1.1, 0.3)]) },
+      { mat: 'leaf', geo: mg([part(ic, '#2c5532', 0, 1.85, 0, 2.5, 2.0, 2.4, 0.3, 0.2, 0), part(ic, '#4f8752', 0.35, 2.45, 0.25, 1.5, 1.2, 1.5, 0, 0.7, 0.2)]) },
+    ]);
+    tr.dispose(); cn.dispose(); ic.dispose(); }
+  cone8.dispose(); cyl6.dispose(); ico.dispose();
+  // the asset models' own instanced kinds (src/world/fcart/houses.ts: beds, well, carts, lamps …; optional hook)
+  const reg = (FC_HOUSES as Record<string, unknown>).registerFcItemKinds;
+  if (typeof reg === 'function') { try { (reg as (k: Ctx) => void)(k); } catch (e) { try { console.warn('[l3d] fcart kinds failed', e); } catch { /* none */ } } }
 }
 
 /* ------------------------------------------------------------------ helpers */
@@ -117,25 +154,22 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
   const rimFull: P2[] = [...sc.rim, [W + FAR, sc.rim[sc.rim.length - 1][1]]];
   // ---- meadow (lowPaving = grass in the new fair) with the pond cut out
   k.b.tag = 'terrain:ground';
-  { const g = polyGeo([[-FAR, NORTH], [W + FAR, NORTH], [W + FAR, sc.H + 2200], [-FAR, sc.H + 2200]], 0, [sc.pond]); k.b.add('lowPaving', g, M(0, 0, 0), '#ffffff', 2.4); g.dispose(); }
+  // the meadow is the town polygon (fc-art.js terrain(): P.grass); outside it the dark forest floor (P.forest)
+  { const g = polyGeo(sc.town, 0, [sc.pond]); k.b.add('lowPaving', g, M(0, 0, 0), MEADOW, 2.4); g.dispose();
+    const f = polyGeo([[-FAR, NORTH], [W + FAR, NORTH], [W + FAR, sc.H + 2200], [-FAR, sc.H + 2200]], 0, [sc.town]); k.b.add('lowPaving', f, M(0, 0, 0), FCP.forestFloor, 2.4); f.dispose(); }
   // ---- plateau top (FC_H)
   k.b.tag = 'terrain:plateau';
-  { const poly: P2[] = [[X0, NORTH], [W + FAR, NORTH], ...rimFull.slice().reverse()]; const g = polyGeo(poly, FC_H); k.b.add('lowPaving', g, M(0, 0, 0), '#e6f0dc', 2.4); g.dispose(); }
+  { const yT = Math.min(...sc.plateau.map((p) => p[1])), xE = Math.max(...sc.plateau.map((p) => p[0])), rE = rimY(sc.rim, xE);
+    const inner: P2[] = [[X0, yT], [xE, yT], ...rimFull.filter((p) => p[0] <= xE).slice().reverse().filter((p, i, a) => i === 0 || p[0] !== a[i - 1][0])];
+    if (inner[2][0] !== xE) inner.splice(2, 0, [xE, rE]);
+    const g = polyGeo(inner, FC_H); k.b.add('lowPaving', g, M(0, 0, 0), PLAT, 2.4); g.dispose();
+    const back = polyGeo([[X0, NORTH], [W + FAR, NORTH], [W + FAR, yT], [X0, yT]], FC_H); k.b.add('lowPaving', back, M(0, 0, 0), FCP.forestFloor, 2.4); back.dispose();
+    const east: P2[] = [[xE, yT], [W + FAR, yT], ...rimFull.filter((p) => p[0] > xE).slice().reverse(), [xE, rE]];
+    if (east.length >= 4) { const e = polyGeo(east, FC_H); k.b.add('lowPaving', e, M(0, 0, 0), FCP.forestFloor, 2.4); e.dispose(); } }
   // ---- rock bank under the rim: rim (FC_H) → rim + FACE (0), with a bulging middle row
   k.b.tag = 'terrain:bank';
   {
-    const top: number[][] = [], mid: number[][] = [], bot: number[][] = [];
-    for (let i = 0; i + 1 < rimFull.length; i++) {
-      const a = rimFull[i], b = rimFull[i + 1], n = Math.max(1, Math.ceil((b[0] - a[0]) / 70));
-      for (let j = i ? 1 : 0; j <= n; j++) {
-        const x = a[0] + (b[0] - a[0]) * j / n, r = a[1] + (b[1] - a[1]) * j / n, X = toX(x), jit = hash(x, 1) - 0.5;
-        top.push([X, FC_H + 0.02, zOf(r)]);
-        mid.push([X, FC_H * (0.5 + jit * 0.12), zOf(r + sc.face * 0.5) + 0.25 + jit * 0.35]);
-        bot.push([X, -0.05, zOf(r + sc.face) + 0.05]);
-      }
-    }
-    const g1 = stripGeo(top, mid), g2 = stripGeo(mid, bot);
-    k.b.add('rock', g1, M(0, 0, 0), P.rock, 1.6); k.b.add('rock', g2, M(0, 0, 0), shade(P.rock, -0.08), 1.6); g1.dispose(); g2.dispose();
+    fcBank(k, rimFull, sc.face, FC_H, 0, sc.stairs);
     // the west end of the bank and the plateau's west cliff (x = X0, north of the rim)
     const r0 = sc.rim[0][1];
     const side = new THREE.BufferGeometry();
@@ -161,7 +195,7 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
     const corner = sc.mount.find((p) => p[0] === mx0 && p[1] > 250) ?? [mx0, sc.mrim[0][1] - 90];
     const edge: P2[] = [[mx0, NORTH], corner as P2, ...sc.mrim, [W + FAR, sc.mrim[sc.mrim.length - 1][1]]];
     const topY = FC_H + FC_MH;
-    const g = polyGeo([[mx0, NORTH], ...edge.slice(1), [W + FAR, NORTH]].reverse() as P2[], topY); k.b.add('rock', g, M(0, 0, 0), shade(P.rock, 0.05), 2); g.dispose();
+    const g = polyGeo([[mx0, NORTH], ...edge.slice(1), [W + FAR, NORTH]].reverse() as P2[], topY); k.b.add('rock', g, M(0, 0, 0), FCP.mrock, 2); g.dispose();
     const t: number[][] = [], b: number[][] = [];
     for (let i = 0; i + 1 < edge.length; i++) {
       const a = edge[i], c = edge[i + 1], n = Math.max(1, Math.ceil(Math.hypot(c[0] - a[0], (c[1] - a[1]) * 2) / 70));
@@ -172,7 +206,7 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
         b.push(i === 0 ? [toX(x - 50), FC_H - 0.05, zOf(y)] : [toX(x) + jit * 0.2, FC_H - 0.05, zOf(y + sc.mface) - 0.05]);
       }
     }
-    const gf = stripGeo(t, b); k.b.add('rock', gf, M(0, 0, 0), P.rock, 1.6); gf.dispose();
+    const gf = stripGeo(t, b); k.b.add('rock', gf, M(0, 0, 0), FCP.mrockD, 1.6); gf.dispose();
     // crags on top (silhouette) and a few far peaks
     for (let i = 0; i < 9; i++) {
       const x = mx0 + 180 + i * 260 + hash(i, 5) * 120, y = Math.min(rimY(sc.mrim, x) - 140, 600) - hash(i, 6) * 350, s = 1.2 + hash(i, 8) * 1.4;
@@ -180,25 +214,7 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
     }
   }
   // ---- stairs and the cart ramp
-  k.b.tag = 'terrain:stairs';
-  for (const s of sc.stairs) {
-    const r = rimY(sc.rim, (s.x0 + s.x1) / 2), x0 = toX(s.x0), x1 = toX(s.x1), rl = toX(sc.rail);
-    if (s.k === 'ramp') {
-      const z0 = zOf(r), z1 = zOf(Math.min(s.y1, r + sc.face)), len = Math.hypot(z1 - z0, FC_H), ang = Math.atan2(FC_H, z1 - z0);
-      rbox(k, 'wood', P.woodL, (x0 + x1) / 2, FC_H / 2 - 0.09, (z0 + z1) / 2, x1 - x0 - 0.1, 0.16, len, 0, ang, 0, 0.6);
-      for (const x of [x0 + 0.06, x1 - 0.06]) rbox(k, 'wood', P.woodD, x - 0.002, FC_H / 2 + 0.04, (z0 + z1) / 2, 0.12, 0.3, len + 0.01, 0, ang, 0, 0.6);
-      continue;
-    }
-    const n = Math.max(6, Math.round(FC_H / 0.2)), y1 = Math.min(s.y1, r + sc.face);
-    for (let i = 0; i < n; i++) {
-      const za = zOf(r + (y1 - r) * i / n), zb = zOf(r + (y1 - r) * (i + 1) / n), top = FC_H * (1 - (i + 0.5) / n);
-      box(k, 'stone', P.stone, x0 + rl, x1 - rl, -0.05, top, za, zb, 0.8);
-    }
-    // cheek walls: one slab per side along the flight (top 0.45 m over the steps), a block at the top
-    { const z0 = zOf(r), z1 = zOf(y1), len = Math.hypot(z1 - z0, FC_H), ang = Math.atan2(FC_H, z1 - z0);
-      for (const xc of [x0 + rl / 2, x1 - rl / 2]) rbox(k, 'stone', shade(P.stone, -0.18), xc, FC_H / 2 + 0.1, (z0 + z1) / 2, rl, 0.9, len, 0, ang, 0, 0.8); }
-    for (const x of [x0 + rl / 2, x1 - rl / 2]) { cyl(k, 'stone', shade(P.stone, -0.25), x, FC_H, zOf(r) + 0.05, 0.13, 0.75, 8, 0.6); ball(k, 'emit', '#ffcf4a', x, FC_H + 0.86, zOf(r) + 0.05, 0.1); k.glows.push(x, FC_H + 0.86, zOf(r) + 0.05, 0.6, 1, 0.75, 0.4); }
-  }
+  fcStairs(k, sc, sc.rim, FC_H);
   fcRails(k, sc, groundAt);
   fcStreets(k, sc, groundAt);
   // ---- pond: water, a soil bank skirt, the pier
@@ -224,15 +240,128 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
   k.b.tag = '';
 }
 
+/** Stairs / ramps that go down this rim (their x centre on its span, their y range across it). */
+export function stairsOn(stairs: readonly FcStair[], rim: readonly P2[], face: number): FcStair[] {
+  if (rim.length < 2) return [];
+  const x0 = rim[0][0], x1 = rim[rim.length - 1][0];
+  return stairs.filter((s) => { const xc = (s.x0 + s.x1) / 2; return xc >= x0 && xc <= x1 && Math.abs(rimY(rim, xc) - (s.y0 + s.y1) / 2) < (s.y1 - s.y0) / 2 + face; });
+}
+/**
+ * The rock bank under a rim: rim (top) → rim + face (base), with a bulging middle row — CUT where a flight of stairs /
+ * a ramp goes down it (its retaining walls close the cut, the flight is in it). Near a cut the bank has no bulge, so
+ * the walls' tops (0.45 m over the flight) stay above it. Shared with the Town Kit (src/world/townkit.ts).
+ */
+export function fcBank(k: Ctx, rim: readonly P2[], face: number, top: number, base: number, stairs: readonly FcStair[]): void {
+  if (rim.length < 2) return;
+  const P = k.pal, cuts = stairsOn(stairs, rim, face), xs: number[] = [];
+  for (let i = 0; i + 1 < rim.length; i++) {
+    const a = rim[i], b = rim[i + 1], n = Math.max(1, Math.ceil(Math.abs(b[0] - a[0]) / 70));
+    for (let j = i ? 1 : 0; j <= n; j++) xs.push(a[0] + (b[0] - a[0]) * j / n);
+  }
+  for (const s of cuts) xs.push(s.x0, s.x1);
+  xs.sort((p, q) => p - q);
+  const inCut = (x: number) => cuts.some((s) => x > s.x0 + 0.5 && x < s.x1 - 0.5);
+  const nearCut = (x: number) => Math.min(1, cuts.reduce((d, s) => Math.min(d, Math.max(0, s.x0 - x, x - s.x1)), Infinity) / 120);
+  const runs: number[][] = [];
+  let cur: number[] = [];
+  for (let i = 0; i < xs.length; i++) {
+    if (i && xs[i] - xs[i - 1] < 0.5) continue;
+    if (cur.length && inCut((cur[cur.length - 1] + xs[i]) / 2)) { if (cur.length > 1) runs.push(cur); cur = []; }
+    cur.push(xs[i]);
+  }
+  if (cur.length > 1) runs.push(cur);
+  for (const run of runs) {
+    const T: number[][] = [], Mi: number[][] = [], B: number[][] = [];
+    for (const x of run) {
+      const r = rimY(rim, x), X = toX(x), f = nearCut(x), jit = (hash(x, 1) - 0.5) * f;
+      T.push([X, top + 0.02, zOf(r)]);
+      Mi.push([X, base + (top - base) * (0.5 + jit * 0.12), zOf(r + face * 0.5) + (0.25 + jit * 0.35) * f]);
+      B.push([X, base - 0.05, zOf(r + face) + 0.05]);
+    }
+    const g1 = stripGeo(T, Mi), g2 = stripGeo(Mi, B);
+    k.b.add('rock', g1, M(0, 0, 0), FCP.rock, 1.6); k.b.add('rock', g2, M(0, 0, 0), FCP.rockD, 1.6); g1.dispose(); g2.dispose();
+  }
+}
+/** A vertical-sided prism over a (z, y) profile polygon (convex, counter-clockwise seen from +x), x from x0 to x1. */
+export function prismX(profile: readonly [number, number][], x0: number, x1: number): THREE.BufferGeometry {
+  const pos: number[] = [], n = profile.length;
+  for (let i = 1; i + 1 < n; i++) {
+    const a = profile[0], b = profile[i], c = profile[i + 1];
+    pos.push(x1, a[1], a[0], x1, c[1], c[0], x1, b[1], b[0]);   // +x cap
+    pos.push(x0, a[1], a[0], x0, b[1], b[0], x0, c[1], c[0]);   // -x cap
+  }
+  for (let i = 0; i < n; i++) {
+    const a = profile[i], b = profile[(i + 1) % n];
+    pos.push(x0, a[1], a[0], x1, a[1], a[0], x1, b[1], b[0], x0, a[1], a[0], x1, b[1], b[0], x0, b[1], b[0]);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();   // non-indexed: flat normals, outward for a CCW profile (z right, y up)
+  return g;
+}
+/** The site's step colours (tk-art.js stair(): cream treads, a grey-pink stone rail on either side with end blocks). */
+const STEP_C = ['#f0dfcc', '#e8d4c0'], RAIL_C = '#cdb7a8', RAIL_D = '#b39a8c';
+/**
+ * One flight of stairs (or the plank cart ramp) down a bank, from the rim (`top` m) to the bank's foot (`base`): solid
+ * step blocks standing on the ground of the cut, a stone retaining wall on either side standing on the ground with
+ * its top 0.45 m over the flight (vertical ends, no slanted slabs), end blocks at the top and the foot. The ramp: a
+ * plank deck whose top is the walk height, cross planks, the same stone walls. Lint marks 'stair' / 'ramp'.
+ * Shared with the Town Kit (src/world/townkit.ts).
+ */
+export function fcFlight(k: Ctx, s: FcStair, r: number, face: number, top: number, base: number, rail: number): void {
+  const P = k.pal, x0 = toX(s.x0), x1 = toX(s.x1), rl = Math.max(0.14, toX(rail)), y1 = Math.min(s.y1, r + face);
+  const z0 = zOf(r), z1 = zOf(y1), H = top - base;
+  const tag = k.b.tag;
+  k.b.tag = s.k === 'ramp' ? 'terrain:ramp' : 'terrain:stairs';
+  // retaining walls: the profile (z, y) = top end on the plateau edge, the slope line + 0.45 m, the foot, the ground
+  const zt = z0 - 0.14, zf = z1 + 0.12, over = 0.45;
+  const prof: [number, number][] = [[zt, base - 0.05], [zf, base - 0.05], [zf, base + over], [z0, top + over], [zt, top + over]];
+  for (const [a, b] of [[x0, x0 + rl], [x1 - rl, x1]]) {
+    const g = prismX(prof, a, b); k.b.add('stone', g, M(0, 0, 0), RAIL_C, 0.8); g.dispose();
+    // end blocks (the site's rounded caps): on the plateau edge and at the foot
+    box(k, 'stone', RAIL_D, a - 0.04, b + 0.04, top + over, top + over + 0.12, zt - 0.02, zt + 0.24, 0.8);
+    box(k, 'stone', RAIL_D, a - 0.04, b + 0.04, base - 0.05, base + over + 0.14, zf - 0.26, zf + 0.02, 0.8);
+  }
+  const ix0 = x0 + rl, ix1 = x1 - rl;
+  if (s.k === 'ramp') {
+    // the deck: a plank slab whose top is the walk height (rim → foot), cross planks a little proud of it
+    const len = Math.hypot(z1 - z0, H), ang = Math.atan2(H, z1 - z0), cy = (top + base) / 2, cz = (z0 + z1) / 2;
+    const nx = Math.sin(ang), ny = Math.cos(ang);   // the deck's up normal in (z, y)
+    rbox(k, 'wood', P.woodL, (ix0 + ix1) / 2, cy - ny * 0.08, cz - nx * 0.08, ix1 - ix0 - 0.02, 0.16, len, 0, ang, 0, 0.6);
+    const n = Math.max(3, Math.floor(len / 0.42));
+    for (let i = 1; i < n; i++) {
+      const t = i / n, yy = top - H * t, zz = z0 + (z1 - z0) * t;
+      rbox(k, 'wood', P.woodD, (ix0 + ix1) / 2, yy + ny * 0.012, zz + nx * 0.012, ix1 - ix0 - 0.1, 0.024, 0.06, 0, ang, 0, 0.6);
+    }
+    (k.marks ||= []).push({ kind: 'ramp', box: [ix0, ix1, base, top, z0, z1], tag: k.b.tag });
+  } else {
+    const n = Math.max(6, Math.round(H / 0.2));
+    for (let i = 0; i < n; i++) {
+      const za = z0 + (z1 - z0) * i / n, zb = z0 + (z1 - z0) * (i + 1) / n, h = base + H * (1 - (i + 0.5) / n);
+      box(k, 'stone', STEP_C[i % 2], ix0, ix1, base - 0.05, h, za, zb, 0.8);
+    }
+    (k.marks ||= []).push({ kind: 'stair', box: [ix0, ix1, base, top, z0, z1], tag: k.b.tag });
+  }
+  k.b.tag = tag;
+}
+/** Every flight of a rim (fair plateau / a kit tier). */
+export function fcStairs(k: Ctx, sc: FairCatsScene, rim: readonly P2[], top: number, face = sc.face, base = 0): void {
+  for (const s of stairsOn(sc.stairs, rim, face)) fcFlight(k, s, rimY(rim, (s.x0 + s.x1) / 2), face, top, base, sc.rail);
+}
+
 /** Cart rails along sc.rails, following the ground (shared with the Town Kit, src/world/townkit.ts). */
 export function fcRails(k: Ctx, sc: FairCatsScene, groundAt: (x: number, y: number) => number): void {
   const P = k.pal;
   // cart rails from the mine down the ramp
   k.b.tag = 'terrain:rails';
+  const kit = kitOf(sc);
+  const faces: { poly: readonly P2[]; rim: readonly P2[]; face: number }[] = kit ? kit.rocks.map((r) => ({ poly: r.poly, rim: r.rim, face: r.face })) : [{ poly: sc.mount, rim: sc.mrim, face: sc.mface }];
+  const mine = sc.buildings.find((b) => b.id === 'mine');   // the portal model lays its own rails into the adit
+  const inRock = (x: number, y: number) => (!!mine && x > mine.vis[0] && x < mine.vis[2] && y > mine.vis[1] && y < mine.vis[3] + 30) || faces.some((f) => inPoly(f.poly, x, y) || (f.rim.length >= 2 && x >= f.rim[0][0] && x <= f.rim[f.rim.length - 1][0] && y < rimY(f.rim, x) + f.face + 6 && y > rimY(f.rim, x) - 400));
   for (let i = 0; i + 1 < sc.rails.length; i++) {
     const a = sc.rails[i], b = sc.rails[i + 1], n = Math.max(1, Math.ceil(Math.hypot(toX(b[0] - a[0]), zOf(b[1]) - zOf(a[1])) / 0.6));
     for (let j = 0; j < n; j++) {
       const pa: P2 = [a[0] + (b[0] - a[0]) * j / n, a[1] + (b[1] - a[1]) * j / n], pb: P2 = [a[0] + (b[0] - a[0]) * (j + 1) / n, a[1] + (b[1] - a[1]) * (j + 1) / n];
+      if (inRock(pa[0], pa[1]) || inRock(pb[0], pb[1])) continue;   // the rails come out of the adit, not out of the rock face
       const ya = groundAt(pa[0], pa[1]), yb = groundAt(pb[0], pb[1]), X = (toX(pa[0]) + toX(pb[0])) / 2, Z = (zOf(pa[1]) + zOf(pb[1])) / 2;
       const dx = toX(pb[0]) - toX(pa[0]), dz = zOf(pb[1]) - zOf(pa[1]), len = Math.hypot(dx, dz, yb - ya), yaw = -Math.atan2(dz, dx), pitch = Math.atan2(yb - ya, Math.hypot(dx, dz));
       for (const o of [-0.22, 0.22]) rbox(k, 'metal', '#8a8e9e', X - Math.sin(yaw) * o * 0 + Math.sin(-yaw) * o, (ya + yb) / 2 + 0.055, Z + Math.cos(yaw) * o, len, 0.05, 0.05, yaw, 0, pitch, 0.5);
@@ -247,10 +376,11 @@ export function fcStreets(k: Ctx, sc: FairCatsScene, groundAt: (x: number, y: nu
   k.b.tag = 'terrain:streets';
   sc.streets.forEach((s, i) => {
     if (s.poly && s.poly.length >= 3) {
-      const g = polyGeo(s.poly, 0.012 + i * 0.005); k.b.add('paving', g, M(0, 0, 0), '#ffffff', 1.6); g.dispose();
+      const g = polyGeo(s.poly, 0.012 + i * 0.005); k.b.add('paving', g, M(0, 0, 0), FCP.pave, 1.6); g.dispose();
     } else if (s.rr) {
       const [x0, y0, x1, y1, rr] = s.rr;
-      const g = polyGeo(roundRect(x0, y0, x1, y1, rr), 0.05); k.b.add('stone', g, M(0, 0, 0), shade(P.stone, 0.18), 0.9); g.dispose();
+      const g = polyGeo(roundRect(x0, y0, x1, y1, rr), 0.05); k.b.add('stone', g, M(0, 0, 0), FCP.plaza, 0.9); g.dispose();
+      if (!kitOf(sc)) fcPlazaRound(k, (x0 + x1) / 2, Math.min(y1 - 60, Math.max(y0 + 60, 1780)), 0.05);
     }
   });
   k.b.tag = 'terrain:lanes';
@@ -265,29 +395,48 @@ export function fcStreets(k: Ctx, sc: FairCatsScene, groundAt: (x: number, y: nu
       const dx = toX(pb[0] - pa[0]), dz = zOf(pb[1]) - zOf(pa[1]), len = Math.hypot(dx, dz);
       if (len < 1e-3) continue;
       const ux = Math.abs(dx / len), uz = Math.abs(dz / len), w = p.w * (SX * uz + SZ * ux) * 0.9;
-      rbox(k, 'paving', '#d8c8b8', toX(mx), ga + 0.002, zOf(my), len + w * 0.5, 0.008, w, -Math.atan2(dz, dx), 0, 0, 1.6);
+      rbox(k, 'paving', '#e8b878', toX(mx), ga + 0.002, zOf(my), len + w * 0.5, 0.008, w, -Math.atan2(dz, dx), 0, 0, 1.6);
     }
   }
 }
 /** The city wall along the bottom with towers, open at the gate (shared with the Town Kit; none without numbers). */
 export function fcWall(k: Ctx, sc: FairCatsScene): void {
-  const P = k.pal;
   if (![sc.wall.x0, sc.wall.x1, sc.wall.y0, sc.wall.y1, sc.wall.gate[0], sc.wall.gate[1]].every(Number.isFinite)) return;
-  // ---- the city wall along the bottom with towers, open at the gate
+  // ---- fc-art.js wallPiece / wallTower: a grey stone wall (rockD body, rockL coping, merlons) along the bottom, open at
+  // the gate, with round stone towers under PURPLE conical roofs (cat ears, a gold / pink pennant)
   k.b.tag = 'terrain:wall';
-  {
-    const w = sc.wall, za = zOf(w.y0) + 0.25, zb = zOf(w.y1) - 0.2, hh = 2.5;
-    for (const [a, b] of [[w.x0, w.gate[0] + 40], [w.gate[1] - 40, w.x1]] as P2[]) {
-      box(k, 'brick', P.brick, toX(a), toX(b), -0.1, hh, za, zb, 1.2);
-      box(k, 'stone', shade(P.stone, -0.1), toX(a) - 0.04, toX(b) + 0.04, hh, hh + 0.12, za - 0.06, zb + 0.06, 0.8);
-      for (let x = toX(a) + 0.25; x < toX(b) - 0.3; x += 0.9) box(k, 'brick', shade(P.brick, 0.05), x, x + 0.45, hh + 0.12, hh + 0.5, za - 0.02, za + 0.3, 1.2);
-      k.colliders.push(toX(a), toX(b), 0, hh + 0.5, za, zb);
-    }
-    for (const x of [w.x0 + 40, (w.x0 + w.gate[0]) / 2, (w.gate[1] + w.x1) / 2, w.x1 - 40]) {
-      cyl(k, 'brick', shade(P.brick, -0.06), toX(x), -0.1, (za + zb) / 2, 1.1, hh + 1.1, 12, 1.2);
-      cone(k, 'roof', P.roof, toX(x), hh + 1.0, (za + zb) / 2, 1.3, 1.5, false, 0.8);
-      k.colliders.push(toX(x) - 1.1, toX(x) + 1.1, 0, hh + 2.5, (za + zb) / 2 - 1.1, (za + zb) / 2 + 1.1);
-    }
+  const w = sc.wall, za = zOf(w.y0) + 0.25, zb = zOf(w.y1) - 0.2, hh = 2.5;
+  for (const [a, b] of [[w.x0, w.gate[0] + 40], [w.gate[1] - 40, w.x1]] as P2[]) {
+    box(k, 'stone', FCP.rockD, toX(a), toX(b), -0.1, hh, za, zb, 1.2);
+    box(k, 'stone', FCP.rockL, toX(a) - 0.05, toX(b) + 0.05, hh, hh + 0.16, za - 0.06, zb + 0.06, 0.8);
+    for (let x = toX(a) + 0.2; x < toX(b) - 0.4; x += 0.8) box(k, 'stone', FCP.rockL, x, x + 0.4, hh + 0.16, hh + 0.56, zb - 0.32, zb + 0.04, 0.8);
+    k.colliders.push(toX(a), toX(b), 0, hh + 0.5, za, zb);
+  }
+  const zc = (za + zb) / 2, xs = [w.x0 + 30, 1100, 1900, 3860, 4660, w.x1 - 30].filter((x) => x >= w.x0 && x <= w.x1 && (x < w.gate[0] - 60 || x > w.gate[1] + 60));
+  xs.forEach((x, i) => {
+    const X = toX(x), R = 1.05, top = hh + 1.15;
+    cyl(k, 'stone', FCP.rock, X, -0.1, zc, R, top + 0.1, 16, 1.2);
+    cyl(k, 'stone', FCP.rockL, X, top, zc, R + 0.1, 0.16, 16, 0.8);          // the eave ring the roof sits on
+    cone(k, 'roof', FCP.plum, X, top + 0.16, zc, R + 0.22, 1.9, false, 0.8);
+    for (const sx of [-1, 1]) cone(k, 'roof', FCP.plumD, X + sx * 0.5, top + 0.95, zc + 0.42, 0.2, 0.45, false, 0.6);   // cat ears
+    const yT = top + 0.16 + 1.9;
+    cyl(k, 'metal', '#3a2e4a', X, yT - 0.1, zc, 0.03, 0.6, 8, 0.5);
+    rbox(k, 'canvas', i % 2 ? FCP.pink : FCP.gold, X + 0.26, yT + 0.32, zc, 0.5, 0.22, 0.02, 0, 0, 0, 1);
+    k.colliders.push(X - R, X + R, 0, top + 2, zc - R, zc + R);
+  });
+}
+
+export function fcPlazaRound(k: Ctx, cx: number, cy: number, y: number): void {
+  const ring = (R: number, r: number, h: number, col: string) => {
+    const el = (q: number) => { const o: P2[] = []; for (let i = 0; i < 40; i++) { const t = -i / 40 * Math.PI * 2; o.push([cx + Math.cos(t) * q, cy + Math.sin(t) * q / 1.6]); } return o; };
+    const g = polyGeo(el(R), y + h, r > 0 ? [el(r).reverse()] : []); k.b.add('stone', g, M(0, 0, 0), col, 0.9); g.dispose();
+  };
+  ring(300, 270, 0.006, FCP.terraD); ring(270, 200, 0.006, FCP.terra); ring(200, 130, 0.006, FCP.terraL); ring(130, 0, 0.006, FCP.plaza);
+  // the brick joints of the middle ring
+  for (let i = 0; i < 36; i++) {
+    const t = i / 36 * Math.PI * 2, a: P2 = [cx + Math.cos(t) * 204, cy + Math.sin(t) * 204 / 1.6], b: P2 = [cx + Math.cos(t) * 266, cy + Math.sin(t) * 266 / 1.6];
+    const X = toX((a[0] + b[0]) / 2), Z = zOf((a[1] + b[1]) / 2), dx = toX(b[0] - a[0]), dz = zOf(b[1]) - zOf(a[1]);
+    rbox(k, 'stone', FCP.terraD, X, y + 0.014, Z, Math.hypot(dx, dz), 0.006, 0.05, -Math.atan2(dz, dx), 0, 0, 0.9);
   }
 }
 
@@ -297,14 +446,113 @@ export function roundRect(x0: number, y0: number, x1: number, y1: number, r: num
   return out;
 }
 
+/* ------------------------------------------------------------------ asset models (src/world/fcart) */
+/**
+ * The asset-faithful model of a site ref (src/world/fcart/registry.ts), or undefined → the generic code builds it.
+ * A Town Kit town asks 'tk:<ref>' first; its buildings are other drawings than the fair's (tk-art.js building()), so
+ * only the shared assets (houses, decor items: the same tk-art.js functions) fall back to the fair's model.
+ */
+export function fcModelFor(ref: string, kit: boolean): FcModel | undefined {
+  if (!kit) return fcModel(ref);
+  return fcModel('tk:' + ref) ?? (ref.startsWith('house:') || ref.startsWith('i:') ? fcModel(ref) : undefined);
+}
+/** Build a model (its errors fall back to the generic code: false). Notes it for the runtime asset check (fcart/live.ts). */
+function buildModel(k: Ctx, m: FcModel, p: FcPlace): boolean {
+  const nb = k.b.tag;
+  try { m.build(k, p); } catch (e) { try { console.warn('[l3d] fcart model failed', m.ref, e); } catch { /* none */ } return false; } finally { k.b.tag = nb; }
+  noteFcModel(m.ref, m.fp);
+  return true;
+}
+/** Run a builder for its solids / colliders only (the geometry goes to a throw-away batch): the jail cage and the mine
+ *  adit keep their walk truth (fairCatsSolids skips their site obstacles) when a new model draws them. */
+function solidsOnly(k: Ctx, fn: (k2: Ctx) => void): void {
+  const k2: Ctx = { ...k, b: new Batch(), inst: new Instancer(), glows: [], lights: [], bulbs: [], wires: [], pools: [], blobs: [], plant: [], marks: [] };
+  try { fn(k2); } catch { /* the solids pushed so far stay */ }
+  k.solids = k2.solids; k.colliders = k2.colliders;
+}
+/** Item point → its drawn box (px) from the asset table (fcart-fp.json box [w, h]: bottom-centred on the item point). */
+function itemVis(ref: string, x: number, y: number, kit: boolean): [number, number, number, number] {
+  const T = FCART_FP as unknown as Record<string, { box: [number, number] }>, e = (kit && T['tk:' + ref]) || T[ref];
+  const [w, h] = e?.box ?? [80, 80];
+  return [x - w / 2, y - h + 8, x + w / 2, y + 8];
+}
+
 /* ------------------------------------------------------------------ buildings + houses */
 /** Every site building on its foot band (see the header). */
 export function buildFairCatsBuildings(k: Ctx, L: FairCatsLayout, groundAt: (x: number, y: number) => number): void {
   const sc = L.faircats, kit = kitOf(sc);
+  clearFcModels();
+  // the boxes of the building pieces: placeFairCatsProps keeps the lamp heads and the small decor out of them (a site
+  // lamp point under a model's deeper roof put the lantern inside it — Town Kit board / forge; the storage model's own
+  // crates stand where the site puts its box and barrel)
+  const high: number[] = []; HIGH.set(k, high);
+  const prev = k.b.onAdd;
+  k.b.onAdd = (mat, bx) => { prev?.(mat, bx); if (k.b.tag && k.b.tag !== 'houses' && mat !== 'emit' && mat !== 'sign') high.push(bx.min.x, bx.min.y, bx.min.z, bx.max.x, bx.max.y, bx.max.z); };
+  const inst0 = new Map<string, number>(); for (const [kind, a] of k.inst.placed) inst0.set(kind, a.length);
+  try { buildFcBuildings(k, L, sc, kit, groundAt); } finally { k.b.onAdd = prev; }
+  // the buildings' own crates / barrels (old builders: lowstreet.ts storage) count as building pieces too
+  for (const [kind, a] of k.inst.placed) if (/crate|barrel/.test(kind)) for (let i = inst0.get(kind) ?? 0; i < a.length; i++) {
+    const q = a[i], r = 0.34 * q.scale;
+    high.push(q.x - r, q.y, q.z - r, q.x + r, q.y + 0.8 * q.sy, q.z + r);
+  }
+}
+/** Building piece boxes per Ctx (buildFairCatsBuildings → placeFairCatsProps). */
+const HIGH = new WeakMap<Ctx, number[]>();
+/** A lamp item moved clear of the building pieces over its head (±0.4 / 0.8 m along x, then 0.4 m forward), or null. */
+function lampClear(k: Ctx, it: FcItem, G: (x: number, y: number) => number, lampHead: number): FcItem | null {
+  const H = HIGH.get(k); if (!H?.length) return it;
+  const hits = (x: number, y: number) => {
+    const X = toX(x), Z = toZ(y - 3), g = G(x, y), y0 = g + lampHead - 0.35, y1 = g + lampHead + 0.75;
+    for (let i = 0; i < H.length; i += 6) if (X + 0.3 > H[i] && X - 0.3 < H[i + 3] && Z + 0.3 > H[i + 2] && Z - 0.3 < H[i + 5] && y1 > H[i + 1] && y0 < H[i + 4]) return true;
+    return false;
+  };
+  for (const [dx, dy] of [[0, 0], [-40, 0], [40, 0], [-80, 0], [80, 0], [0, 20], [-40, 20], [40, 20]]) if (!hits(it.x + dx, it.y + dy)) return dx || dy ? { ...it, x: it.x + dx, y: it.y + dy } : it;
+  return null;
+}
+/** Small decor the site places right where a building model drew its own (box / barrel / crate / sack inside a piece). */
+const DECOR = new Set(['box', 'barrel', 'crate', 'sack', 'pot', 'bucket']);
+function decorInBuilding(k: Ctx, it: FcItem, G: (x: number, y: number) => number): boolean {
+  const H = HIGH.get(k); if (!H?.length || !DECOR.has(it.k)) return false;
+  const X = toX(it.x), Z = toZ(it.y - 15), g = G(it.x, it.y), hw = it.k === 'crate' ? (Math.min(3, Math.max(1, +(it.n as number) || 1)) - 1) * 0.31 + 0.25 : 0.22;
+  for (let i = 0; i < H.length; i += 6) if (X + hw > H[i] && X - hw < H[i + 3] && Z + 0.26 > H[i + 2] && Z - 0.26 < H[i + 5] && g + 0.5 > H[i + 1] && g + 0.1 < H[i + 4]) return true;
+  return false;
+}
+function buildFcBuildings(k: Ctx, L: FairCatsLayout, sc: FairCatsScene, kit: ReturnType<typeof kitOf>, groundAt: (x: number, y: number) => number): void {
   for (const b of L.buildings) {
     const fb = sc.buildings.find((x) => x.id === b.id);
     k.b.tag = b.id;
     const base = groundAt(b.door.x, b.door.y);
+    // an asset model (src/world/fcart): drawn on the site's own rects; doors / signs / labels keep working through
+    // BUILDING_XF (entrance plane = the model's front on foot[3]); colliders stay the site's obstacles
+    const am = fcModelFor(b.id, !!kit);
+    if (am) {
+      const foot = fb?.foot ?? [b.hit[0], b.hit[2], b.hit[1], b.hit[3]], vis = fb?.vis ?? foot;
+      const J = b.id === 'jail' ? jailGeoOf(b, L.low) : null;
+      if (J) JAIL_GEO.set(b, J);
+      const nSol = (k.solids ||= []).length;
+      const place: FcPlace = { vis, foot, door: { x: b.door.x, y: b.door.y }, base, data: {
+        id: b.id, title: b.title, sign: L.signs[b.id] ? signText(L.signs[b.id]) : b.title, level: kit?.lvl[b.id] ?? 5, build: kit?.build[b.id] ?? null,
+        soon: !!b.soon, scaffold: !!b.scaffold, low: LOW_IDS.has(b.id) || !!b.mine, kit: kit ? kit.id : null, biome: kit?.biome ?? 'meadow', vis5: kit?.vis5[b.id] ?? null,
+        ...(J ? { jail: J } : {}) } };
+      if (buildModel(k, am, place)) {
+        // the jail and the mine models push their own walk solids (cage bars / floor, the portal posts: the site's obstacle
+        // list skips them, fairCatsSolids); every other model keeps only its finite tops (the site's obstacles are the walls)
+        const OWN = b.id === 'jail' || b.id === 'mine';
+        if (!OWN) { const S = k.solids!; for (let i = S.length - 5; i >= nSol; i -= 5) if (S[i + 4] === Infinity) S.splice(i, 5); }
+        if (!OWN && b.mine) {   // another adit drawn by a model: the old builder's walk truth
+          const lh = k.lowH, wz = k.wallZ;
+          k.lowH = base; k.wallZ = toZ(b.hit[3]) - 3.2;
+          try { solidsOnly(k, (k2) => buildBuilding(k2, b)); } finally { k.lowH = lh; k.wallZ = wz; }
+        }
+        // the model's door (civic.ts civicDoorXf: entrance plane + door scale), else its front on foot[3]
+        const dx = (FC_CIVIC as Record<string, unknown>).civicDoorXf as ((ref: string, p: FcPlace) => { zE: number; s: number } | null) | undefined;
+        const d = typeof dx === 'function' ? dx(b.id, place) : null;
+        const E = d ? d.zE : toZ(Math.min(foot[3], b.door.y - 22)) - 0.03;
+        BUILDING_XF.set(b, { virt: { ...b }, z: () => E, s: d ? d.s : 1 });
+        continue;
+      }
+      k.solids!.length = Math.min(k.solids!.length, nSol);   // a failed model: its solids go, the generic code builds
+    }
     if (LOW_IDS.has(b.id) || b.mine) {
       if (b.id === 'jail') { const J = jailGeoOf(b, L.low); if (J) JAIL_GEO.set(b, J); }
       const lh = k.lowH, wz = k.wallZ, inst0 = new Map<string, number>();
@@ -340,16 +588,23 @@ export function buildFairCatsBuildings(k: Ctx, L: FairCatsLayout, groundAt: (x: 
   }
   // houses: the tavern and cottages, facing the street below them
   k.b.tag = 'houses';
-  for (const h of sc.houses) {
+  sc.houses.forEach((h, i) => {
     const X0 = toX(h.foot[0]) + 0.05, X1 = toX(h.foot[2]) - 0.05, zf = toZ(h.foot[3]) - 0.04, d = Math.max(2.2, toZ(h.foot[3]) - toZ(h.foot[1]) - 0.1);
     const tav = h.k === 'tavern', r = hash(h.foot[0], h.foot[1]);
+    const am = fcModelFor(tav ? 'house:tavern' : 'house:' + (h.roof || 'red'), !!kit);
+    if (am && buildModel(k, am, { vis: h.vis, foot: h.foot, door: { x: h.door.x, y: h.door.y }, base: groundAt(h.door.x, h.door.y),
+      data: { id: h.id, k: h.k, roof: h.roof, roofCol: ROOF[h.roof] ?? k.pal.roof, roofCat: i % 2 === 0, sign: tav ? 'ТРАКТИР' : null, kit: kit ? kit.id : null, biome: kit?.biome ?? 'meadow' } })) {
+      k.b.tag = 'houses';
+      k.colliders.push(X0, X1, 0, 4.5, zf - d, zf);
+      return;
+    }
     house(k, X0, X1, zf, d, tav ? 3.6 : 2.5 + r * 0.4, {
       wall: tav ? 'wood' : r < 0.4 ? 'plaster' : r < 0.75 ? 'wood' : 'brick', timber: tav || (r >= 0.4 && r < 0.75), roofCol: ROOF[h.roof] ?? k.pal.roof,
       chimney: r > 0.3, lit: 0.65, shutters: r < 0.5 ? k.pal.sign : undefined, roof: 'x', ...(tav ? { floors: 2 } : {}),
     });
     if (tav) signF(k, 'ТРАКТИР', (X0 + X1) / 2, 2.25, zf, 1.8);
     k.colliders.push(X0, X1, 0, 4.5, zf - d, zf);
-  }
+  });
   k.b.tag = '';
 }
 /** «РЫБНЫЕ РЯДЫ» → «Рыбные ряды» (sign atlas case). */
@@ -407,43 +662,99 @@ export function placeFairCatsProps(k: Ctx, L: FairCatsLayout, groundAt: (x: numb
   const sc = L.faircats, P = k.pal, lampHeads: number[] = [];
   const G = (x: number, y: number) => groundAt(x, y);
   const posts = new Set<string>();
-  for (const it of sc.items) placeItem(k, sc, it, G, lampHead, lampHeads, posts);
-  // a pine belt round the town (outside the walk area) + the far forest edge
-  k.b.tag = 'forest';
-  let s = 77;
-  const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const town = sc.town, X0 = plateauX0(sc), kit = kitOf(sc);
-  const rocks = kit ? kit.rocks.map((r) => r.poly) : [sc.mount];
-  // a Town Kit town: the biome's trees (tk-art.js NATURE: pines in the north, broadleaf in the woods, none in the sands)
-  const kind = kit ? (kit.biome === 'desert' ? '' : ['forest', 'meadow', 'coast', 'ruin', 'swamp'].includes(kit.biome) ? VK.tree : 'fc:pine') : 'fc:pine';
-  const tryTree = (x: number, y: number, sc0: number) => {
-    if (!kind || inPoly(town, x, y) || L.free(x, y) || rocks.some((r) => inPoly(r, x, y))) return;
-    for (let d = 0; d < 60; d += 20) if (L.free(x + d, y) || L.free(x - d, y) || L.free(x, y + d) || L.free(x, y - d)) return;
-    if (y > sc.wall.y0 - 60 && y < sc.wall.y1 + 120 && x > sc.wall.x0 - 60 && x < sc.wall.x1 + 60) return;
-    k.inst.add(kind, toX(x), groundAt(x, y), toZ(y), rnd() * 6.28, kind === 'fc:pine' ? sc0 : sc0 * 0.9);
-  };
-  // ≈ 150 pines (≈ 66 tris each): a belt on the west / east edges, north of the low west quarter, beyond the wall, and on
-  // the plateau's back; the hills ring of the backdrop does the rest
-  if (kit) {
-    // any town shape: a ring of cells round the town polygon's box (tryTree keeps them off the walk area)
-    const xs = town.map((p) => p[0]), ys = town.map((p) => p[1]);
-    const bx0 = Math.min(...xs) - 900, bx1 = Math.max(...xs) + 900, by0 = Math.min(...ys) - 700, by1 = Math.max(...ys) + 600;
-    for (let y = by0; y < by1; y += 300 + rnd() * 110) for (let x = bx0; x < bx1; x += 320 + rnd() * 140) tryTree(x, y, 1.3 + rnd() * 0.6);
-  } else for (let y = 1000; y < sc.H + 500; y += 280 + rnd() * 110) {
-    for (let x = -600; x < 300; x += 300 + rnd() * 140) tryTree(x, y, 1.3 + rnd() * 0.6);
-    for (let x = 5520; x < sc.W + 600; x += 300 + rnd() * 140) tryTree(x, y, 1.3 + rnd() * 0.6);
+  // trees next to a flight / the cart ramp stay smaller: their crowns never hang over the steps (the trunk stays on the
+  // site's obstacle, so they are not moved)
+  const TREEK = new Set(['tree', 'pine', 'blossom', 'bush']);
+  const nearFlight = (x: number, y: number) => sc.stairs.some((s) => x > s.x0 - 150 && x < s.x1 + 150 && y > s.y0 - 90 && y < s.y1 + 90);
+  for (const it1 of sc.items) {
+    const it0 = it1.k === 'lamp' ? lampClear(k, it1, G, lampHead) : it1;
+    if (!it0 || decorInBuilding(k, it0, G)) continue;   // no room for the lantern beside the roof over it / the model drew it
+    const it = TREEK.has(it0.k) && nearFlight(it0.x, it0.y) ? { ...it0, s: (typeof it0.s === 'number' ? it0.s : 1) * 0.7 } : it0;
+    const am = fcModelFor('i:' + it.k, !!kitOf(sc));
+    if (am) {
+      k.b.tag = 'prop:' + it.k;
+      const vis = itemVis('i:' + it.k, it.x, it.y, !!kitOf(sc));
+      const ok = buildModel(k, am, { vis, foot: vis, door: { x: it.x, y: it.y }, base: G(it.x, it.y), data: { ...it } });
+      k.b.tag = '';
+      if (ok) { if (it.k === 'lamp') lampHeads.push(toX(it.x), G(it.x, it.y) + lampHead, toZ(it.y - 3)); continue; }
+    }
+    placeItem(k, sc, it, G, lampHead, lampHeads, posts);
   }
-  if (!kit) {
-    for (let x = -500; x < X0 - 40; x += 230 + rnd() * 100) for (let y = 300; y < 880; y += 240 + rnd() * 90) tryTree(x, y, 1.3 + rnd() * 0.6);
-    for (let x = 0; x < sc.W; x += 330 + rnd() * 160) for (let y = sc.wall.y1 + 180; y < sc.H + 400; y += 300 + rnd() * 100) tryTree(x, y, 1.3 + rnd() * 0.7);
-    for (let x = X0 + 100; x < 4200; x += 300 + rnd() * 150) for (let y = -300; y < 180; y += 260 + rnd() * 100) tryTree(x, y, 1.4 + rnd() * 0.7);
-  }
+  fcForest(k, L, groundAt);
+  const kit = kitOf(sc);
   void P;
   k.b.tag = '';
+  // the asset models built in this town are compared with the page's live art once, idle (fcart/live.ts)
+  scheduleFcArtCheck(kit ? { kind: 'tk', id: kit.id, levels: kit.lvl, building: kit.build as Record<string, unknown> } : { kind: 'fc' });
   // wires the building builders collected (tent pennants, shop beams) → garland spans
   const garlands: THREE.Vector3[][] = [];
   for (let j = 0; j + 5 < k.wires.length; j += 6) garlands.push([new THREE.Vector3(k.wires[j], k.wires[j + 1], k.wires[j + 2]), new THREE.Vector3(k.wires[j + 3], k.wires[j + 4], k.wires[j + 5])]);
   return { garlands, lampHeads };
+}
+
+/* ------------------------------------------------------------------ the forest round the clearing */
+/**
+ * The town is a clearing in a dense forest (fc-art.js forest(): every free cell of the map outside the town polygon, the
+ * mountain and the plateau is a dark tree, 30 % pines): a jittered 2 × 2 m grid outside the town polygon, dense at the
+ * edge (the trees you see), thinning out to ≈ 26 m; the city wall's band, the gate road and the walk area stay free.
+ * Two instanced kinds (fc:foak / fc:fpine, 4 draw calls). Pines on the mountain top (fc-art.js mountain()). Town Kit
+ * towns: the biome's mix (none in the desert, pines in the north).
+ */
+export function fcForest(k: Ctx, L: FairCatsLayout, groundAt: (x: number, y: number) => number): number {
+  const sc = L.faircats, kit = kitOf(sc), town = sc.town;
+  if (town.length < 3) return 0;
+  const biome = kit?.biome ?? 'meadow';
+  if (biome === 'desert') return 0;
+  const pineShare = ['ice', 'tundra', 'north', 'snow', 'mountain'].includes(biome) ? 0.8 : biome === 'ash' || biome === 'blight' ? 0.5 : 0.3;
+  k.b.tag = 'forest';
+  let seed = 977;
+  const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const rocks = kit ? kit.rocks.map((r) => r.poly) : [sc.mount];
+  const water = kit ? kit.water.map((w) => w.poly) : [sc.pond];
+  const edges: [number, number, number, number][] = [];
+  for (let i = 0, j = town.length - 1; i < town.length; j = i++) edges.push([toX(town[j][0]), toZ(town[j][1]), toX(town[i][0]), toZ(town[i][1])]);
+  const distTown = (X: number, Z: number) => {
+    let d = Infinity;
+    for (const [ax, az, bx, bz] of edges) {
+      const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz, t = l2 ? Math.max(0, Math.min(1, ((X - ax) * dx + (Z - az) * dz) / l2)) : 0;
+      d = Math.min(d, Math.hypot(X - ax - dx * t, Z - az - dz * t));
+    }
+    return d;
+  };
+  const W = sc.wall, wallOk = [W.x0, W.x1, W.y0, W.y1].every(Number.isFinite), gx = wallOk ? (W.gate[0] + W.gate[1]) / 2 : NaN;
+  const xs = town.map((p) => p[0]), ys = town.map((p) => p[1]);
+  const x0 = Math.min(...xs) - 2600, x1 = Math.max(...xs) + 2600, y0 = Math.min(...ys) - 1300, y1 = Math.max(...ys) + 1250;
+  let n = 0;
+  for (let y = y0, row = 0; y < y1; y += 100, row++) for (let x = x0 + (row % 2) * 100; x < x1; x += 200) {
+    const px = x + (rnd() - 0.5) * 120, py = y + (rnd() - 0.5) * 60, r1 = rnd(), r2 = rnd(), r3 = rnd();
+    if (inPoly(town, px, py) || rocks.some((r) => inPoly(r, px, py)) || water.some((w) => w.length > 2 && inPoly(w, px, py))) continue;
+    const X = toX(px), Z = toZ(py), d = distTown(X, Z);
+    if (d > 26 || r1 > (d < 5 ? 1 : d < 11 ? 0.5 : d < 18 ? 0.28 : 0.16)) continue;
+    if (wallOk && py > W.y0 - 80 && py < W.y1 + 150 && px > W.x0 - 80 && px < W.x1 + 80) continue;   // the wall's band
+    if (wallOk && Math.abs(px - gx) < 190 && py > W.y0 - 40) continue;                              // the gate road out
+    if (L.free(px, py) || L.free(px + 40, py) || L.free(px - 40, py) || L.free(px, py + 30) || L.free(px, py - 30)) continue;
+    if (sc.stairs.some((st) => px > st.x0 - 150 && px < st.x1 + 150 && py > st.y0 - 60 && py < st.y1 + 60)) continue;   // crowns off the flights / the cart ramp
+    const pine = r2 < pineShare, s = (pine ? 1.15 : 1.0) * (0.85 + r3 * 0.55) * (d > 12 ? 1.25 : 1);
+    k.inst.add(pine ? 'fc:fpine' : 'fc:foak', X, groundAt(px, py) - 0.05, Z, r1 * 40, s, s * (0.9 + r2 * 0.25));
+    n++;
+  }
+  // pines on the mountain top (fc-art.js mountain(): its trees stand on the top, away from the face)
+  if (!kit && sc.mount.length >= 3 && sc.mrim.length >= 2) {
+    const topY = FC_H + FC_MH, mx0 = Math.min(...sc.mount.map((p) => p[0])), placed: number[] = [];
+    for (let i = 0; i < 46; i++) {
+      const px = mx0 + 60 + rnd() * (sc.W - mx0 - 100), py = 180 + rnd() * 560;
+      if (!inPoly(sc.mount, px, py) || py > rimY(sc.mrim, px) - 60 || (Math.abs(px - 4925) < 220 && py > rimY(sc.mrim, px) - 160)) continue;
+      const s = 0.8 + rnd() * 0.5, rot = rnd() * 6.28, X = toX(px), Z = toZ(py);
+      let near = false;   // crowns (r 1.0 × s) apart: two pines never stand in each other
+      for (let j = 0; j < placed.length; j += 3) if (Math.hypot(X - placed[j], Z - placed[j + 1]) < (s + placed[j + 2]) * 0.9) { near = true; break; }
+      if (near) continue;
+      placed.push(X, Z, s);
+      k.inst.add('fc:fpine', X, topY - 0.05, Z, rot, s, s);
+      n++;
+    }
+  }
+  k.b.tag = '';
+  return n;
 }
 
 function placeItem(k: Ctx, sc: FairCatsScene, it: FcItem, G: (x: number, y: number) => number, lampHead: number, lampHeads: number[], posts: Set<string>): void {
@@ -497,7 +808,8 @@ function placeItem(k: Ctx, sc: FairCatsScene, it: FcItem, G: (x: number, y: numb
     case 'pot': cyl(k, 'brick', '#c06a40', X, g, toZ(y - 8), 0.22, 0.38, 12, 0.5); k.inst.add(VK.bush, X, g + 0.3, toZ(y - 8), rot, 0.5); break;
     case 'crate': {
       const n = Math.max(1, +(it.n as number) || 1);
-      for (let i = 0; i < n; i++) k.inst.add(VK.crate, X + (i % 3) * 0.3 - (n > 2 ? 0 : 0), g + (i >= 3 ? 0.54 : 0), toZ(y - 18) + (i % 2) * 0.04, (i * 0.37) % 0.6 - 0.3, 0.9);
+      // 0.62 m apart, turned ≤ ±0.1 rad: the 0.55 m crates never cut into each other (they stood 0.3 m apart)
+      for (let i = 0; i < n; i++) k.inst.add(VK.crate, X + (i % 3) * 0.62 - (Math.min(n, 3) - 1) * 0.31, g + (i >= 3 ? 0.54 : 0), toZ(y - 18) + (i % 2) * 0.04, ((i * 0.37) % 0.6 - 0.3) / 3, 0.9);
       break;
     }
     case 'barrel': k.inst.add(VK.barrel, X, g, toZ(y - 10), rot, it.water ? 1.05 : 0.95); break;
@@ -530,7 +842,13 @@ function placeItem(k: Ctx, sc: FairCatsScene, it: FcItem, G: (x: number, y: numb
     case 'sandpit': { const rx = toX(+(it.rx as number) || 100), rz = (+(it.ry as number) || 30) * SZ; k.b.add('flat', GEO.cyl16, M(X, g + 0.012, Z, rx * 2, 0.008, rz * 2), '#d8b878', 1); break; }
     case 'coal': for (let i = 0; i < 6; i++) lump(k, 'rock', '#2a2630', X - 0.4 + (i % 3) * 0.4, g + 0.12 + (i >= 3 ? 0.18 : 0), toZ(y - 18) + (i % 2) * 0.1, 0.22); break;
     case 'woodpile': for (let r = 0; r < 3; r++) for (let i = 0; i < 6 - r; i++) k.b.add('wood', GEO.cyl8, M(X - 0.6 + (i + r * 0.5) * 0.24, g + 0.12 + r * 0.22, toZ(y - 20), 0.22, 1.1, 0.22, Math.PI / 2, 0, 0), i % 2 ? P.wood : P.woodD, 0.5); break;
-    case 'grind': k.b.add('stone', GEO.cyl16, M(X, g + 0.45, toZ(y - 10), 0.75, 0.16, 0.75, Math.PI / 2, 0, 0), '#8a8a96', 0.6); box(k, 'wood', P.woodD, X - 0.32, X + 0.32, g, g + 0.3, toZ(y - 10) - 0.12, toZ(y - 10) + 0.12, 0.5); break;
+    case 'grind': {   // the stone on an axle between two posts (it used to sit 26 % deep in a crate: a half disc)
+      const zg = toZ(y - 10), ya = g + 0.3 + 0.375 + 0.02;
+      for (const s2 of [-1, 1]) box(k, 'wood', P.woodD, X + s2 * 0.2 - 0.04, X + s2 * 0.2 + 0.04, g, ya + 0.05, zg - 0.06, zg + 0.06, 0.5);
+      k.b.add('metal', GEO.cyl8, M(X, ya, zg, 0.05, 0.31, 0.05, 0, 0, Math.PI / 2), '#5a5e6a', 0.5);
+      k.b.add('stone', GEO.cyl16, M(X, ya, zg, 0.75, 0.16, 0.75, 0, 0, Math.PI / 2), '#8a8a96', 0.6);
+      break;
+    }
     case 'bucket': cyl(k, 'wood', P.wood, X, g, toZ(y - 6), 0.13, 0.26, 8, 0.4); break;
     case 'haystack': k.b.add('canvas', GEO.dome, M(X, g, toZ(y - 24), 1.4, 1.0, 1.2), '#e8c45a', 1); break;
     case 'sack': { const n = Math.max(1, +(it.n as number) || 1); for (let i = 0; i < n; i++) lump(k, 'canvas', it.ore ? '#a08868' : '#d8c8a0', X - 0.15 + i * 0.25, g + 0.2, toZ(y - 15), 0.22, 1.1); break; }

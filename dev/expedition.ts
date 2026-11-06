@@ -4,6 +4,7 @@
  *   ?speed=2 (default)  ?dl=4 stream delay the fake reports (s)  ?at=SEC start at plan second SEC  ?spec=1 spectator
  *   ?role=archer|legionary|mage|priest…  ?q=0..3 quality  ?n=50 big party (extra cats)
  *   ?demo=travel|battle|…&ter=Тыквенное поле : a fixed view on that terrain (biome checks)
+ *   ?tod=HH:MM : force the user-clock day / night (open-sky daytime biomes follow it; src/world/daynight.ts)
  *   ?hud=battle|battle-tele|map-vote|rune-door|rune-vote|pz-cups|pz-riddle|skeldance|gob-bet|gob-shell|ev-traveler|ev-dice|gather
  *     the quest HUD (src/quest) over a FAKE site «Поход» tab (src/quest/fake-site.ts: the site's markup and handlers, presses are
  *     logged to window.__site.log, never sent); &qa=0 = a hero without the site's button flag (→ «пиши в чат стрима»)
@@ -17,11 +18,14 @@ import { FakeQuest, rebase } from '../src/quest/fake';
 import { mockById } from '../src/debug/questMocks';
 import type { Role, QuestPayload } from '../src/quest/model';
 import { ExpeditionView } from '../src/expedition';
+import { parseTod, setTodForce } from '../src/world/daynight';
 import meFx from '../test/fixtures/me.json';
 import { mountQuestHud } from '../src/quest';
 import { FakeSite, FAKE_MOCK, type FakeStage } from '../src/quest/fake-site';
 
 const Q = new URLSearchParams(location.search);
+// ?tod=HH:MM: force the user-clock day / night (src/world/daynight.ts) — open-sky daytime biomes follow it
+{ const m = parseTod(Q.get('tod')); if (m != null) setTodForce(m); }
 const host = document.getElementById('app') as HTMLElement;
 const engine = createEngine({ host, quality: Q.has('q') ? (+Q.get('q')! as 0) : 2 });
 const { scene, camera, renderer } = engine;

@@ -14,7 +14,7 @@ import type { AvatarKit } from '../contracts/modules';
 import type { SceneState, Member, FoeState } from './adapter';
 import { HOW_RU, isTight } from './adapter';
 import { ExpMats } from './mats';
-import { Terrain, type TerrainMode } from './terrain';
+import { Terrain, clockNight, type TerrainMode } from './terrain';
 import { Crowd, type Actor } from './crowd';
 import { Foes, Boss, Bars, Decals, Shots, type FoeActor } from './foes';
 import { FloatText, Label } from './text';
@@ -144,7 +144,8 @@ export class ExpeditionScene implements RoomScene {
     this.setKey = s.setKey;
     const mode: TerrainMode = s.kind === 'travel' ? 'path' : 'clearing';
     const biome = s.kind === 'gather' || s.kind === 'town' ? 'meadow' : s.kind === 'dungeon' ? 'dungeon' : s.kind === 'lair' ? 'swamp' : s.biome;
-    const night = s.kind === 'rest' && !isTight(biome);
+    // night: the rest stop, or an open-sky daytime biome at night by the user's clock (src/world/daynight.ts)
+    const night = (s.kind === 'rest' && !isTight(biome)) || clockNight(biome);
     const tKey = `${biome}|${mode}|${night}`;
     if (tKey !== this.tKey) {
       this.terrain?.dispose();

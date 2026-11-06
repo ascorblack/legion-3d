@@ -37,11 +37,19 @@ const _nm = new THREE.Matrix3();
 export class Batch {
   private parts = new Map<BatchKey, Part[]>();
   /** Dev/test hook: sees every piece in world space (z-fight detector, src/world/zfight.ts). */
-  recorder: ((mat: BatchKey, g: THREE.BufferGeometry, tag: string, look: string) => void) | null = null;
+  recorder: ((mat: BatchKey, g: THREE.BufferGeometry, tag: string, look: string, role?: string) => void) | null = null;
   /** Optional hook: every piece's material + world bounds (static.ts turns low slabs — door steps, plinths — into steps). */
   onAdd: ((mat: BatchKey, box: THREE.Box3) => void) | null = null;
-  /** Name of what is being added (for the recorder), e.g. the building id. */
-  tag = '';
+  /** Name of what is being added (for the recorder), e.g. the building id. Every assignment starts a new object for the
+   *  geometry lint (`tagSeq`, src/world/lint): two decor items of one kind are two objects even with the same tag. */
+  get tag(): string { return this._tag; }
+  set tag(v: string) { this._tag = v; this.tagSeq++; }
+  private _tag = '';
+  /** Number of `tag` assignments so far (object identity for src/world/lint). */
+  tagSeq = 0;
+  /** What the next pieces are for the geometry lint, without starting a new object: 'smoke' / 'hang' (float by design),
+   *  'found' (a foundation below the ground), 'decal'. Set it around the pieces, reset to ''. */
+  role = '';
   /** Last x-chunk index (pieces beyond go into it); set from the city width. */
   maxChunk = 5;
   constructor(private chunkW = 15) {}
@@ -108,7 +116,7 @@ export class Batch {
     // look signature: identical (material, colour, uv mapping) pieces shade identically → coplanar overlap is invisible
     if (this.recorder) {
       g0.setAttribute('uv', uvA);   // the final UVs too (texture-mapping test: test/world-texmap.test.ts)
-      this.recorder(mat, g0, this.tag, ownCol ? 'own' + Math.random() : `${mat}|${col[0].toFixed(3)},${col[1].toFixed(3)},${col[2].toFixed(3)}|${Array.isArray(uv) ? uv.join('x') : uv}`);
+      this.recorder(mat, g0, this.tag, ownCol ? 'own' + Math.random() : `${mat}|${col[0].toFixed(3)},${col[1].toFixed(3)},${col[2].toFixed(3)}|${Array.isArray(uv) ? uv.join('x') : uv}`, this.role);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', pos);

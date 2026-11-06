@@ -23,6 +23,7 @@ export function patchWater(m: THREE.MeshStandardMaterial, o: WaterLook): void {
     uWZen: { value: o.zenith.clone() }, uWHor: { value: o.horizon.clone() }, uWMoon: { value: o.moonDir.clone().normalize() },
     uWBank: { value: new THREE.Vector2(isNaN(o.c0) ? -1e6 : o.c0, isNaN(o.c1) ? -1e6 : o.c1) }, uWT: WATER_T,
   };
+  m.userData.l3dWaterU = U;   // the day / night cycle re-tints the reflected sky and moves the glint (src/world/daynight.ts)
   const prev = m.onBeforeCompile;
   m.onBeforeCompile = (sh, r) => {
     prev?.call(m, sh, r);

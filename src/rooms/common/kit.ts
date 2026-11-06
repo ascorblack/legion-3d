@@ -486,7 +486,11 @@ export class RoomKit {
   /** Hanging lantern from the ceiling: chain, cage, emissive glass, light. */
   lantern(x: number, y: number, z: number, ceil: number, color = '#ffcf6a', light = true): void {
     const P = this.pal;
-    this.box('metal', P.metal, x - 0.012, x + 0.012, y + 0.2, ceil, z - 0.012, z + 0.012);
+    // the chain hangs from a beam under it, else from the ceiling boards (it ended 0.2 m under them between the beams:
+    // geometry lint «float»)
+    const onBeam = (this.beams ?? []).some((bz) => Math.abs(bz - z) < 0.12);
+    const top = !onBeam && this.shellH > ceil ? this.shellH : ceil;
+    this.box('metal', P.metal, x - 0.012, x + 0.012, y + 0.2, top, z - 0.012, z + 0.012);
     this.cone('metal', P.metal, x, y + 0.12, z, 0.16, 0.12, true);
     this.box('emit', color, x - 0.09, x + 0.09, y - 0.12, y + 0.12, z - 0.09, z + 0.09);
     this.box('metal', P.metal, x - 0.12, x + 0.12, y - 0.16, y - 0.12, z - 0.12, z + 0.12);

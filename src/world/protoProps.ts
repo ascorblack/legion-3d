@@ -18,6 +18,27 @@ function hdr(g: THREE.BufferGeometry, r: number, gg: number, b: number): THREE.B
   return g;
 }
 
+/**
+ * A street-lamp lantern head (local: centre of the glass at y = 0): a lit core inside four corner rods, a base plate
+ * under it and a pyramid cap ON it — every part touching the next (test/geom-lint: «lamp» — a bare emissive box with no
+ * frame reads as a flat cream box, bug 06.11 #1). Returns [metal frame, emissive core] geometries with baked colours.
+ */
+export function lanternHead(metal: string, glass = '#ffd27a', w = 0.24, h = 0.34): [THREE.BufferGeometry, THREE.BufferGeometry] {
+  const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 8), cone4 = new THREE.ConeGeometry(0.5, 1, 4);
+  const sphS = new THREE.SphereGeometry(0.5, 5, 3), r = w / 2 + 0.01, rods: THREE.BufferGeometry[] = [];
+  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) rods.push(part(box, metal, dx * r, 0, dz * r, 0.035, h + 0.04, 0.035));
+  const frame = merge([
+    part(box, metal, 0, -h / 2 - 0.035, 0, w + 0.1, 0.05, w + 0.1),                    // base plate (top = the rods' foot)
+    ...rods,
+    part(box, metal, 0, h / 2 + 0.03, 0, w + 0.08, 0.04, w + 0.08),                     // top ring on the rods
+    part(cone4, metal, 0, h / 2 + 0.05 + 0.12, 0, w * 1.75, 0.24, w * 1.75, 0, Math.PI / 4), // cap sits on the ring
+    part(sphS, '#ffcf4a', 0, h / 2 + 0.33, 0, 0.08, 0.08, 0.08),                        // finial on the cap's tip
+  ]);
+  const core = hdr(part(cyl, glass, 0, 0, 0, w * 0.86, h, w * 0.86), 1.5, 1.05, 0.5);
+  box.dispose(); cyl.dispose(); cone4.dispose(); sphS.dispose();
+  return [frame, core];
+}
+
 export function registerProtoProps(inst: Instancer, P: Pal): void {
   const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 8), cone4 = new THREE.ConeGeometry(0.5, 1, 4);
   const sph = new THREE.SphereGeometry(0.5, 8, 6), sphS = new THREE.SphereGeometry(0.5, 5, 3);
@@ -44,6 +65,10 @@ export function registerProtoProps(inst: Instancer, P: Pal): void {
     part(box, P.woodL, 0, 0.42, 0, 1.5, 0.08, 0.42), part(box, P.woodL, 0, 0.78, -0.2, 1.5, 0.3, 0.06, -0.15),
     part(box, P.woodD, -0.65, 0.2, 0, 0.08, 0.4, 0.4), part(box, P.woodD, 0.65, 0.2, 0, 0.08, 0.4, 0.4),
     part(box, P.woodD, -0.72, 0.58, 0, 0.08, 0.06, 0.42), part(box, P.woodD, 0.72, 0.58, 0, 0.08, 0.06, 0.42),
+    // arm posts under the armrests and back posts behind the backrest: the rests stood 9–20 cm above the seat with
+    // nothing holding them (geometry lint «float»)
+    part(box, P.woodD, -0.72, 0.5, 0.15, 0.06, 0.12, 0.06), part(box, P.woodD, 0.72, 0.5, 0.15, 0.06, 0.12, 0.06),
+    part(box, P.woodD, -0.62, 0.68, -0.21, 0.07, 0.5, 0.06, -0.15), part(box, P.woodD, 0.62, 0.68, -0.21, 0.07, 0.5, 0.06, -0.15),
   ]) }, { mat: 'flat', geo: merge([part(cone4, P.flag, -0.55, 1.02, -0.22, 0.16, 0.18, 0.06), part(cone4, P.flag, 0.55, 1.02, -0.22, 0.16, 0.18, 0.06)]) }]);
   // crate
   inst.registerKind('crate', [{ mat: 'wood', castShadow: true, geo: merge([

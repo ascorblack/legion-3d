@@ -13,7 +13,7 @@ import type { Building } from '../contracts';
 import { signF } from './buildings';
 import { toX, toZ } from './coords';
 import { GEO, M } from './batch';
-import { type Ctx, box, rbox, cone, ball, signZ, shade, windowZ, gableRoof } from './kit';
+import { type Ctx, box, rbox, cone, ball, signZ, shade, windowZ, gableRoof, markDoor } from './kit';
 
 /* ------------------------------------------------------------------ rocks */
 
@@ -288,6 +288,7 @@ export function mine(k: Ctx, b: Building, x0: number, x1: number): void {
   tunnel(k, cx, base, zf, zBack, hw, th - 0.012);   // ceiling 1.2 cm under the cap's underside
   for (const dz of [0.75, 1.5]) timberSet(k, cx, base, zP - dz, hw - 0.17, th - 0.12, shade(P.woodD, -0.25), 0.14);
   timberSet(k, cx, base, zP + 0.1, hw, th, P.woodD, 0.26, true);
+  markDoor(k, 'arch', cx - hw - 0.3, cx + hw + 0.3, base, base + th + 0.28, zP - 0.04, zP + 0.25);   // the portal frame = the outline
   // planks across the cap ends (lagging) peeking out under the lintel crag
   for (let i = 0; i < 5; i++) rbox(k, 'wood', shade(P.woodD, -0.15 + (i % 2) * 0.08), cx - hw + 0.15 + i * (2 * hw - 0.3) / 4, base + th + 0.3, zP - 0.12, 0.2, 0.05, 0.62, 0, 0.04 * (i - 2), 0, 0.6);
   // rails: from the back of the tunnel out past the door, on sleepers
@@ -341,6 +342,7 @@ export function mine(k: Ctx, b: Building, x0: number, x1: number): void {
 export function mineboard(k: Ctx, b: Building, x0: number, x1: number): void {
   const P = k.pal, base = k.lowH, cx = (x0 + x1) / 2, z = toZ(b.hit[3]) - 0.55, w = Math.min(0.92, x1 - x0 + 0.06);
   const top = 1.62;
+  markDoor(k, 'arch', cx - w / 2 - 0.02, cx + w / 2 + 0.02, base, base + top + 0.44, z - 0.06, z + 0.16);   // the outline traces the board
   for (const s of [-1, 1]) box(k, 'wood', P.woodD, cx + s * (w / 2 - 0.07) - 0.05, cx + s * (w / 2 - 0.07) + 0.05, base, base + top + 0.42, z - 0.05, z + 0.05, 0.6);
   // plank board + frame (frame 8 mm proud of the board, notices in front of both)
   box(k, 'wood', P.wood, cx - w / 2 + 0.03, cx + w / 2 - 0.03, base + 0.82, base + top, z + 0.05, z + 0.09, 0.6);
@@ -385,6 +387,7 @@ export function storage(k: Ctx, b: Building, x0: number, x1: number): void {
   gableRoof(k, P.roof, 'wood', plank, hx0, hx1, zw + 0.32, zFront, base + wallH + 0.04, 1.35, 0.32);   // back eave meets the wall
   // big double gate at the door: Z-braced leaves, frame, hinges, a cross-bar latch
   box(k, 'flat', '#1b1426', gx - gw / 2, gx + gw / 2, base + 0.4, base + gh, zFront - 0.05, zFront + 0.008);
+  markDoor(k, 'door', gx - gw / 2 - 0.13, gx + gw / 2 + 0.13, base, base + gh + 0.15, zFront - 0.05, zFront + 0.12);
   for (const s of [-1, 1]) {
     const lx0 = s < 0 ? gx - gw / 2 + 0.02 : gx + 0.012, lx1 = s < 0 ? gx - 0.012 : gx + gw / 2 - 0.02, lc = (lx0 + lx1) / 2, lw = lx1 - lx0;
     box(k, 'wood', '#9a6440', lx0, lx1, base + 0.06, base + gh - 0.02, zFront - 0.02, zFront + 0.04, 0.5);
@@ -400,7 +403,9 @@ export function storage(k: Ctx, b: Building, x0: number, x1: number): void {
   // windows with shutters either side, sign over the gate, lantern
   spans.forEach(([a, c], i) => (b.soon && i === 0) || windowZ(k, (a + c) / 2, base + 1.05, zFront, 0.5, 0.58, i === 0, { shutters: c - a >= 1.3 ? P.sign : undefined }));
   signF(k, b.title, gx, base + gh + 0.2, zFront + 0.012, 1.3);
-  const lx = gx + gw / 2 + 0.38, ly = base + 2.0, lz = zFront;
+  // the lantern's bracket on the wall right of the gate — or left of it when the barn ends there (a narrow village barn:
+  // it hung 0.2 m past the wall's end, geometry lint «float»)
+  const lR = gx + gw / 2 + 0.38, lx = lR + 0.08 <= hx1 ? lR : Math.max(hx0 + 0.1, gx - gw / 2 - 0.38), ly = base + 2.0, lz = zFront;
   box(k, 'metal', P.metal, lx - 0.02, lx + 0.02, ly + 0.08, ly + 0.12, lz, lz + 0.26);
   box(k, 'emit', '#d8964a', lx - 0.05, lx + 0.05, ly - 0.12, ly + 0.06, lz + 0.17, lz + 0.27);
   cone(k, 'metal', P.metal, lx, ly + 0.06, lz + 0.22, 0.1, 0.07, true);
@@ -410,9 +415,9 @@ export function storage(k: Ctx, b: Building, x0: number, x1: number): void {
   const hb0 = b.soon ? gx + gw / 2 + 0.3 : hx0 - 0.15, hb1 = hb0 + 0.75;
   box(k, 'flat', '#d9b45a', hb0, hb1, base, base + 0.4, zFront + 0.2, zFront + 0.65);
   for (const yy of [0.12, 0.28]) box(k, 'flat', '#b08a3a', hb0 - 0.008, hb1 + 0.008, base + yy, base + yy + 0.025, zFront + 0.192, zFront + 0.658);
-  k.inst.add('crate', hx1 + 0.3, base, zFront + 0.25, 0.2, 1);
-  k.inst.add('crate', hx1 + 0.32, base + 0.55, zFront + 0.25, -0.1, 0.9);
-  k.inst.add('barrel', hx1 + 0.25, base, zFront - 0.45, 0, 1);
+  k.inst.add('crate', hx1 + 0.42, base, zFront + 0.25, 0.2, 1);   // clear of the stone plinth (to hx1 + 0.06)
+  k.inst.add('crate', hx1 + 0.44, base + 0.55, zFront + 0.25, -0.1, 0.9);
+  k.inst.add('barrel', hx1 + 0.37, base, zFront - 0.45, 0, 1);
   k.inst.add('barrel', hx1 + 0.55, base, zFront - 1.05, 0, 1);
   if (b.soon) {
     // scaffold in the left wall span, clear of the corner post and the gate frame; the «СКОРО» board is nailed onto

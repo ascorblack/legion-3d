@@ -6,20 +6,20 @@
  *     plateau); the tier's other edges drop as plain rock walls; its `sides` (cliff obstacles) are inside those walls;
  *   - every rock (lv 0, not walkable): a top FC_MH above what it stands on, a rock face along its rim down to rim + face,
  *     plain walls elsewhere, a few crags on top;
- *   - stairs / ramps from the rim of the tier they climb down to their foot (stone flights with cheek walls and lamps,
- *     the plank ramp).
+ *   - stairs / ramps from the rim of the tier they climb down to their foot, in a cut of the bank (faircats.ts fcFlight:
+ *     solid steps / the plank ramp between stone retaining walls).
  * Heights come from fcground.ts townKitGround (the player's ground) so the drawn surfaces and the walk heights agree.
  */
 import * as THREE from 'three';
 import type { FairCatsScene } from '../net/faircats';
-import { rimY } from '../net/faircats';
+import { rimY, inPoly } from '../net/faircats';
 import type { KitInfo } from '../net/townkit';
 import { kitTierH } from '../net/townkit';
 import { toX, toZ } from './coords';
 import { M } from './batch';
-import { type Ctx, box, rbox, cyl, ball, shade } from './kit';
+import { type Ctx, box, shade } from './kit';
 import { FC_H, FC_MH, FC_PIER, FC_POND } from './fcground';
-import { polyGeo, stripGeo, hash, ICO1, fcRails, fcStreets, fcWall } from './faircats';
+import { polyGeo, stripGeo, hash, ICO1, fcRails, fcStreets, fcWall, fcBank, fcFlight } from './faircats';
 
 type P2 = [number, number];
 const zOf = (y: number) => toZ(y);
@@ -44,35 +44,24 @@ function sideWalls(k: Ctx, poly: readonly P2[], rim: readonly P2[], top: number,
     k.b.add('rock', g1, M(0, 0, 0), col, 1.6); k.b.add('rock', g2, M(0, 0, 0), col, 1.6); g1.dispose(); g2.dispose();
   }
 }
-/** The rock bank under a rim: rim (top) → rim + face (base), with a bulging middle row (the fair's plateau bank). */
-function bank(k: Ctx, rim: readonly P2[], face: number, top: number, base: number): void {
-  if (rim.length < 2) return;
-  const P = k.pal, T: number[][] = [], Mi: number[][] = [], B: number[][] = [];
-  for (let i = 0; i + 1 < rim.length; i++) {
-    const a = rim[i], b = rim[i + 1], n = Math.max(1, Math.ceil(Math.abs(b[0] - a[0]) / 70));
-    for (let j = i ? 1 : 0; j <= n; j++) {
-      const x = a[0] + (b[0] - a[0]) * j / n, r = a[1] + (b[1] - a[1]) * j / n, X = toX(x), jit = hash(x, 1) - 0.5;
-      T.push([X, top + 0.02, zOf(r)]);
-      Mi.push([X, base + (top - base) * (0.5 + jit * 0.12), zOf(r + face * 0.5) + 0.25 + jit * 0.35]);
-      B.push([X, base - 0.05, zOf(r + face) + 0.05]);
-    }
-  }
-  const g1 = stripGeo(T, Mi), g2 = stripGeo(Mi, B);
-  k.b.add('rock', g1, M(0, 0, 0), P.rock, 1.6); k.b.add('rock', g2, M(0, 0, 0), shade(P.rock, -0.08), 1.6); g1.dispose(); g2.dispose();
-}
-
 export function buildKitTerrain(k: Ctx, sc: FairCatsScene, kit: KitInfo, groundAt: (x: number, y: number) => number): void {
   const P = k.pal, W = sc.W, H = sc.H, FAR = 3200;
   // ---- ground (lowPaving = grass) with the water cut out
   k.b.tag = 'terrain:ground';
-  { const g = polyGeo([[-FAR, -FAR], [W + FAR, -FAR], [W + FAR, H + FAR], [-FAR, H + FAR]], 0, kit.water.map((w) => w.poly)); k.b.add('lowPaving', g, M(0, 0, 0), '#ffffff', 2.4); g.dispose(); }
+  // the meadow is the town polygon; outside it the darker forest floor (tk-art.js drawTown: P.grass / P.forest)
+  const big: P2[] = [[-FAR, -FAR], [W + FAR, -FAR], [W + FAR, H + FAR], [-FAR, H + FAR]];
+  const inside = kit.water.every((w) => w.poly.every(([x, y]) => inPoly(sc.town, x, y)));
+  if (sc.town.length >= 3 && inside && kit.biome !== 'desert') {
+    const g = polyGeo(sc.town, 0, kit.water.map((w) => w.poly)); k.b.add('lowPaving', g, M(0, 0, 0), '#ffffff', 2.4); g.dispose();
+    const f = polyGeo(big, 0, [sc.town]); k.b.add('lowPaving', f, M(0, 0, 0), shade(TIER_TINT[kit.biome] ?? '#ffffff', -0.38), 2.4); f.dispose();
+  } else { const g = polyGeo(big, 0, kit.water.map((w) => w.poly)); k.b.add('lowPaving', g, M(0, 0, 0), '#ffffff', 2.4); g.dispose(); }
   // ---- tiers
   k.b.tag = 'terrain:tiers';
   const tint = TIER_TINT[kit.biome] ?? '#e6f0dc';
   kit.tiers.forEach((t) => {
     const h = kitTierH(t.lv, FC_H); if (h <= 0) return;
     const g = polyGeo(t.poly, h); k.b.add('lowPaving', g, M(0, 0, 0), tint, 2.4); g.dispose();
-    bank(k, t.rim, t.face, h, 0);
+    fcBank(k, t.rim, t.face, h, 0, sc.stairs);
     sideWalls(k, t.poly, t.rim, h, 0, shade(P.rock, -0.1));
     // boulders at the bank's foot (in the face's obstacle band; never on stairs / in a building's foot)
     if (t.rim.length >= 2) {
@@ -93,7 +82,7 @@ export function buildKitTerrain(k: Ctx, sc: FairCatsScene, kit: KitInfo, groundA
     const base = r.rim.length >= 2 ? groundAt(cx, rimY(r.rim, cx) + r.face + 12) : groundAt(cx, Math.max(...ys) + 12);
     const top = base + FC_MH;
     const g = polyGeo(r.poly, top); k.b.add('rock', g, M(0, 0, 0), shade(P.rock, 0.05), 2); g.dispose();
-    bank(k, r.rim, r.face, top, base);
+    fcBank(k, r.rim, r.face, top, base, []);
     sideWalls(k, r.poly, r.rim, top, base, shade(P.rock, -0.05));
     const n = Math.max(2, Math.round((Math.max(...xs) - Math.min(...xs)) / 300));
     for (let i = 0; i < n; i++) {
@@ -102,27 +91,12 @@ export function buildKitTerrain(k: Ctx, sc: FairCatsScene, kit: KitInfo, groundA
       k.b.add('rock', ICO1, M(toX(x), top + s * 0.2, zOf(y), s * 2.4, s * 1.5, s * 2.0, hash(i, 1), hash(i, 2) * 3, 0), shade(P.rock, hash(i, 3) * 0.16 - 0.08), 2);
     }
   }
-  // ---- stairs and ramps (the tier whose rim they cross)
-  k.b.tag = 'terrain:stairs';
-  const rl = toX(sc.rail);
+  // ---- stairs and ramps (the tier whose rim they cross): flights in a cut of the bank (faircats.ts fcFlight)
   for (const s of sc.stairs) {
     const xc = (s.x0 + s.x1) / 2;
     const t = kit.tiers.find((q) => q.rim.length >= 2 && xc >= q.rim[0][0] && xc <= q.rim[q.rim.length - 1][0]);
     if (!t) continue;
-    const top = kitTierH(t.lv, FC_H), r = rimY(t.rim, xc), x0 = toX(s.x0), x1 = toX(s.x1), y1 = Math.min(s.y1, r + t.face);
-    const z0 = zOf(r), z1 = zOf(y1), len = Math.hypot(z1 - z0, top), ang = Math.atan2(top, z1 - z0);
-    if (s.k === 'ramp') {
-      rbox(k, 'wood', P.woodL, (x0 + x1) / 2, top / 2 - 0.09, (z0 + z1) / 2, x1 - x0 - 0.1, 0.16, len, 0, ang, 0, 0.6);
-      for (const x of [x0 + 0.06, x1 - 0.06]) rbox(k, 'wood', P.woodD, x - 0.002, top / 2 + 0.04, (z0 + z1) / 2, 0.12, 0.3, len + 0.01, 0, ang, 0, 0.6);
-      continue;
-    }
-    const n = Math.max(6, Math.round(top / 0.2));
-    for (let i = 0; i < n; i++) {
-      const za = zOf(r + (y1 - r) * i / n), zb = zOf(r + (y1 - r) * (i + 1) / n), h = top * (1 - (i + 0.5) / n);
-      box(k, 'stone', P.stone, x0 + rl, x1 - rl, -0.05, h, za, zb, 0.8);
-    }
-    for (const xc2 of [x0 + rl / 2, x1 - rl / 2]) rbox(k, 'stone', shade(P.stone, -0.18), xc2, top / 2 + 0.1, (z0 + z1) / 2, rl, 0.9, len, 0, ang, 0, 0.8);
-    for (const x of [x0 + rl / 2, x1 - rl / 2]) { cyl(k, 'stone', shade(P.stone, -0.25), x, top, z0 + 0.05, 0.13, 0.75, 8, 0.6); ball(k, 'emit', '#ffcf4a', x, top + 0.86, z0 + 0.05, 0.1); k.glows.push(x, top + 0.86, z0 + 0.05, 0.6, 1, 0.75, 0.4); }
+    fcFlight(k, s, rimY(t.rim, xc), t.face, kitTierH(t.lv, FC_H), 0, sc.rail);
   }
   fcRails(k, sc, groundAt);
   fcStreets(k, sc, groundAt);

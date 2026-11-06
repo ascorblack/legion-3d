@@ -26,6 +26,7 @@ import type { NpcWorld } from './hwnpc';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { selfLit } from '../common';
 import { glowPoints } from '../../world/sky';
+import { holdNight } from '../../world/daynight';
 import { campThemeOf } from '../../world/camp-themes';
 import { groundSpec } from '../../world/ground';
 import { toX, toZ, fromX, fromZ } from '../../world/coords';
@@ -105,6 +106,8 @@ interface Hooks { bulbs: THREE.Points | null; cable: THREE.LineSegments | null; 
 /** Find the garland bulbs, lamp heads, sky dome and moon in the world root; re-colour / tint them; undo in restore(). */
 export function hookWorld(ctx: EventContext): Hooks {
   const root = ctx.world.root, undo: (() => void)[] = [];
+  // Halloween is a night: hold the day / night cycle at night (applied at once, before the tints below; released last)
+  undo.push(holdNight('halloween'));
   const bulbs = (root.getObjectByName('fx:bulbs') as THREE.Points | undefined) ?? null;
   const cable = (root.getObjectByName('fx:cable') as THREE.LineSegments | undefined) ?? null;
   if (bulbs) {

@@ -396,9 +396,39 @@ function print(cur, R, meta) {
     if (fp.added.length) console.log('  new: ' + f('g', fp.added.join(', ')));
     if (fp.removed.length) console.log('  gone: ' + f('r', fp.removed.join(', ')));
   }
+  console.log('\n' + f('b', 'Town art assets (fc-art.js / tk-art.js) vs src/data/fcart-fp.json'));
+  const as = meta.assets;
+  if (!as) console.log(f('d', '  (no fc-art.js in the scripts)'));
+  else if (as.error) console.log(f('y', '  ! ' + as.error));
+  else if (!as.changed.length && !as.added.length && !as.removed.length) console.log(f('g', `  none (${as.n} assets)`));
+  else for (const line of assetLines(as)) console.log('  ' + f('y', line));
   console.log('\n' + f('b', 'API paths we call that the site no longer mentions'));
   console.log(R.broken.length ? '  ' + f('r', R.broken.join(', ')) : f('g', '  none'));
   if (Object.keys(R.changes).length) console.log(f('d', '\nAfter updating the code: npm run drift -- --write   (see docs/EXTENDING.md)'));
+}
+
+/** The asset part of the report: «assets changed: …» (+ the model file that was made from the old picture). */
+export function assetLines(as) {
+  const m = (r) => (as.models[r] ? `${r} (${as.models[r]})` : r), out = [];
+  if (as.changed.length) out.push('assets changed: ' + as.changed.map(m).join(', '));
+  if (as.added.length) out.push('assets new: ' + as.added.join(', '));
+  if (as.removed.length) out.push('assets gone: ' + as.removed.map(m).join(', '));
+  return out;
+}
+
+/** Asset fingerprints of the downloaded town art (scripts/fcart-fp.mjs) against src/data/fcart-fp.json. */
+export async function assetDrift(files, pinnedPath) {
+  const base = (k) => k.split('?')[0].split('/').pop();
+  const read = (f) => { const k = Object.keys(files).find((q) => base(q) === f); return k ? files[k] : null; };
+  if (!read('fc-art.js') && !read('tk-art.js')) return null;
+  try {
+    const { liveFingerprints, modelFiles, FP_JSON } = await import('./fcart-fp.mjs');
+    const { diffFingerprints } = await import('../src/world/fcart/fingerprint.ts');
+    const p = pinnedPath || FP_JSON;
+    const pinned = existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {};
+    const { table } = liveFingerprints(read);
+    return { ...diffFingerprints(pinned, table), n: Object.keys(table).length, table, models: modelFiles() };
+  } catch (e) { return { error: 'asset fingerprints: ' + (e.message || e), changed: [], added: [], removed: [], n: 0, models: {} }; }
 }
 
 async function main() {
@@ -436,20 +466,24 @@ async function main() {
   }
   const prints = fingerprints(src.files);
   const printDiff = diffPrints(prints, snap?.fingerprints);
-  if (opt.json) console.log(JSON.stringify({ site: data, ...R, contract: contractFailed, scriptsChanged: printDiff, errors, failed: src.failed }, null, 2));
-  else print(data, R, { source: opt.local ? `local ${opt.local}` : url, failed: src.failed, errors, snapAt: snap?.at, contract: contractFailed, contractN: contract.checks.length, prints: printDiff });
+  const assets = await assetDrift(src.files);
+  const assetsOut = assets && { changed: assets.changed, added: assets.added, removed: assets.removed, ...(assets.error ? { error: assets.error } : {}) };
+  if (opt.json) console.log(JSON.stringify({ site: data, ...R, contract: contractFailed, scriptsChanged: printDiff, assets: assetsOut, errors, failed: src.failed }, null, 2));
+  else print(data, R, { source: opt.local ? `local ${opt.local}` : url, failed: src.failed, errors, snapAt: snap?.at, contract: contractFailed, contractN: contract.checks.length, prints: printDiff, assets });
   if (opt.write) {
     if (errors.length) { console.error('\nnot writing the snapshot: extraction errors above'); process.exit(1); }
     const { scripts, ...rest } = data;
     const snapObj = { at: new Date().toISOString().slice(0, 10), source: opt.local ? 'local' : new URL(url).origin + '/c/…', scripts: scripts.map((s) => s.replace(/^\/c\/[^/]+/, '/c/…')), ...rest, fingerprints: prints };
     writeFileSync(SNAPSHOT, compactJson(snapObj) + '\n');
     console.log(`\nsnapshot written: ${SNAPSHOT.replace(ROOT + '/', '')}`);
+    if (assets && assets.table && !assets.error) { const { writeTable } = await import('./fcart-fp.mjs'); writeTable(assets.table); console.log('asset fingerprints written: src/data/fcart-fp.json'); }
   }
   // exit codes: 3 = a 'break' contract check failed or an endpoint we call vanished (the extension is likely broken);
   // 2 (--strict only) = anything new / changed / unsupported (review needed).
   if (contractFailed.some((c) => c.severity === 'break') || R.broken.length) process.exit(3);
   const anyChange = Object.keys(R.changes).length || Object.keys(R.unsupported).length || contractFailed.length
-    || (printDiff && (printDiff.changed.length || printDiff.added.length || printDiff.removed.length));
+    || (printDiff && (printDiff.changed.length || printDiff.added.length || printDiff.removed.length))
+    || (assets && (assets.changed.length || assets.added.length || assets.removed.length));
   if (opt.strict && anyChange) process.exit(2);
 }
 

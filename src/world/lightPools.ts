@@ -4,6 +4,8 @@
  *  - fake ambient occlusion at the foot of walls (height above the street level);
  *  - large-scale tint variation (breaks texture tiling) and a cool moonlight rim.
  * One shared uniform set; `PoolLights.update(cameraPos, dt)` re-picks the nearest sources every 0.2 s (no allocations).
+ * Day / night (src/world/daynight.ts): `uL3dLit` scales the pools (lamps off by day), `uL3dDimK` the paving's darkening
+ * between pools, `uL3dRim` is re-tinted; the defaults (1, 1, moon blue) are the night look — rooms never change them.
  */
 import * as THREE from 'three';
 
@@ -32,6 +34,8 @@ export class PoolLights {
     uL3dWallZ: { value: 1e6 },
     uL3dLowH: { value: 0 },
     uL3dRim: { value: new THREE.Color('#7f95ff') },
+    uL3dLit: { value: 1 },
+    uL3dDimK: { value: 1 },
   };
   /** candidates: x, y, z, radius, r, g, b, gain */
   private cand: Float32Array;
@@ -108,7 +112,9 @@ uniform vec3 uL3dC[${POOL_N}];
 uniform int uL3dN;
 uniform float uL3dWallZ;
 uniform float uL3dLowH;
-uniform vec3 uL3dRim;`)
+uniform vec3 uL3dRim;
+uniform float uL3dLit;
+uniform float uL3dDimK;`)
         .replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec3 nw = normalize(vL3dNw);
@@ -139,11 +145,11 @@ uniform vec3 uL3dRim;`)
     acc += uL3dC[i] * (a * nl);
   }
   // soft cap: overlapping pools never light a surface past ~1.25× its albedo (knee at 0.8)
-  vec3 e = acc * ${gain};
+  vec3 e = acc * (${gain} * uL3dLit);
   vec3 over = max(e - 0.8, 0.0);
   e = min(e, vec3(0.8)) + over / (1.0 + over / 0.45);
   totalEmissiveRadiance += diffuseColor.rgb * e;
-  diffuseColor.rgb *= ${dim};
+  diffuseColor.rgb *= mix(1.0, ${dim}, uL3dDimK);
   // cool moon rim on silhouettes (view space)
   float fr = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
   totalEmissiveRadiance += uL3dRim * (fr * fr * fr * ${rim}) * (0.35 + 0.65 * clamp(nw.y * 0.5 + 0.6, 0.0, 1.0));

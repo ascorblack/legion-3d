@@ -699,6 +699,36 @@
       "why": "the new fair's walk grid and building list map({ jail, magic }) (free / nearest / path / clear / levelAt, old fair titles) and spawn — src/net/site.ts buildFairCatsLayout"
     },
     {
+      "id": "LGFairCatsArt.draw (new fair art, fc-art.js)",
+      "kind": "global",
+      "name": "LGFairCatsArt",
+      "file": "fc-art.js",
+      "keys": [
+        "draw"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "draw() → { props: [{ x, y, w, h, svg, ref: 'b:<id>' | 'h:<id>' | 'i:<index>' | 'wall' | 'tower' | 'south' }], layers, flat, front }: the asset fingerprints the 3D models are pinned to (src/world/fcart/fingerprint.ts, src/data/fcart-fp.json; runtime check src/world/fcart/live.ts) — without it a changed site picture is not noticed"
+    },
+    {
+      "id": "LGTownKitArt asset kit (tk-art.js)",
+      "kind": "global",
+      "name": "LGTownKitArt",
+      "file": "tk-art.js",
+      "keys": [
+        "ITEM",
+        "houseB",
+        "tree",
+        "pine",
+        "drawTown"
+      ],
+      "type": "any",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "the houses / decor / forest drawings of the fair and the Town Kit towns, re-drawn at a fixed point for their asset fingerprints (src/world/fcart/fingerprint.ts artSamples)"
+    },
+    {
       "id": "city.js fcWant / buildCats (data-town fairc)",
       "file": "city.js",
       "re": "^(?=[\\s\\S]*const fcWant = \\(\\) => [^;]*X\\.fcOn)(?=[\\s\\S]*function buildCats\\()(?=[\\s\\S]*LGFairCatsCity\\.build\\()(?=[\\s\\S]*dataset\\.town = 'fairc')(?=[\\s\\S]*S\\.cats \\? 'fairc')",

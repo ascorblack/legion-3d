@@ -11,6 +11,7 @@ import type { BiomeId } from './adapter';
 import { propGeo, GB, T, type PropKind } from './art';
 import type { ExpMats } from './mats';
 import { tunnelGeo, chamberGeo, ridgeGeo, hash2, blobShadowMesh, rowPoints, type ShellCfg } from './biome-art';
+import { DN, tickDayNight } from '../world/daynight';
 
 export const P = 48;           // repeat period along x (m)
 const SPAN = 1.5 * P;          // ground spans x ∈ [−SPAN, SPAN]
@@ -47,6 +48,15 @@ export interface BiomeSpec {
   mist?: [number, string];
 }
 const DAY: [string, string, string] = ['#2a74e6', '#86c4ff', '#dcefff'];
+/** An open-sky daytime biome (its own palette is a day): follows the user's clock (src/world/daynight.ts). */
+export const clockable = (S: BiomeSpec) => (!S.shell || S.shell === 'gorge') && !S.moon && S.stars === 0 && S.walls !== 'cave';
+/** Is it night by the user's clock for this biome (a terrain built now should be a night build)? */
+export function clockNight(biome: BiomeId): boolean {
+  const S = BIOMES[biome] || BIOMES.meadow;
+  if (!clockable(S)) return false;
+  tickDayNight();
+  return DN.night > 0.5;
+}
 const WARM: [number, number, number] = [1.1, 1.04, 0.84], LUSH: [number, number, number] = [0.86, 1.0, 0.9], NEUT: [number, number, number] = [1, 1, 1];
 export const BIOMES: Record<BiomeId, BiomeSpec> = {
   meadow: { ru: 'Луг', sky: DAY, fog: '#cfe8f4', fogNear: 34, fogFar: 95, stars: 0, ground: ['#4a9e36', '#6cb844'], path: '#d8b87a', amp: 0.8, hemi: ['#fff6e8', '#7a8a5a', 2.6], sun: ['#fff2dc', 2.4],
@@ -229,33 +239,86 @@ export class Terrain {
     this.shafts(seed);
   }
 
+  /**
+   * The day / night cycle (src/world/daynight.ts): an open-sky daytime biome follows the user's clock — its own palette
+   * by day, the generic night (the rest-stop look) at night, a warm tint at dawn / dusk. Biomes with their own fixed
+   * mood (moonlit graveyard, the Halloween dusk, starry gate / dead tree, caves, mines, dungeons) and the rest-stop night
+   * are not cycled.
+   */
+  get clocked(): boolean { return !this.night && clockable(this.spec); }
+  private dnV = -1;
+  private sceneRef: THREE.Scene | null = null;
+  private ownFog: THREE.Fog | null = null;
+  private ownBg: THREE.Color | null = null;
+  private readonly _ca = new THREE.Color();
+  private readonly _cb = new THREE.Color();
+  private readonly _tw = new THREE.Color();
+  private static readonly NIGHT = { top: new THREE.Color('#0a0a26'), mid: new THREE.Color('#241e4c'), low: new THREE.Color('#4a3a5c'), cloud: new THREE.Color('#4a4a7a'),
+    sun: new THREE.Color('#c8d0ff'), fog: new THREE.Color('#2a2450'), hemi: new THREE.Color('#8a9aff'), key: new THREE.Color('#a8b0ff'), rimL: new THREE.Color('#8aa0ff'),
+    rim: new THREE.Color('#7a8cff'), water: new THREE.Color('#3a3a6a'), dawn: new THREE.Color('#ffb890'), dusk: new THREE.Color('#ff9a62') };
+  /** Night amount 0…1 and twilight 0…1 of this terrain now. */
+  private dnK(): [number, number] {
+    if (this.night) return [1, 0];
+    if (!this.clocked) return [0, 0];
+    // a day-built terrain only dims towards the dusk (its ridges / ground are baked by day); the full night is a night
+    // build (clockNight at the set change) with the tuned rest-stop look
+    return [Math.min(0.4, DN.night * 0.5 + 0.3 * DN.tw), DN.tw];
+  }
+  /** a := lerp(day, night, k), then towards the twilight colour by w */
+  private lc(out: THREE.Color, day: string | THREE.Color, night: THREE.Color, k: number, w = 0): THREE.Color {
+    if (typeof day === 'string') out.set(day); else out.copy(day);
+    out.lerp(night, k);
+    if (w > 0) out.lerp(this._tw, w);
+    return out;
+  }
+
   /** Colours for scene.background / fog, the sky + material uniforms (applied by the scene every set change). */
   apply(scene: THREE.Scene): void {
-    const S = this.spec, m = this.mats.sky.uniforms, n = this.night;
-    if (n) { m.uTop.value.set('#0a0a26'); m.uMid.value.set('#241e4c'); m.uLow.value.set('#4a3a5c'); m.uStars.value = 1; m.uSun.value = 0; m.uMoon.value = 1; m.uCloud.value = 0.25; m.uCloudCol.value.set('#4a4a7a'); m.uSunCol.value.set('#c8d0ff'); }
-    else { m.uTop.value.set(S.sky[0]); m.uMid.value.set(S.sky[1]); m.uLow.value.set(S.sky[2]); m.uStars.value = S.stars; m.uSun.value = S.sunI; m.uMoon.value = S.moon ?? 0; m.uCloud.value = S.cloud; m.uCloudCol.value.set(S.cloudCol); m.uSunCol.value.set(S.sunCol); }
+    this.sceneRef = scene;
+    if (this.clocked) tickDayNight();
+    this.dnV = DN.version;
+    this.ownBg = new THREE.Color(); this.ownFog = new THREE.Fog(this.ownBg.getHex(), 10, 100);
+    scene.background = this.ownBg; scene.fog = this.ownFog;
+    this.applyLook();
+  }
+  /** Re-apply when the day / night state changed (called by update; mutates only this terrain's own fog / background). */
+  private applyLook(): void {
+    const S = this.spec, m = this.mats.sky.uniforms, NI = Terrain.NIGHT, [k, tw] = this.dnK();
+    this._tw.copy(NI.dusk).lerp(NI.dawn, this.clocked ? DN.am : 0);
+    this.lc(m.uTop.value, S.sky[0], NI.top, k, tw * 0.1); this.lc(m.uMid.value, S.sky[1], NI.mid, k, tw * 0.25); this.lc(m.uLow.value, S.sky[2], NI.low, k, tw * 0.5);
+    m.uStars.value = S.stars + (1 - S.stars) * k * k; m.uSun.value = S.sunI * (1 - k); m.uMoon.value = (S.moon ?? 0) + (1 - (S.moon ?? 0)) * k * k;
+    m.uCloud.value = S.cloud + (0.25 - S.cloud) * k; this.lc(m.uCloudCol.value, S.cloudCol, NI.cloud, k, tw * 0.35); this.lc(m.uSunCol.value, S.sunCol, NI.sun, k, tw * 0.5);
     m.uSunDir.value.set(S.sunDir[0], S.sunDir[1], S.sunDir[2]).normalize();
-    const fog = n ? '#2a2450' : S.fog;
-    scene.background = new THREE.Color(fog);
-    scene.fog = new THREE.Fog(fog, n ? 14 : S.fogNear, n ? 62 : S.fogFar);
-    if (n) { this.hemi.intensity = 0.9; this.hemi.color.set('#8a9aff'); this.sun.intensity = 0.5; this.sun.color.set('#a8b0ff'); this.rimL.color.set('#8aa0ff'); this.rimL.intensity = 1.2; }
-    else this.rimL.intensity = S.walls === 'cave' ? 0.7 : 0.5 + 0.6 * Math.min(1.3, S.sunI);
+    if (this.ownBg && this.ownFog) {
+      this.lc(this.ownFog.color, S.fog, NI.fog, k, tw * 0.3); this.ownBg.copy(this.ownFog.color);
+      this.ownFog.near = S.fogNear + (14 - S.fogNear) * k; this.ownFog.far = S.fogFar + (62 - S.fogFar) * k;
+    }
+    const hemiI0 = S.hemi[2] * (S.walls === 'cave' ? 0.8 : 0.62);
+    this.hemi.intensity = hemiI0 + (0.9 - hemiI0) * k; this.lc(this.hemi.color, S.hemi[0], NI.hemi, k, tw * 0.25);
+    this.sun.intensity = S.sun[1] * 1.4 + (0.5 - S.sun[1] * 1.4) * k; this.lc(this.sun.color, S.sun[0], NI.key, k, tw * 0.45);
+    this.lc(this.rimL.color, S.sunCol, NI.rimL, k, tw * 0.3);
+    const rimI0 = S.walls === 'cave' ? 0.7 : 0.5 + 0.6 * Math.min(1.3, S.sunI);
+    this.rimL.intensity = rimI0 + (1.2 - rimI0) * k;
     // rim colour of the cel material, ground tints, water
-    this.mats.rim.value.set(n ? '#7a8cff' : S.rim).multiplyScalar(n ? 0.5 : S.rimK);
+    this.lc(this.mats.rim.value, S.rim, NI.rim, k).multiplyScalar(S.rimK + (0.5 - S.rimK) * k);
     const gu = this.mats.groundU;
-    gu.uMode.value = S.mode; gu.uSpk.value.set(S.spk[0]); gu.uSpkAmt.value = S.spk[1]; gu.uArena.value = this.mode === 'clearing' ? 1 : 0; gu.uCloudSh.value = n || S.shell ? 0 : S.cloud * 0.34; gu.uTA.value.setRGB(...S.tA); gu.uTB.value.setRGB(...S.tB); gu.uDetail.value = this.q <= 0 ? 0.5 : 1;
-    if (n) { gu.uTA.value.multiplyScalar(0.9); gu.uTB.value.multiplyScalar(0.8); }
+    gu.uMode.value = S.mode; gu.uSpk.value.set(S.spk[0]); gu.uSpkAmt.value = S.spk[1]; gu.uArena.value = this.mode === 'clearing' ? 1 : 0; gu.uCloudSh.value = S.shell ? 0 : S.cloud * 0.34 * (1 - k); gu.uDetail.value = this.q <= 0 ? 0.5 : 1;
+    // a clocked night has no campfire fill and day-baked ridges / ground: darken them by the night amount instead
+    const ck = this.clocked ? k : 0;
+    gu.uTA.value.setRGB(S.tA[0], S.tA[1], S.tA[2]).multiplyScalar((1 - 0.1 * k) * (1 - 0.3 * ck)); gu.uTB.value.setRGB(S.tB[0], S.tB[1], S.tB[2]).multiplyScalar((1 - 0.2 * k) * (1 - 0.3 * ck));
+    this.mats.ridge.color.setScalar(1 - 0.5 * ck);
     const w = this.mats.water.uniforms, W = S.water;
-    w.uSky.value.set(n ? '#3a3a6a' : S.sky[1]); w.uSunCol.value.set(n ? '#c8d0ff' : S.sunCol); w.uSunDir.value.set(S.sunDir[0], S.sunDir[1], S.sunDir[2]).normalize();
+    this.lc(w.uSky.value, S.sky[1], NI.water, k); this.lc(w.uSunCol.value, S.sunCol, NI.sun, k); w.uSunDir.value.set(S.sunDir[0], S.sunDir[1], S.sunDir[2]).normalize();
     if (W === 'swamp') { w.uShallow.value.set('#5a7a48'); w.uDeep.value.set('#2a3e30'); w.uOpacity.value = 0.94; w.uFoam.value = 0; w.uScum.value = 1; w.uFlow.value = 0.03; }
     else {
       const warm = W === 'bridge';
       w.uShallow.value.set(warm ? '#5cb4cc' : '#40c0e4'); w.uDeep.value.set(warm ? '#256a94' : W === 'falls' ? '#1a74b8' : '#1f6aaa'); w.uOpacity.value = 0.9;
       w.uFoam.value = W === 'bridge' && this.mode === 'path' ? 0 : 1; w.uScum.value = 0; w.uFlow.value = 0.45;
     }
-    if (n) { w.uShallow.value.multiplyScalar(0.35); w.uDeep.value.multiplyScalar(0.3); }
+    if (k > 0) { w.uShallow.value.multiplyScalar(1 - 0.65 * k); w.uDeep.value.multiplyScalar(1 - 0.7 * k); }
     const bm = this.mats.beam.uniforms.uCol.value;
     if (S.shell === 'gorge') bm.set(0.05, 0.04, 0.02); else if (S.shell === 'cave') bm.set(0.1, 0.14, 0.3); else if (this.biome === 'forest') bm.set(0.15, 0.14, 0.07); else bm.set(0.16, 0.14, 0.08);
+    if (this.clocked && k > 0) bm.multiplyScalar(1 - k);   // no sun shafts at night (the rest-stop night keeps its own)
   }
 
   /** Ground height (m). Periodic in x; flat where the action is. */
@@ -879,6 +942,10 @@ export class Terrain {
   scroll(offset: number): void { this.scrollRoot.position.x = -mod(offset, P); }
 
   update(t: number): void {
+    if (this.clocked && this.sceneRef && this.ownFog && this.sceneRef.fog === this.ownFog) {   // the user's clock moved on
+      tickDayNight();
+      if (DN.version !== this.dnV) { this.dnV = DN.version; this.applyLook(); }
+    }
     const W = this.sails;
     if (W) {
       for (let i = 0; i < W.sc.length; i++) {

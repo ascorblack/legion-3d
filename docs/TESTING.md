@@ -32,6 +32,43 @@ They need no browser and no network. Fixtures are sanitized copies of real site 
 `CHROMIUM=/usr/bin/google-chrome node e2e/fetch-tee.mjs` runs the same probe in real Chromium (needs `npm run build`, no network).
 Live: `node e2e/live.mjs --start=2d --steps='[{"wait":4000},{"pi":"2d"},{"press":"F8"},{"wait":30000},{"pi":"3d"},{"press":"F8"},{"wait":2000},{"pi":"classic"}]'` prints the site's `pi` per mode (0 = nothing detected; 3D on is 1 by design, classic back to 0).
 
+### Geometry lint
+
+`src/world/lint` checks the built world for crooked geometry and textures, so a class of bug found once does not come
+back: `lintWorld(source, opts)` takes world-space pieces (every `Batch.add` piece through `LintCollector`, the instanced
+props split into their connected parts, any scene graph), the door marks (`markDoor`, `doorZ`), the door hit boxes and
+`groundAt`, and returns findings `{ cls, where, tag, kind, at: [x, y, z], what, v }`.
+
+| class | finding | tolerance |
+|---|---|---|
+| `float` | a group of touching parts with nothing under or beside it | > 0.08 m over the ground; contact = AABB within 2 cm (12 cm inside one object: facade layers) or a face ≤ 8 cm below |
+| `loose` | a float that is one thin plane | < 3 cm thick |
+| `sunk` | a part below the ground | > 0.25 m and > 30 % of its height; walls / plinths ≥ 0.8 m of stone / brick / plaster / rock are foundations; `k.b.role = 'found'` |
+| `overlap` | solid convex parts of different objects inside each other; a round part ≥ 25 % inside a box part of the same prop | > 0.05 m |
+| `door` | two door / open-arch marks of one building on one facade | < 1 m apart |
+| `stairs` | a step under the visible terrain, a non-monotonic flight, a step top off the walk height, a cheek wall (a stairs piece ≤ 0.5 m beside the flight) that does not cover the steps or floats | 0.04 m / — / 0.25 m / 0.1 m over the steps / 0.08 m |
+| `rails` | rails and ramp planks off the walk height or buried in the terrain | > 0.1 m |
+| `onramp` | a prop or instance on a stair / ramp footprint | any overlap (5 cm inset) |
+| `zfight` | coplanar overlapping faces (`src/world/zfight.ts`) | < 4 mm apart, ≥ 2 cm² |
+| `uv` | texel density vs the material median, texture stretch (textured materials) | outside 0.4–2.5 ×, anisotropy > 3 : 1 |
+| `plane` | one flat plane, one bare box face, a slanted wall slab (vertical sides, inclined top); a small piece's face = its largest planar face, not its AABB | > 24 m², > 60 m², > 6 m² |
+| `ledge` | a box part reaching into a round body mid-height (a board wholly in front of the wall is fine) | corners > 0.12 m outside it |
+| `lamp` | a lamp head not attached to its post, a bare emissive box with no frame | — |
+| `outline` | the door's hover-outline region vs the drawn door | > 0.15 m beyond it, < 60 % of it, no door mark |
+
+Runs: `test/geom-lint.test.ts` (old fair, new cats fair, camp, villages cats + cherts, a Town Kit town) and
+`test/geom-lint-scenes.test.ts` (12 rooms, mine geo1 / geo3, an expedition stage) — the whole suite in ≈ 10 s. `door`, `loose` and `lamp` are hard
+zeros everywhere. Other counts
+per place and class are a ratchet in `test/fixtures/lint-baseline.json`: a count may only go down
+(`LINT_WRITE=1 npx vitest run test/geom-lint --no-file-parallelism` rewrites it — commit only lower numbers). `LINT_OUT=<dir>` writes every
+finding as JSON, `LINT_MAX=<n>` prints more of them. Intentional cases go into `src/world/lint/allow.ts`, each with a
+reason, or mark the pieces with `k.b.role` (`'smoke'`, `'hang'`, `'found'`). In the game: Settings → Отладка →
+«Проверка геометрии» (or `dist-dev/game.html?lint=1`) logs the findings and puts red pins on them (magenta: doors /
+outline, orange: stairs / rails); `window.__l3dLint` holds the last report.
+
+Visual tour: `CHROMIUM=/usr/bin/google-chrome node dev/lint-tour.mjs [town…] [--lint]` — ≈ 12 fixed views per town
+(overview, stairs / ramp, every door) at 960×540 SwiftShader into `.local/fcart/tour/<town>/` with `views.json`.
+
 ## 2. Offline demo
 
 `dist-dev/game.html` runs the complete game (`src/content/game.ts`) on a fake `SiteSession` built from the

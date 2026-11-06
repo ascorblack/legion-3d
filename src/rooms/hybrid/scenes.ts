@@ -282,7 +282,7 @@ export const HYBRID_SCENES: Record<string, HybridSpec> = {
         if (i < 4) for (let j = 1; j < 6; j++) { const t2 = j / 6; dot(K, x + 1.05 * t2, 0.86 - Math.sin(t2 * Math.PI) * 0.18, -D / 2 + 2.75, 0.035, '#a3122a'); } }
       K.box('wood', P.woodD, 3.3, 3.36, 0.35, 1.9, -D / 2 + 0.6, -D / 2 + 0.66); K.box('wood', P.woodD, 4.0, 4.06, 0.35, 1.9, -D / 2 + 0.6, -D / 2 + 0.66); K.box('wood', P.woodD, 3.29, 4.07, 1.85, 1.92, -D / 2 + 0.58, -D / 2 + 0.68);
       K.geo('metal', DISCZ, M(3.68, 1.25, -D / 2 + 0.63, 0.6, 0.6, 0.6), '#e8b923');
-      K.prop('crate', 3.6, 0, 2.6, 0.2, 0.8); K.prop('crate', 3.6, 0.62, 2.6, -0.2, 0.6, { solid: false }); K.prop('chest', 2.7, 0, 3.4, 0.3, 0.9);
+      K.prop('crate', 3.6, 0, 2.6, 0.2, 0.8); K.prop('crate', 3.6, 0.48, 2.6, -0.2, 0.6, { solid: false }); K.prop('chest', 2.7, 0, 3.4, 0.3, 0.9);
       stringLights(K, -W / 2 + 0.2, H - 0.3, -D / 2 + 0.5, W / 2 - 0.2, H - 0.3, -D / 2 + 0.5, 14, ['#ffcf6a', '#ff8fa3'], 0.35, 0.55);
       bunting(K, -W / 2 + 0.1, H - 0.25, 2.4, W / 2 - 0.1, H - 0.25, 2.4, 14, ['#ffcf4a', '#a3122a', '#5a2a4a'], 0.35);
       wallLamp(K, -1.2, 2.3, D / 2, Math.PI, { real: 1 });
@@ -336,7 +336,7 @@ export const HYBRID_SCENES: Record<string, HybridSpec> = {
       wallLamp(K, W / 2, 2.9, -1.0, -Math.PI / 2, { pool: 0.9 });
       // a pallet of goods waiting to be shelved
       K.box('wood', '#a8754f', 1.6, 3.0, 0, 0.14, 0.3, 1.4);
-      K.prop('crate', 1.95, 0.14, 0.6, 0.1, 0.8, { solid: false }); K.prop('crate', 2.65, 0.14, 0.65, -0.15, 0.8, { solid: false }); K.prop('crate', 2.3, 0.75, 0.62, 0.3, 0.7, { solid: false });
+      K.prop('crate', 1.95, 0.14, 0.6, 0.1, 0.8, { solid: false }); K.prop('crate', 2.65, 0.14, 0.65, -0.15, 0.8, { solid: false }); K.prop('crate', 2.3, 0.62, 0.62, 0.3, 0.7, { solid: false });
       sack(K, 2.0, 1.15, '#d8c08a', 0.8, 0.14); sack(K, 2.6, 1.12, '#e0c89a', 0.75, 0.14);
       K.solid(1.6, 3.0, 0.3, 1.4, 1.3);
       K.geo('canvas', new THREE.TorusGeometry(0.22, 0.05, 6, 16).rotateX(Math.PI / 2), M(3.6, 0.05, 2.6), '#c9a46a');
@@ -358,7 +358,7 @@ export const HYBRID_SCENES: Record<string, HybridSpec> = {
       K.shell({ w: W, d: D, h: H, wall: 'stone', wallCol: '#b0a0a0', wainscot: '#7a4a32', floor: 'lowPaving', floorCol: '#a89080', ceiling: 'beams', ceilCol: '#4a3428', door: { x: 0, w: 1.5, h: 2.5 } });
       patternRug(K, 0.2, 1.6, -0.2, 3.4, '#a3122a', '#ffcf4a', '#3a3448');
       K.rug(-3.6, -1.4, -1.0, 2.4, '#a3122a', '#ffcf4a');
-      K.prop('dummy', -2.4, 0, 0.6, 0.4, 1.0); K.prop('crate', -0.9, 0, 2.6, 0.3, 0.8); K.prop('crate', -0.9, 0.62, 2.6, 0.0, 0.6, { solid: false });
+      K.prop('dummy', -2.4, 0, 0.6, 0.4, 1.0); K.prop('crate', -0.9, 0, 2.6, 0.3, 0.8); K.prop('crate', -0.9, 0.48, 2.6, 0.0, 0.6, { solid: false });
       // the gate arch with a portcullis on the back wall (right of centre)
       const gx = 1.2, gz = -D / 2;
       K.box('stone', '#6a6276', gx - 1.9, gx + 1.9, 0, 3.6, gz, gz + 0.35);

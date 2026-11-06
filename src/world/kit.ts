@@ -33,7 +33,11 @@ export interface Ctx {
   blobs?: number[];
   /** Soil rectangles planted with foliage (scatter.ts plantRects): x0 x1 z0 z1 ySoil yFoot zFringe. Optional. */
   plant?: number[];
+  /** Dev/test marks for the geometry lint (src/world/lint/marks.ts): door openings etc. Optional; buildAtDepth moves them. */
+  marks?: LintMark[];
 }
+/** What a builder declares about its geometry for the lint (src/world/lint): box = x0 x1 y0 y1 z0 z1 (world m). */
+export interface LintMark { kind: 'door' | 'arch' | 'hearth' | 'lamp' | 'stair' | 'ramp'; box: number[]; tag: string }
 
 export const C = (c: THREE.ColorRepresentation) => new THREE.Color(c);
 export function shade(c: string, k: number): string {
@@ -187,10 +191,22 @@ export function windowZ(k: Ctx, x: number, y: number, zf: number, w: number, h: 
 }
 
 /** Door on a +Z facing wall: frame, plank leaf (dark wood), optional arch top, step, handle; or an open glowing doorway. */
+/**
+ * Declare a door opening (or an open arch / a hearth mouth) for the geometry lint and the hover outline: box = the
+ * drawn opening with its frame (world m). doorZ() does it itself; a model that draws its own door calls this once per
+ * door. One door per building door: a second 'door' / 'arch' mark within 1 m on the same facade is a lint error (bug
+ * 06.11 #2); a furnace mouth or a window is a 'hearth', never a door.
+ */
+export function markDoor(k: Ctx, kind: 'door' | 'arch' | 'hearth', x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): void {
+  (k.marks ||= []).push({ kind, box: [x0, x1, y0, y1, z0, z1], tag: k.b.tag });
+}
+
 export function doorZ(k: Ctx, x: number, y: number, zf: number, w: number, h: number, opts: { arch?: boolean; open?: boolean; color?: string; frame?: string; glow?: string } = {}): void {
   const P = k.pal, fr = opts.frame || P.line;
   const leaf = opts.color || P.woodD;
   const rectH = opts.arch ? h - w / 2 : h;
+  // one mark per opening (the geometry lint: one door per building door; the hover outline follows this box)
+  markDoor(k, opts.open ? 'arch' : 'door', x - w / 2 - 0.1, x + w / 2 + 0.1, y, y + h + 0.1, zf - 0.04, zf + 0.1);
   // depth layers: see FACADE_LAYERS (arch rim .046, arch leaf .054, leaf .062, bands .072, posts .08, lintel .088)
   if (opts.open) {
     box(k, 'emit', opts.glow || '#c8642a', x - w / 2, x + w / 2, y, y + rectH, zf - 0.01, zf + 0.058);

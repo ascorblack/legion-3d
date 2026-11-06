@@ -23,6 +23,7 @@ import { setEventOverride } from './seasonal';
 import { halloweenOpts } from '../events/halloween';
 import { parseHwc, hwcMode, modeKey, portalSpot, HW_OFF, type HwMode, type PortalSpot } from '../events/halloween/hwcity';
 import { DeadGrade } from '../events/halloween/dead';
+import { holdNight } from '../world/daynight';
 import { buildPortal, type Portal } from '../events/halloween/portal';
 import { GhostCrowd, type CrowdEntry } from '../events/halloween/ghosts';
 import { npcPlaces, npcWorld, passLevel, type NpcWorld } from '../events/halloween/hwnpc';
@@ -58,7 +59,7 @@ export default coreFeature({
     const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     let want: HwMode = HW_OFF;
     let world: unknown = null;
-    let dead: DeadGrade | null = null, deadK = 0;
+    let dead: DeadGrade | null = null, deadK = 0, relNight: (() => void) | null = null;
     let portal: Portal | null = null, portalK = 0, spot: PortalSpot | null = null, facadeZ = 0;
     const ghosts = new GhostCrowd(3);
     const group = new THREE.Group(); group.name = 'hwcity'; ctx.scene.add(group);
@@ -84,6 +85,8 @@ export default coreFeature({
         halloweenOpts.hw = m.look;
         setEventOverride(m.look ? 'halloween' : null, m.look ? 'hw' : '', () => ctx.layout()?.id === 'fair');
       }
+      // the Pumpkin Moon is a night: hold the day / night cycle at night before the grade captures the lights
+      if (m.look && !relNight) relNight = holdNight('hwcity'); else if (!m.look && relNight) { relNight(); relNight = null; }
       if (m.dead && !dead) dead = new DeadGrade(w.root);
       if (m.portal && !portal) {
         const L = ctx.layout();
@@ -160,6 +163,7 @@ export default coreFeature({
       for (const o of npcOffs) o(); npcOffs = [];
       halloweenOpts.npcs = null;
       if (halloweenOpts.hw) { halloweenOpts.hw = false; setEventOverride(null); }
+      relNight?.(); relNight = null;
     };
   },
 });
