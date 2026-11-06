@@ -66,7 +66,10 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   site's SVG assets by fingerprints (`fingerprint.ts`; `node scripts/fcart-fp.mjs <site copy> [--ref]` writes
   `src/data/fcart-fp.json` and the reference SVG/PNGs in `.local/fcart/ref/`). `npm run drift` prints «assets changed: …»;
   at runtime `fcart/live.ts` reports «модель X сделана по старой картинке сайта» (l3d:drift, F3). A missing / failing
-  model falls back to the generic builder (`faircats.ts fcModelFor`).
+  model falls back to the generic builder (`faircats.ts fcModelFor`). Roofs that mirror the site's `roofV` (hall, storage,
+  auction, board, every house) go through `fcart/roof.ts`: `roofRidge3d` / `siteRoof` (the site's RDROP + roofRidge
+  formula; the 3D ridge is the PLAN end, drawn x − dx / 2) and `tileHipRoof` (scallop rows + bands + trims in the one
+  batch material `fcroof`, a shared DataTexture: one draw call for every roof of the town).
 - Buildings open through the room manager: 3D shops (`shop3d`), 3D interiors with the site's panel over them
   (`hybrid`) and the 3D mine (`mine3d`); a kind whose module is missing or fails falls back to the site's own screen.
 - After a site update run `npm run drift` (docs/EXTENDING.md) — it lists new/removed ids and what we do not support.

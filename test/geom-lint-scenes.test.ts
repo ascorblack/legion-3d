@@ -12,9 +12,9 @@ import fx3 from './fixtures/mine3-enter.json';
 import classic from './fixtures/mine-enter.json';
 import { LintCollector, lintWorld, type LintClass } from '../src/world/lint';
 import { RoomKit } from '../src/rooms/common/kit';
-import { ratchet } from './geom-lint-fixture';
+import { ratchet, pinTod } from './geom-lint-fixture';
 
-beforeAll(() => stubDom());
+beforeAll(() => { stubDom(); pinTod(); });
 
 const SHOPS = ['forge', 'magic', 'shop', 'tent'];
 const HYBRIDS = ['trainer', 'board', 'hall', 'auction', 'storage', 'gate', 'anvil', 'plain'];

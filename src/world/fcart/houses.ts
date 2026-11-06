@@ -25,15 +25,16 @@ import { part, type Instancer } from '../instancer';
 import { LAMP_HEAD_Y, lanternHead } from '../protoProps';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { registerFcModel, fcModel, type FcPlace } from './registry';
+import { siteRoof, tileHipRoof } from './roof';
 
 /** Fingerprints of the site assets these models were made from (src/data/fcart-fp.json, scripts/fcart-fp.mjs). */
 const FP: Record<string, string> = {
-  'house:blue': '0d0ab8c9923615',
-  'house:mustard': '18725d789e9397',
-  'house:pink': '07848b8754ef0f',
-  'house:red': '1c8e51b5dad927',
-  'house:tavern': '1928923b4c3e70',
-  'house:teal': '168a71edcb9854',
+  'house:blue': '12303730148562',
+  'house:mustard': '0fcfb9b4f64662',
+  'house:pink': '0eafc591c707fd',
+  'house:red': '1aba5607332201',
+  'house:tavern': '09b1e6e6105c8d',
+  'house:teal': '03100d59e6034a',
   'i:bench': '087622bb9e8c08',
   'i:cart': '16398870579203',
   'i:flowers': '0a08653073bb1e',
@@ -135,27 +136,28 @@ function buildHouse(k: Ctx, p: FcPlace, roofKey: string, tav: boolean): void {
   const y0 = p.base;
   const x0 = toX(p.foot[0]) + 0.05, x1 = toX(p.foot[2]) - 0.05, zf = toZ(p.foot[3]) - 0.04;
   const W = x1 - x0, D = Math.max(2.2, toZ(p.foot[3]) - toZ(p.foot[1]) - 0.1), zb = zf - D, cx = (x0 + x1) / 2, zc = (zf + zb) / 2;
-  const Hw = tav ? 1.8 : 1.68, rise = tav ? 1.3 : 1.1, ov = 0.28, yT = y0 + Hw;
+  const Hw = tav ? 1.8 : 1.68, rise0 = tav ? 1.3 : 1.1, ov = 0.28, yT = y0 + Hw;
   const rnd = siteRng((p.vis[0] + p.vis[3]) | 0), chimLeft = rnd() < 0.5, catWin = rnd() < 0.4 || tav;
   const hid = String(d.id ?? ''), roofCat = d.roofCat ?? (hid === 'tavern' || /^h\d*[02468]$/.test(hid));
-  const roofCol = R[0], roofTile = new THREE.Color(R[0]).multiplyScalar(1.55), fasCol = R[1], doorX = p.door ? toX(p.door.x) : cx;
+  const roofCol = R[0], fasCol = R[1], doorX = p.door ? toX(p.door.x) : cx;
   // --- body: mauve stone plinth, pastel plaster walls, a dark fascia band under the roof
   box(k, 'stone', SP.rock, x0 - 0.04, x1 + 0.04, y0 - 0.05, y0 + 0.2, zb - 0.04, zf + 0.04, 0.8);
   box(k, 'plaster', wallCol, x0, x1, y0 + 0.18, yT, zb, zf, 1.2);
   box(k, 'wood', shade(fasCol, 0.05), x0 - 0.12, x1 + 0.12, yT - 0.15, yT + 0.02, zb - 0.12, zf + 0.12, 0.6);
   // corner posts (the darker wall edge the art paints along both sides)
   for (const x of [x0, x1 - 0.07]) box(k, 'plaster', shade(wallCol, -0.1), x, x + 0.07, y0 + 0.2, yT - 0.15, zf, zf + 0.025, 1.2);
-  // --- roof
-  const ex = W / 2 + ov, ez = D / 2 + ov, rl = ex * 0.8, yB = yT + 0.02;
-  { const g = hipRoofGeo(ex, ez, rl, rise); k.b.add('roof', g, M(cx, yB, zc), roofTile, [1, 1]); g.dispose(); }
+  // --- roof: the site's roofV (tk-art.js 06.11) — the ridge ends from roofRidge (plan, without the oblique dx / 2), the
+  //     eave RDROP px lower (the ridge stays), scalloped tile rows + bands + ribs / ridge cap / knobs / lip (roof.ts)
+  const [vx0, vy0, vx1, vB] = p.vis, sr = siteRoof({ L: vx0 - 14, R: vx1 + 14, eY: vB - 100, rY: vy0 + 40, dx: 42, dy: 30, sw: 30, sh: 18 });
+  const drop = sr.ridge.drop * 0.015, ex = W / 2 + ov, ez = D / 2 + ov, yB = yT + 0.02 - drop, rise = rise0 + drop;
+  const rl = Math.max(0.1, Math.min(ex - 0.2, ex - sr.ridge.a * 0.01));
+  const roof = { x0: cx - ex, x1: cx + ex, z0: zc - ez, z1: zc + ez, y0: yB, h: rise, rx0: cx - rl, rx1: cx + rl };
+  tileHipRoof(k, { ...roof, pal: R, tileW: sr.sw * 0.01, rows: sr.rows, sideRows: sr.sideRows, soffit: false, ridge: 0.21, rib: 0.11, lip: 0.09 });
   box(k, 'wood', shade(fasCol, -0.3), cx - ex, cx + ex, yB - 0.07, yB, zc - ez, zc + ez, 0.5);   // soffit
-  const rib = shade(fasCol, -0.05);
-  for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) edge(k, 'roof', rib, [cx + sx * ex, yB, zc + sz * ez], [cx + sx * rl, yB + rise, zc], 0.1);
-  box(k, 'roof', shade(fasCol, -0.12), cx - rl - 0.04, cx + rl + 0.04, yB + rise - 0.06, yB + rise + 0.1, zc - 0.09, zc + 0.09, 1);
-  for (const s of [-1, 1]) k.b.add('roof', ICO0, M(cx + s * (rl + 0.04), yB + rise + 0.02, zc, 0.24, 0.22, 0.22), shade(fasCol, -0.05), 1);
-  // --- chimney: brick stack on the back slope near the ridge, a darker cap, a black flue
+  // --- chimney: brick stack behind the ridge, where the site puts it (chX from the drawn ridge ends, back to plan x)
   {
-    const chx = cx + (chimLeft ? -1 : 1) * rl * 0.7, chz = zc - 0.3, top = yB + rise + 0.3;
+    const sx = chimLeft ? Math.max(vx0 + 56, sr.ridge.sx0 + 20) : Math.min(vx1 - 56, sr.ridge.sx1 - 22);
+    const chx = Math.max(cx - rl + 0.1, Math.min(cx + rl - 0.1, toX(sx - sr.ridge.hx))), chz = zc - 0.3, top = yB + rise + 0.3;
     box(k, 'stone', SP.brick, chx - 0.2, chx + 0.2, yT + 0.2, top, chz - 0.2, chz + 0.2, 1.2);
     box(k, 'stone', SP.brickD, chx - 0.27, chx + 0.27, top, top + 0.12, chz - 0.27, chz + 0.27, 0.8);
     box(k, 'flat', '#2b1d18', chx - 0.17, chx + 0.17, top + 0.09, top + 0.14, chz - 0.17, chz + 0.17);
@@ -163,7 +165,7 @@ function buildHouse(k: Ctx, p: FcPlace, roofKey: string, tav: boolean): void {
     [[0.3, 0.1], [0.58, 0.15], [0.9, 0.2]].forEach(([dy, r], i) => soft(k, '#f2eff6', chx + 0.08 + i * 0.16, top + 0.2 + dy, chz, r));
     k.b.role = '';
   }
-  if (roofCat) sitCat(k, FUR[Math.floor(rnd() * 3)], cx + (rnd() - 0.5) * rl * 0.8, yB + rise + 0.09, zc, 0.8);   // the site's cat on the ridge (every second house)
+  if (roofCat) sitCat(k, FUR[Math.floor(rnd() * 3)], cx + (rnd() - 0.5) * rl * 0.8, yB + rise + 0.055, zc, 0.8);   // the site's cat on the ridge cap (every second house)
   // --- windows with shutters in the roof colour and a flower box each; the left one holds a black cat on 40 % of the houses
   const wh = 0.55, ww = 0.4, wy = y0 + 0.78, dw = Math.max(0.42, 0.165 * W), FL = ['#ff8fa3', '#ffe27a', '#fff4e0', '#c9b6ff'];
   [x0 + dw, x1 - dw].forEach((wx, wi) => {

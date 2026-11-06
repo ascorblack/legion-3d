@@ -844,7 +844,11 @@ export class Terrain {
         for (const dx of [-P, 0, P]) {
           const xx = x + dx;
           if (xx < -SPAN || xx > SPAN) continue;
-          const y = kind === 'lily' ? this.waterAt(xx, z) + 0.03 : kind === 'support' && this.mode === 'path' ? 0 : this.heightAt(xx, z) - (kind === 'stone' || kind === 'rock' || kind === 'pillar' || kind === 'boulder' || kind === 'tomb' ? 0.18 : kind === 'cliff' ? 0.6 : 0.04);
+          // a flat scatter (pebbles, moss) is wider than it is tall: it sits at the lowest ground under its footprint, so on a
+          // slope no stone of the cluster hangs in the air (geometry lint `float`)
+          const hug = kind === 'pebbles' || kind === 'moss', hr = 0.38 * sc;
+          const gy = hug ? Math.min(this.heightAt(xx, z), this.heightAt(xx - hr, z), this.heightAt(xx + hr, z), this.heightAt(xx, z - hr), this.heightAt(xx, z + hr)) : this.heightAt(xx, z);
+          const y = kind === 'lily' ? this.waterAt(xx, z) + 0.03 : kind === 'support' && this.mode === 'path' ? 0 : gy - (kind === 'stone' || kind === 'rock' || kind === 'pillar' || kind === 'boulder' || kind === 'tomb' ? 0.18 : kind === 'cliff' ? 0.6 : 0.04);
           p.set(xx, y, z); m.compose(p, q, s); inst.setMatrixAt(k++, m);
           if (sr && (this.q > 0 || sr > 0.9)) this.shadowList.push(xx, z, sr * sc);
           if (glowOn && this.halos.length < 9 * 190) this.halos.push(xx, y + gl![0] * s.y, z, gl![1] * sc, gl![2], gl![3], gl![4], gl![5], gl![6]);

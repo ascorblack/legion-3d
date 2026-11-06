@@ -8,8 +8,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 export type MatKey = 'brick' | 'plaster' | 'wood' | 'roof' | 'stone' | 'metal' | 'glow' | 'glass' | 'paving' | 'lowPaving'
   | 'flat' | 'sign' | 'canvas' | 'water' | 'leaf' | 'back' | 'dark' | 'emit';
-/** Every key the batch accepts: MatKey + city-only materials (rooms build Record<MatKey, …> and never use these). */
-export type BatchKey = MatKey | 'rock';
+/** Every key the batch accepts: MatKey + city-only materials (rooms build Record<MatKey, …> and never use these).
+ *  'fcroof' = the asset models' tiled roofs (src/world/fcart/roof.ts: vertex colours × the shared scallop texture). */
+export type BatchKey = MatKey | 'rock' | 'fcroof';
 
 interface Part { geo: THREE.BufferGeometry; chunk: number }
 /** A material with at most this many triangles in total is merged into one mesh instead of one per x-chunk. */
@@ -25,7 +26,6 @@ const MAT_UV: Partial<Record<BatchKey, [number, number]>> = {
 // 'rock' has no correction: builders pass the tile size (≈ 1.6 m) and flat-shaded faces project along their own normal
 /** Materials whose pieces get a per-piece brightness/hue jitter (less repetitive facades). */
 const JITTER = new Set<BatchKey>(['brick', 'plaster', 'wood', 'roof', 'stone']);
-let _jit = 7;
 
 const _n = new THREE.Vector3();
 const _p = new THREE.Vector3();
@@ -50,6 +50,9 @@ export class Batch {
   /** What the next pieces are for the geometry lint, without starting a new object: 'smoke' / 'hang' (float by design),
    *  'found' (a foundation below the ground), 'decal'. Set it around the pieces, reset to ''. */
   role = '';
+  /** Tint jitter state: per batch, so a town's look (and which coplanar pieces shade alike) never depends on what was
+   *  built before it in the same page / test process. */
+  private jit = 7;
   /** Last x-chunk index (pieces beyond go into it); set from the city width. */
   maxChunk = 5;
   constructor(private chunkW = 15) {}
@@ -105,8 +108,8 @@ export class Batch {
     else {
       _c.set(color ?? '#ffffff');
       if (JITTER.has(mat)) {   // deterministic per-piece tint jitter: ±7 % value, slight warm/cool shift
-        _jit = (_jit * 16807) % 2147483647; const r1 = _jit / 2147483647;
-        _jit = (_jit * 16807) % 2147483647; const r2 = _jit / 2147483647;
+        this.jit = (this.jit * 16807) % 2147483647; const r1 = this.jit / 2147483647;
+        this.jit = (this.jit * 16807) % 2147483647; const r2 = this.jit / 2147483647;
         const v = 0.93 + r1 * 0.14, w = (r2 - 0.5) * 0.06;
         _c.setRGB(_c.r * v * (1 + w), _c.g * v, _c.b * v * (1 - w));
       }

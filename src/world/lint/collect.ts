@@ -95,6 +95,8 @@ export class LintCollector {
       for (let q: THREE.Object3D | null = o; q; q = q.parent) if (!q.visible) return;
       const mat = Array.isArray(m.material) ? m.material[0] : m.material;
       if (mat && (mat as THREE.Material).visible === false) return;
+      // additive surfaces are light (glow halos, fireflies, flame cores, beams), never a solid object: nothing to lint
+      if (mat && (mat as THREE.Material).blending === THREE.AdditiveBlending) return;
       const name = o.name || o.type, comps = components(m.geometry);
       const im = o as THREE.InstancedMesh;
       if (im.isInstancedMesh) {

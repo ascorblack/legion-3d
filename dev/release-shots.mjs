@@ -12,7 +12,10 @@ const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
 const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
-const SHOTS = opt.set === '070' ? [
+const SHOTS = opt.set === '071' ? [
+  ['game', 'fc=1&magic=1&bots=4&hwc=off&tod=12:00', 'roofs-hall', 14000, at(2880, 1700, 'tp', 0, -0.32, 'g.rig.dist=20;')],
+  ['game', 'fc=1&magic=1&bots=4&hwc=off&tod=15:40', 'roofs-street', 14000, at(2880, 2350, 'tp', 0.25, -0.35, 'g.rig.dist=22;')],
+] : opt.set === '070' ? [
   ['game', 'fc=1&magic=1&bots=6&hwc=off&tod=12:00', 'fair-day', 14000, at(2880, 2350, 'tp', 0.25, -0.35, 'g.rig.dist=22;')],
   ['game', 'fc=1&magic=1&bots=6&hwc=off&tod=16:15', 'fair-sunset', 14000, at(2880, 2700, 'tp', 0, -0.12)],
   ['game', 'fc=1&magic=1&bots=6&hwc=off&tod=23:00', 'fair-night', 14000, at(2880, 2350, 'tp', 0.25, -0.35, 'g.rig.dist=22;')],

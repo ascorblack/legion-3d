@@ -8,6 +8,7 @@ import { fixtureLayout, campFixtureLayout, villageFixtureLayout, fairCatsFixture
 import type { CityLayout } from '../src/contracts';
 import { lintTownSource } from '../src/world/lint/town';
 import { formatFindings, type LintReport } from '../src/world/lint';
+export { pinTod } from './setup-tod';
 
 /** A town built in node into a lint source (src/world/lint/town.ts). */
 export const lintTown = (where: string, L: CityLayout) => lintTownSource(where, L);

@@ -66,6 +66,12 @@ reason, or mark the pieces with `k.b.role` (`'smoke'`, `'hang'`, `'found'`). In 
 «Проверка геометрии» (or `dist-dev/game.html?lint=1`) logs the findings and puts red pins on them (magenta: doors /
 outline, orange: stairs / rails); `window.__l3dLint` holds the last report.
 
+Time of day: the whole suite runs at a pinned clock (`test/setup-tod.ts`, vitest setupFiles; default 12:00), because
+outdoor scenes follow the user's clock (the expedition terrain builds its night look after dusk, towns take their night
+key) and counts would otherwise depend on the hour and the time zone (CI: UTC). `L3D_TOD=23:00 npx vitest run` runs it at
+night; the lint counts are the same by day and by night. Additive meshes (glow halos, fireflies, beams) are light, not
+geometry: the collector skips them.
+
 Visual tour: `CHROMIUM=/usr/bin/google-chrome node dev/lint-tour.mjs [town…] [--lint]` — ≈ 12 fixed views per town
 (overview, stairs / ramp, every door) at 960×540 SwiftShader into `.local/fcart/tour/<town>/` with `views.json`.
 

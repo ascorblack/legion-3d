@@ -17,6 +17,7 @@ import { toX, toZ, SX } from '../coords';
 import { GEO, M, type BatchKey } from '../batch';
 import { type Ctx, box, signZ, shade, markDoor } from '../kit';
 import { registerFcModel, type FcPlace } from './registry';
+import { siteRoof, tileHipRoof, hipRidgeAt, roofPiece, roofBox, roofCol } from './roof';
 
 type V2 = [number, number];
 /** Metres per px of the asset's heights. */
@@ -87,14 +88,22 @@ function lathe(k: Ctx, mat: BatchKey, col: string, x: number, z: number, prof: V
   const g = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(Math.max(0.0005, r), y)), seg);
   k.b.add(mat, g, M(x, 0, z), col, uv); g.dispose();
 }
-/** Hipped roof over [x0, x1] × [z0, z1]: eaves at y0, ridge (along x) at y0 + h; soffit closed. */
-function hipRoof(k: Ctx, col: string, x0: number, x1: number, z0: number, z1: number, y0: number, h: number, hip = (z1 - z0) / 2): void {
-  const d = z1 - z0, r = Math.min(hip, (x1 - x0) / 2 - 0.01), zc = (z0 + z1) / 2, y1 = y0 + h;
-  const A = [x0, y0, z1], B = [x1, y0, z1], C = [x1, y0, z0], D = [x0, y0, z0], E = [x0 + r, y1, zc], F = [x1 - r, y1, zc];
-  const t = (a: number[], b: number[], c: number[]) => [...a, ...b, ...c];
-  const pos = [...t(A, B, F), ...t(A, F, E), ...t(C, D, E), ...t(C, E, F), ...t(D, A, E), ...t(B, C, F), ...t(A, D, C), ...t(A, C, B)];
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
-  k.b.add('roof', g, M(0, 0, 0), col, 1); g.dispose();
+/** A loaf cat lying along x (head on the −x end) on a ridge at height y (tk-art.js kitty 'loaf'), flat colour in 'fcroof'. */
+function roofCat(k: Ctx, x: number, y: number, z: number, s: number, fur: string): void {
+  roofPiece(k, ICO_R, M(x, y + s * 0.17, z, s * 0.9, s * 0.4, s * 0.5), fur);
+  roofPiece(k, ICO_R, M(x - s * 0.4, y + s * 0.3, z + s * 0.04, s * 0.38, s * 0.34, s * 0.36), fur);
+  for (const e of [-1, 1]) roofPiece(k, GEO.cone4, M(x - s * 0.42, y + s * 0.5, z + s * 0.04 + e * s * 0.1, s * 0.11, s * 0.14, s * 0.09), fur);
+  for (const e of [-1, 1]) roofPiece(k, GEO.box, M(x - s * 0.58, y + s * 0.32, z + s * 0.04 + e * s * 0.07, 0.012, s * 0.03, s * 0.05), INK);
+  roofPiece(k, ICO_R, M(x + s * 0.48, y + s * 0.1, z + s * 0.16, s * 0.34, s * 0.11, s * 0.12), shade(fur, -0.08));
+}
+const ICO_R = new THREE.IcosahedronGeometry(0.5, 1);
+/** prism() in the roof material, flat colour (the plain strip of the roof texture). */
+function roofPrism(k: Ctx, col: string, pts: V2[], z0: number, z1: number): void {
+  const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))), { depth: Math.max(0.002, z1 - z0), bevelEnabled: false });
+  g.translate(0, 0, z0);
+  const n = g.attributes.position.count, uv = g.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < n; i++) uv.setXY(i, 0.5, 0.95);
+  k.b.add('fcroof', g, M(0, 0, 0), roofCol(col), 'keep'); g.dispose();
 }
 /** Five-point star (radius 0.5, 0.2 thick, normal +z) — the magic roof's stars. */
 const STAR = (() => {
@@ -168,7 +177,12 @@ function buildHall(k: Ctx, p: FcPlace): void {
   for (const ax of [2590, 2716, 3026, 3150]) { const x = f.X(ax + 10); box(k, 'wood', P.terra, x - 0.14, x + 0.14, base + f.h(18), wt, zf - 0.01, zf + 0.08, 0.5); box(k, 'wood', P.terraL, x - 0.1, x + 0.1, base + f.h(18) + 0.04, wt - 0.04, zf + 0.08, zf + 0.1, 0.5); }
   for (const x of [L, R - f.w(20)]) box(k, 'wood', P.terraL, x - 0.01, x + f.w(20) + 0.01, base + f.h(18), wt, zb - 0.01, zb + 0.08, 0.5);
   for (const x of [L - 0.025, R - 0.035]) box(k, 'wood', P.terraL, x, x + 0.06, base + f.h(18), wt, zb + 0.09, zf - 0.02, 0.5);   // side corner posts
-  box(k, 'wood', P.plumD, L - f.w(22), R + f.w(22), wt - 0.04, wt + f.h(11), zb - 0.12, zf + 0.12, 0.6);
+  // roof: the site's roofV(L − 22, R + 22, wt + 4, 1222, dx 50, dy 34, plum, sw 36, sh 21, ridge 14) — the ridge ends from
+  // roofRidge (plan x: drawn − dx / 2), the eave RDROP px lower (the ridge stays), scalloped rows / bands / trims (roof.ts)
+  const sr = siteRoof({ L: 2568, R: 3192, eY: 1366, rY: 1222, dx: 50, dy: 34, sw: 36, sh: 21 }), rg = sr.ridge;
+  const ov = f.w(22), drop = f.h(rg.drop), ry = wt + f.h(11) - drop, rh = Math.min(1.9, Math.max(1.6, f.h(140))) + drop;
+  // the plum fascia band under the eave (inside the roof's hips: it never pokes through them)
+  box(k, 'wood', P.plumD, L - ov + 0.1, R + ov - 0.1, wt - 0.04, ry + 0.02, zb - 0.12, zf + 0.12, 0.6);
   // four arched windows with flower boxes, the side window
   for (const ax of [2652, 2776, 2988, 3112]) {
     window3(k, 'wood', P.terra, f.X(ax), base + 0.8, f.w(50), 1.15, zf, true);
@@ -178,26 +192,30 @@ function buildHall(k: Ctx, p: FcPlace): void {
   for (const zc of [zb + D * 0.3, zb + D * 0.7]) {   // side windows (the site's one on the right wall), both sides
     for (const [x0, x1] of [[R - 0.01, R + 0.05], [L - 0.05, L + 0.01]]) { box(k, 'wood', '#5a4248', x0, x1, base + 1.0, base + 1.9, zc - 0.3, zc + 0.3, 0.5); box(k, 'emit', P.glass, x0 - 0.01, x1 + 0.01, base + 1.06, base + 1.84, zc - 0.22, zc + 0.22); }
   }
-  // roof: hipped, purple; eave 22 px over
-  const ov = f.w(22), rh = Math.min(1.9, Math.max(1.6, f.h(140))), ry = wt + f.h(11), hipR = (zf - zb) * 0.32 + ov;
-  hipRoof(k, P.plum, L - ov, R + ov, zb - ov, zf + ov, ry, rh, hipR);
-  const roofAt = (x: number) => ry + rh * Math.min(1, (x - L + ov) / hipR, (R + ov - x) / hipR);
+  const roof = { x0: L - ov, x1: R + ov, z0: zb - ov, z1: zf + ov, y0: ry, h: rh, rx0: f.X(rg.x0), rx1: f.X(rg.x1) }, rt = f.w(23);
+  tileHipRoof(k, { ...roof, pal: [P.plum, P.plumD, P.plumL], tileW: f.w(sr.sw), rows: sr.rows, sideRows: sr.sideRows, soffit: P.plumD, ridge: rt, rib: 0.12, lip: 0.1 });
+  const roofAt = (x: number) => hipRidgeAt(roof, x), capTop = ry + rh + rt * 0.45;
+  /** the drawn ridge-relative x (px, as fc-art.js places chimneys / vanes / the cat) → plan → world */
+  const atRidge = (sx: number) => f.X(sx - rg.hx);
   // dormers (arched, on the front slope) and chimneys
-  const slopeZ = (y: number) => zf + ov - (y - wt - f.h(11)) / rh * (D / 2 + ov);
+  const slopeZ = (y: number) => zf + ov - (y - ry) / rh * (D / 2 + ov);
   for (const ax of [2690, 3070]) {
     const x = f.X(ax), yb = wt + f.h(11) + rh * 0.3, z = slopeZ(yb) - 0.05, w = f.w(60);
     prism(k, 'plaster', P.cream, archPts(x - w / 2, x + w / 2, yb - 0.3, yb + 0.25, w / 2), z - 0.9, z + 0.02);
     window3(k, 'wood', P.terra, x, yb - 0.05, w * 0.55, 0.42, z + 0.02, true);
-    k.b.add('roof', HALF_TORUS, M(x, yb + 0.25, z - 0.3, w * 1.25, w * 1.1, 2.4), P.plumL, 1);
+    roofPiece(k, HALF_TORUS, M(x, yb + 0.25, z - 0.3, w * 1.25, w * 1.1, 2.4), P.plumL);
   }
-  for (const [ax, up] of [[2660, 0.75], [3100, 0.65]] as const) { const x = f.X(ax), z = zb + D * 0.42, top = roofAt(x) + up; box(k, 'stone', P.brick, x - 0.24, x + 0.24, wt + 0.3, top, z - 0.24, z + 0.24, 0.6); box(k, 'stone', P.brickD, x - 0.29, x + 0.29, top, top + 0.12, z - 0.29, z + 0.29, 0.6);
+  // chimneys: fc-art.js chimney(rgL + 28, …) / chimney(rgR − 32, …) — near the ridge ends, just behind the ridge
+  for (const [sx, up] of [[rg.sx0 + 28, 0.75], [rg.sx1 - 32, 0.65]] as const) { const x = atRidge(sx), z = zb + D * 0.42, top = roofAt(x) + up; box(k, 'stone', P.brick, x - 0.24, x + 0.24, wt + 0.3, top, z - 0.24, z + 0.24, 0.6); box(k, 'stone', P.brickD, x - 0.29, x + 0.29, top, top + 0.12, z - 0.29, z + 0.29, 0.6);
     for (let i = 0; i < 3; i++) k.b.add('plaster', ICO, M(x + i * 0.12, top + 0.3 + i * 0.22, z, 0.3 - i * 0.04, 0.24, 0.26), '#e8e4f0', 1); }
-  // gold flags on the roof ends
-  for (const [ax, s] of [[2624, -1], [3136, 1]] as const) {
-    const x = f.X(ax), y0 = roofAt(x) - 0.08, zc = zb + D / 2;
-    box(k, 'wood', P.metal, x - 0.025, x + 0.025, y0, y0 + 1.0, zc - 0.025, zc + 0.025, 0.4);
-    prism(k, 'wood', P.gold, [[x, y0 + 0.62], [x + s * 0.62, y0 + 0.78], [x + s * 0.5, y0 + 0.86], [x + s * 0.62, y0 + 0.94], [x, y0 + 0.98]], zc - 0.015, zc + 0.015);
+  // gold vanes on the ridge ends (fc-art.js: at rgL + 2 / rgR − 2), through the end knobs
+  for (const [sx, s] of [[rg.sx0 + 2, -1], [rg.sx1 - 2, 1]] as const) {
+    const x = atRidge(sx), y0 = roofAt(x) - 0.08, zc = zb + D / 2;
+    roofBox(k, P.metal, x - 0.025, x + 0.025, y0, y0 + 1.0, zc - 0.025, zc + 0.025);
+    roofPrism(k, P.gold, [[x, y0 + 0.62], [x + s * 0.62, y0 + 0.78], [x + s * 0.5, y0 + 0.86], [x + s * 0.62, y0 + 0.94], [x, y0 + 0.98]], zc - 0.015, zc + 0.015);
   }
+  // the loaf cat on the ridge (fc-art.js kitty(rgL + 84, 1218, 0.7, FUR[2], 'loaf')), flat-coloured in the roof material
+  roofCat(k, atRidge(rg.sx0 + 84) + 0.06, capTop - 0.02, zb + D / 2, 0.75, '#f3d9b1');
   // clock tower: cream, terra corner posts, rising through the roof from the front wall
   const tw0 = f.w(128) * 1.2, tx0 = cx - tw0 / 2, tx1 = cx + tw0 / 2, tz1 = zf + 0.08, tz0 = Math.max(zb + 0.3, tz1 - tw0 * 1.1), tTop = Math.max(f.Y(1138) - 0.3, ry + rh + 1.0);
   box(k, 'plaster', P.cream, tx0, tx1, wt, tTop, tz0, tz1, 1.2);
@@ -220,7 +238,7 @@ function buildHall(k: Ctx, p: FcPlace): void {
     for (const dy of [0, -0.1]) k.b.add('wood', GEO.box, M(cx + s * (rC + 0.16), yClk + dy, tz1 + 0.03, 0.26, 0.025, 0.02, 0, 0, s * dy * 2), INK, 1);
   }
   const sw = (tx1 - tx0) / 2 + f.w(18), sh = Math.max(1.3, f.h(80)), tzc = (tz0 + tz1) / 2;
-  k.b.add('roof', GEO.cone4, M(cx, tTop + 0.12 + sh / 2, tzc, sw * 2, sh, (tz1 - tz0) / 2 * 2 + f.w(36)), P.plum, 1);
+  roofPiece(k, GEO.cone4, M(cx, tTop + 0.12 + sh / 2, tzc, sw * 2, sh, (tz1 - tz0) / 2 * 2 + f.w(36)), P.plum);
   box(k, 'wood', P.metal, cx - 0.02, cx + 0.02, tTop + sh, tTop + sh + 0.5, tzc - 0.02, tzc + 0.02, 0.4);
   k.b.add('wood', ICO, M(cx + 0.06, tTop + sh + 0.48, tzc, 0.42, 0.16, 0.06), P.gold, 1);
   prism(k, 'wood', P.gold, [[cx + 0.24, tTop + sh + 0.48], [cx + 0.38, tTop + sh + 0.58], [cx + 0.38, tTop + sh + 0.38]], tzc - 0.02, tzc + 0.02);
@@ -241,7 +259,7 @@ function buildHall(k: Ctx, p: FcPlace): void {
   }
   box(k, 'wood', P.terra, cx - px - 0.05, cx + px + 0.05, py, py + 0.14, pz0, pz1 + 0.05, 0.5);
   prism(k, 'plaster', P.terraL, [[cx - px, py + 0.14], [cx + px, py + 0.14], [cx, py + 0.14 + 0.62]], pz0, pz1);
-  for (const s of [-1, 1]) k.b.add('roof', GEO.box, M(cx + s * px / 2, py + 0.14 + 0.33, (pz0 + pz1) / 2 + 0.02, Math.hypot(px, 0.62) + 0.14, 0.07, pz1 - pz0 + 0.14 + (s > 0 ? 0.012 : 0), 0, 0, s * -Math.atan2(0.62, px)), P.plumD, 1);
+  for (const s of [-1, 1]) roofPiece(k, GEO.box, M(cx + s * px / 2, py + 0.14 + 0.33, (pz0 + pz1) / 2 + 0.02, Math.hypot(px, 0.62) + 0.14, 0.07, pz1 - pz0 + 0.14 + (s > 0 ? 0.012 : 0), 0, 0, s * -Math.atan2(0.62, px)), P.plumD);
   const sW = Math.min(2.0, f.w(170) * 1.15), sY = Math.max(py + 0.82, wt - 0.2);
   signZ(k, signText(p, 'РАТУША'), cx, sY, Math.max(zf, tz1), sW, { bg: P.plum, fg: P.gold });
   for (const s of [-1, 1]) lantern(k, 'wood', cx + s * 1.2, base + 1.7, zf, 1.5);
@@ -445,7 +463,7 @@ function buildStorage(k: Ctx, p: FcPlace): void {
   box(k, 'wood', shade(P.wood, -0.12), L, R, base - 0.05, wt, zb, zb + t, 0.9);
   for (const x of [L, R - t]) box(k, 'wood', shade(P.wood, -0.18), x, x + t, base - 0.05, wt, zb + t, zf - t, 0.9);
   for (let i = 1; i < 30; i++) { const x = L + (R - L) * i / 30; if (Math.abs(x - cx) < gw + 0.12) continue; box(k, 'wood', P.woodD, x - 0.008, x + 0.008, base + 0.05, wt - 0.05, zf, zf + 0.006); }
-  box(k, 'wood', P.brickD, L - f.w(24), R + f.w(24), wt - 0.02, wt + 0.18, zb - 0.1, zf + 0.12, 0.6);
+  box(k, 'wood', P.brickD, L - f.w(24), R + f.w(24), wt - 0.02, wt + 0.18, zb - 0.1, zf + 0.12, 0.6);   // fascia (inside the roof's hips)
   // inside: dark back planks, floor, a shelf with boxes, a ladder, hay, the lamp (warm glow)
   const zi = zb + t + 0.02;
   box(k, 'wood', '#5e3e2c', L + t, R - t, base - 0.04, wt - 0.05, zi, zi + 0.02, 0.9);
@@ -476,12 +494,14 @@ function buildStorage(k: Ctx, p: FcPlace): void {
   const gz = (z0: number, z1: number, y0: number, h: number, x0: number, x1: number, col: string) => {
     prism(k, 'wood', col, [[x0, y0], [x1, y0], [(x0 + x1) / 2, y0 + h]], z0, z1);
   };
-  // a hipped red roof as the site's roofV (the long ridge along x), a dark ridge beam
-  hipRoof(k, P.red, L - ov, R + ov, zb - ov, zf + ov, ry0, rh, (D / 2 + ov) * 0.7);
-  box(k, 'roof', P.redD, L - ov + (D / 2 + ov) * 0.7 - 0.05, R + ov - (D / 2 + ov) * 0.7 + 0.05, ry0 + rh - 0.06, ry0 + rh + 0.1, zb + D / 2 - 0.1, zb + D / 2 + 0.1, 0.6);
+  // the hipped red roof of the site's roofV(L − 24, R + 24, wt + 4, 2066, dx 46, dy 32, red, sw 36, sh 21, ridge 14): the
+  // ridge ends from roofRidge (plan x), the eave RDROP px lower (the ridge stays), scalloped rows / bands / ridge cap (roof.ts)
+  { const sr = siteRoof({ L: 4556, R: 5224, eY: 2256, rY: 2066, dx: 46, dy: 32, sw: 36, sh: 21 }), drop = f.h(sr.ridge.drop);
+    tileHipRoof(k, { x0: L - ov, x1: R + ov, z0: zb - ov, z1: zf + ov, y0: ry0 - drop, h: rh + drop, rx0: f.X(sr.ridge.x0), rx1: f.X(sr.ridge.x1),
+      pal: [P.red, P.redD, P.redL], tileW: f.w(sr.sw), rows: sr.rows, sideRows: sr.sideRows, soffit: P.redD, ridge: f.w(23), rib: 0.12, lip: 0.1 }); }
   { const w = f.w(120), y0 = ry0 + 0.1, z1 = zf + 0.05, z0 = z1 - 1.4, h = Math.max(1.0, f.h(64));
     box(k, 'wood', P.woodL, cx - w / 2, cx + w / 2, y0, y0 + h, z0, z1, 0.6);
-    for (const s of [-1, 1]) k.b.add('roof', GEO.box, M(cx + s * w / 4, y0 + h + 0.25, (z0 + z1) / 2, w / 2 / Math.cos(0.75) + 0.15, 0.1, z1 - z0 + 0.2 + (s > 0 ? 0.012 : 0), 0, 0, -s * 0.75), P.redL, 1);
+    for (const s of [-1, 1]) roofPiece(k, GEO.box, M(cx + s * w / 4, y0 + h + 0.25, (z0 + z1) / 2, w / 2 / Math.cos(0.75) + 0.15, 0.1, z1 - z0 + 0.2 + (s > 0 ? 0.012 : 0), 0, 0, -s * 0.75), P.redL);
     gz(z1 - 0.02, z1, y0 + h, w / 2 * Math.tan(0.75), cx - w / 2, cx + w / 2, P.woodL);
     box(k, 'wood', '#3a2a30', cx - f.w(32), cx + f.w(32), y0 + 0.12, y0 + h - 0.08, z1, z1 + 0.02, 0.4);
     k.b.add('canvas', ICO, M(cx, y0 + 0.2, z1 - 0.02, f.w(60), 0.35, 0.16), '#f0c464', 1);
@@ -636,9 +656,9 @@ function buildMine(k: Ctx, p: FcPlace): void {
 
 /* ================================================================== registration */
 // fp = src/data/fcart-fp.json at the time each model was made (06.11, site-1106-0007)
-registerFcModel({ ref: 'hall', fp: '0b4d77b76354df', note: 'cream half-timbered hall, purple hipped roof, 2 dormers, clock tower with purple spire + cat ears, columned porch', build: buildHall });
+registerFcModel({ ref: 'hall', fp: '03fd9e716aaa12', note: 'cream half-timbered hall, purple hipped roof, 2 dormers, clock tower with purple spire + cat ears, columned porch', build: buildHall });
 registerFcModel({ ref: 'magic', fp: '1324c4d672646a', note: 'round lilac wizard tower, wooden balcony ring, star-dotted night-blue cone, moon + cat, telescope, two annexes', build: buildMagic });
 registerFcModel({ ref: 'jail', fp: '106537d538e0f2', note: 'giant blue pet carrier (cream tray, blue vented lid, handle, grated door) + the barred cage КЛЕТКА', build: buildJail });
-registerFcModel({ ref: 'storage', fp: '1e9b9c4d9db528', note: 'plank barn, red gable roof, hayloft + hoist, open front with shelves / hay, РЫБА / МОЛОКО crates', build: buildStorage });
+registerFcModel({ ref: 'storage', fp: '1b3ceb17e5739d', note: 'plank barn, red gable roof, hayloft + hoist, open front with shelves / hay, РЫБА / МОЛОКО crates', build: buildStorage });
 registerFcModel({ ref: 'gate', fp: '1e34776ffe04fe', note: 'stone gate with arched passage + portcullis, two round towers with purple cones, cat ears, flags; faces the town', build: buildGate });
 registerFcModel({ ref: 'mine', fp: '1fc45c03742c4b', note: 'timber portal in a rock collar, lean-to roof with moss, ШАХТА plate, lanterns, dark adit with rails', build: buildMine });

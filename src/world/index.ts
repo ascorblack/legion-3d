@@ -45,6 +45,7 @@ export const layoutPalette = (L: CityLayout) => paletteOf(L.styleId, (L as CityL
 export { createSvgArt } from './svgArt';
 export { groundSpec, makeGroundAt, layoutGroundAt } from './ground';
 import { layoutGroundAt } from './ground';
+import { fcRoofMaterial } from './fcart/roof';
 
 const MAX_LIGHTS = 6;
 const BULB_COLS = ['#ffcf4a', '#ff8fa3', '#5fbfa8', '#7fb0e8', '#b79be0', '#f0903a', '#8fe07a'].map((c) => new THREE.Color(c));
@@ -128,6 +129,7 @@ function makeMaterials(L: CityLayout, signs: SignAtlas): Record<BatchKey, THREE.
     glass: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.15, metalness: 0.4 }),
     back: new THREE.MeshLambertMaterial({ vertexColors: true }),
     emit, glow: emit, sign: signMat, water: waterMat,
+    fcroof: fcRoofMaterial(),   // the asset models' tiled roofs (fcart/roof.ts): one draw call for every roof of the town
   };
   // darker street: the lamp pools (lightPools.ts) carry the light, the paving no longer reads as a bright busy sheet
   (mats.paving as THREE.MeshStandardMaterial).color.setScalar(0.9);
@@ -207,7 +209,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
 
   // ------------------------------------------------ materials + meshes
   const mats = makeMaterials(L, signs);
-  const CAST = new Set<BatchKey>(['brick', 'plaster', 'wood', 'roof', 'stone', 'canvas', 'metal', 'rock']);
+  const CAST = new Set<BatchKey>(['brick', 'plaster', 'wood', 'roof', 'stone', 'canvas', 'metal', 'rock', 'fcroof']);
   // fake light pools / AO / macro variation / moon rim on every lit material (city + prop kit)
   const poolCand: number[] = [];
   for (let i = 0; i + 6 < k.glows.length; i += 7) {
@@ -219,7 +221,7 @@ export const buildCity = async (layout: CityLayout, opts: CityOpts): Promise<Cit
   const pools = new PoolLights(poolCand, k.wallZ || 1e6, spec.lowH);
   const POOL_OPTS: Partial<Record<BatchKey, PoolOpts>> = {
     paving: { vary: 0.3, ao: 0, gain: 1.5, rim: 0.05, gao: 0.6, dim: 0.34 }, lowPaving: { vary: 0.3, ao: 0, gain: 1.5, rim: 0.05, gao: 0.6, dim: 0.34 },
-    brick: { vary: 0.14 }, plaster: { vary: 0.12 }, rock: { vary: 0.16, ao: 0.35 }, wood: { vary: 0.12 }, stone: { vary: 0.16 }, roof: { vary: 0.18, ao: 0, rim: 0.3 },
+    brick: { vary: 0.14 }, plaster: { vary: 0.12 }, rock: { vary: 0.16, ao: 0.35 }, wood: { vary: 0.12 }, stone: { vary: 0.16 }, roof: { vary: 0.18, ao: 0, rim: 0.3 }, fcroof: { vary: 0.08, ao: 0, rim: 0.3 },
     metal: { vary: 0.05, ao: 0.2 }, canvas: { vary: 0.06, ao: 0.2 }, leaf: { vary: 0.2, ao: 0.2, rim: 0.3 }, flat: { vary: 0.08, ao: 0.3 },
   };
   windPatch(mats.leaf, 0.03, 0.9);

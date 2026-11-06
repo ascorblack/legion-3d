@@ -22,6 +22,7 @@ import { GEO, M, type BatchKey } from '../batch';
 import { toX, toZ } from '../coords';
 import { BUILDING_XF } from '../buildings';
 import { registerFcModel, type FcPlace } from './registry';
+import { siteRoof, tileHipRoof } from './roof';
 
 type P2 = [number, number];
 type V4 = readonly [number, number, number, number];
@@ -35,15 +36,17 @@ const P = {
 };
 const FUR = ['#f2a65a', '#e8914a', '#f3d9b1', '#9aa3ad', '#7d8a99', '#f4f1ec', '#4a4350', '#a8754f', '#ffc6a0', '#c9ccd3'];
 const TEAL = ['#3f8f8a', '#2a6662', '#62b0a8'], MUSTARD = ['#f0b840', '#a0741e', '#f0c464'], RED = ['#c8664a', '#8f3f2c', '#e08a68'];
+/** The site's ROOF palettes (tk-art.js) for the tiled roofs (roof.ts): the colours stay the site's. */
+const ROOF_MUSTARD: [string, string, string] = ['#d9a23a', '#a0741e', '#f0c464'], ROOF_RED: [string, string, string] = ['#c8664a', '#8f3f2c', '#e08a68'];
 /** Batch materials each model uses (= its draw calls inside one x-chunk). */
 export const SHOP_MATS: Record<string, BatchKey[]> = {
   tent: ['flat', 'emit', 'sign', 'wood'],
   trainer: ['wood', 'flat', 'emit', 'sign'],
   shop: ['canvas', 'wood', 'flat', 'sign'],
-  auction: ['plaster', 'wood', 'flat', 'emit', 'sign'],
+  auction: ['plaster', 'wood', 'flat', 'emit', 'sign', 'fcroof'],
   forge: ['plaster', 'wood', 'flat', 'emit', 'sign', 'brick'],
   anvil: ['wood', 'flat', 'emit', 'brick', 'sign'],
-  board: ['wood', 'flat', 'roof', 'sign'],
+  board: ['wood', 'flat', 'fcroof', 'sign'],
 };
 /** The reference vis boxes (fc-map.js 06.11) the asset coordinates belong to. */
 const VIS0: Record<string, V4> = {
@@ -459,12 +462,14 @@ function auction(k: Ctx, p: FcPlace): void {
     k.glows.push(lx, hy(2070) - 0.06, zw + 0.2, 1.1, 1, 0.78, 0.4);
   }
   k.lights.push(X(cx), hy(2070), zw + 0.6);
-  // the mustard hip roof, its fascia, the ridge beam with knobs, the cross gable with the gavel medallion
-  const yE = hy(wt + 4), zE0 = zb + 0.05, zE1 = zf + 0.38, zm = (zE0 + zE1) / 2, yR = hy(1906);
-  loftRoof(k, 'flat', MUSTARD[0], X(L - 22), X(R + 22), zE0, zE1, yE, X(L + 60), X(R - 60), zm, zm, yR, { sag: 0.05 });
+  // the mustard hip roof of the site's roofV(L − 22, R + 22, wt + 4, 1906, dx 44, dy 30, mustard, sw 34, sh 20, ridge 13): the
+  // ridge ends from roofRidge (plan x: drawn − dx / 2), the eave RDROP px lower (the ridge stays), scalloped rows, bands,
+  // ridge cap + knobs (roof.ts); its fascia; the cross gable with the gavel medallion
+  const sr = siteRoof({ L: L - 22, R: R + 22, eY: wt + 4, rY: 1906, dx: 44, dy: 30, sw: 34, sh: 20 });
+  const yE = hy(wt + 4 + sr.ridge.drop), zE0 = zb + 0.05, zE1 = zf + 0.38, zm = (zE0 + zE1) / 2, yR = hy(1906);
+  tileHipRoof(k, { x0: X(L - 22), x1: X(R + 22), z0: zE0, z1: zE1, y0: yE, h: yR - yE, rx0: X(sr.ridge.x0), rx1: X(sr.ridge.x1), pal: ROOF_MUSTARD,
+    tileW: F.W(sr.sw), rows: sr.rows, sideRows: sr.sideRows, soffit: MUSTARD[1], ridge: F.W(22), rib: 0.11, lip: 0.09 });
   box(k, 'wood', MUSTARD[1], X(L - 18), X(R + 18), yE - 0.16, yE + 0.01, zE0 + 0.05, zE1 - 0.04, 0.6);
-  cylX(k, 'wood', MUSTARD[1], X(L + 50), X(R - 50), yR + 0.03, zm, 0.08 * s);
-  for (const x of [L + 50, R - 50]) lump(k, 'wood', MUSTARD[2], X(x), yR + 0.03, zm, 0.12, 0.12, 0.12);
   const gA = hy(1880), gz0 = zm - 0.3, gz1 = zE1 - 0.05;
   ext(k, 'flat', WALL, [[X(cx - 130), yE - 0.02], [X(cx + 130), yE - 0.02], [X(cx), gA]], gz0, gz1);
   { const dx = X(cx + 146) - X(cx), dy = hy(1866) - (yE - 0.08), len = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
@@ -476,7 +481,7 @@ function auction(k: Ctx, p: FcPlace): void {
   rbox(k, 'wood', P.woodD, X(cx) - 0.04, hy(1962) + 0.06, gz1 + 0.08, 0.36, 0.2, 0.08, 0, 0, 0.52, 0.5);
   rbox(k, 'wood', P.wood, X(cx) + 0.08, hy(1962) - 0.09, gz1 + 0.08, 0.08, 0.32, 0.06, 0, 0, 0.52, 0.5);
   plaque(k, signOf(p, 'АУКЦИОН'), X(cx), yE + 0.02, zE1 + 0.12, F.W(170) * 1.15);
-  if (F.det) kitty(k, X(1660), yR - 0.25, zm + 0.45, 0.6, FUR[7]);
+  if (F.det) kitty(k, X(1660), yR - (yR - yE) * 0.45 / ((zE1 - zE0) / 2) - 0.02, zm + 0.45, 0.6, FUR[7]);   // on the front slope
   k.colliders.push(X(L - 22), X(R + 22), y0, gA + 0.2, zb, zf + 0.38);
 }
 
@@ -647,15 +652,12 @@ function board(k: Ctx, p: FcPlace): void {
     disc(k, 'flat', '#c0504a', X(x1 - 22), hy(1652), zp + 0.0785, 0.06, 0.06, 0.001, 8);
   }
   markDoor(k, 'arch', X(x0) - 0.005, X(x1) + 0.005, hy(1670) - 0.005, hy(1584) + 0.005, zp - 0.025, zp + 0.21);   // the board and its notes
-  // the little red gable roof with the ridge beam and its round caps
-  const yE = hy(1590), yR = hy(1556), half = 0.5, rx0 = X(x0 - 16), rx1 = X(x1 + 16);
-  { const len = Math.hypot(half, yR - yE), a = Math.atan2(yR - yE, half);
-    for (const sg of [-1, 1]) rbox(k, 'roof', sg > 0 ? RED[0] : shade(RED[0], -0.15), (rx0 + rx1) / 2 + (sg > 0 ? 0.008 : 0), (yE + yR) / 2 + 0.04, zp + sg * half / 2, rx1 - rx0, 0.08, len + 0.04, 0, sg * a, 0, 0.8);
-    for (const x of [rx0 + 0.03, rx1 - 0.03]) tri(k, 'flat', RED[1], [x, yE, zp - half + 0.02], [x, yE, zp + half - 0.02], [x, yR + 0.02, zp]);
-    box(k, 'wood', RED[1], rx0 + 0.016, rx1 - 0.016, yE - 0.06, yE + 0.02, zp + half - 0.03, zp + half + 0.03, 0.5);
-    cylX(k, 'wood', P.woodD, rx0 + 0.05, rx1 - 0.05, yR + 0.06, zp, 0.06 * s);
-    for (const x of [rx0 + 0.05, rx1 - 0.05]) lump(k, 'wood', P.woodL, x, yR + 0.06, zp, 0.08, 0.08, 0.08);
-  }
+  // the little red roof: the site's roofV(x0 − 16, x1 + 16, 1590, 1556, dx 16, dy 11, red, sw 26, sh 15, ridge 9) is a hip —
+  // the ridge ends from roofRidge (plan x), the eave RDROP px lower (the ridge stays), scalloped rows, ridge cap + knobs
+  const sr = siteRoof({ L: x0 - 16, R: x1 + 16, eY: 1590, rY: 1556, dx: 16, dy: 11, sw: 26, sh: 15 });
+  const yE = hy(1590 + sr.ridge.drop), yR = hy(1556), half = 0.5, rx0 = X(x0 - 16), rx1 = X(x1 + 16);
+  tileHipRoof(k, { x0: rx0, x1: rx1, z0: zp - half, z1: zp + half, y0: yE, h: yR - yE, rx0: X(sr.ridge.x0), rx1: X(sr.ridge.x1), pal: ROOF_RED,
+    tileW: F.W(sr.sw), rows: sr.rows, sideRows: sr.sideRows, soffit: RED[1], ridge: F.W(18), rib: 0.07, lip: 0.06 });
   plaque(k, signOf(p, 'ДОСКА'), X(cx), hy(1676), zp + 0.1, F.W(96) * 1.05, { bg: P.woodD, ears: false });
   k.colliders.push(X(x0), X(x1), y0, yR + 0.2, zp - 0.5, zp + 0.5);
 }
@@ -664,7 +666,7 @@ function board(k: Ctx, p: FcPlace): void {
 registerFcModel({ ref: 'tent', fp: '133a590e0dfb37', note: 'pink/white striped circus dome with cat ears and a gold knob, round lit entrance with the dandy, bead string, easel sign', build: tent });
 registerFcModel({ ref: 'trainer', fp: '0a910a402c4323', note: 'teal two-tier pagoda roof with gold fish, red plank walls, open front with shoji screens and rope pillars', build: trainer });
 registerFcModel({ ref: 'shop', fp: '18b9fd24a970de', note: 'four stalls with purple/blue/red/yellow striped awnings and labels, goods, vendor cats, beam with bunting and the main sign', build: shop });
-registerFcModel({ ref: 'auction', fp: '17db95d0707666', note: 'mustard hip roof, cream walls with two arched lots rooms and a double door, cross gable with the gavel medallion', build: auction });
+registerFcModel({ ref: 'auction', fp: '01cbb2d6d5ce5a', note: 'mustard hip roof, cream walls with two arched lots rooms and a double door, cross gable with the gavel medallion', build: auction });
 registerFcModel({ ref: 'forge', fp: '0989128d1c2a65', note: 'open cardboard box workshop: flaps, rounded opening, brick furnace with a can-stack chimney, anvil, tools, «ХРУПКОЕ»', build: forge });
 registerFcModel({ ref: 'anvil', fp: '1cd472a67702c7', note: 'small open smithy: shed roof with the sign, brick furnace and chimney, water tub, anvil, smith cat, grindstone', build: anvil });
-registerFcModel({ ref: 'board', fp: '0de69022cfc50d', note: 'notice board on two legs with six pinned notes under a little red gable roof, «ДОСКА» plaque', build: board });
+registerFcModel({ ref: 'board', fp: '0e280ddb80aa2a', note: 'notice board on two legs with six pinned notes under a little red gable roof, «ДОСКА» plaque', build: board });

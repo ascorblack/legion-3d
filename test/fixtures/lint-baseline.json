@@ -250,10 +250,10 @@
   "lamp": 0
  },
  "exp:Курган": {
-  "float": 26,
+  "float": 18,
   "sunk": 101,
   "overlap": 39,
-  "plane": 3,
+  "plane": 0,
   "ledge": 0
  }
 }
