@@ -830,6 +830,13 @@
       "re": "h\\.sg\\.sx \\|\\| h\\.sg\\.fb",
       "severity": "degrade",
       "why": "site 06.11: hero.sg.fb turns on the free bag layout (sg.lay.b) without the storage layout; src/ui/data.ts bagLay mirrors it — otherwise the 3D bag shows packed cells in a different order than the site"
+    },
+    {
+      "id": "city.js town in localStorage (lgCityTown@channel)",
+      "file": "city.js",
+      "re": "\"lgCityTown@\" \\+|'lgCityTown@' \\+",
+      "severity": "degrade",
+      "why": "site 07.11 keeps the last chosen town across tabs in localStorage lgCityTown@<channel> (townLs); src/net/town.ts readTownSignals falls back to it — otherwise a new tab boots 3D in the fair while the site shows the district town"
     }
   ]
 }

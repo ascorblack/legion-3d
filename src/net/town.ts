@@ -6,7 +6,7 @@
  *   2. the City DOM: `#tab-city .cy`   — `data-town` on camp / district towns (city.js buildCamp/buildTown), absent on
  *                                        the fair; no `.cy` while a town is being prepared («Город строится…»);
  *   3. the town picker: `.cy-tp [data-town][aria-current="true"]` (only after it was opened);
- *   4. sessionStorage `lgCityTown`     — city.js townSet(): the last chosen non-fair town;
+ *   4. sessionStorage `lgCityTown`, else localStorage `lgCityTown@<channel>` (07.11) — city.js townSet(): the last chosen non-fair town;
  *   5. the hero (`/api/me`, SSE `me`) — hm.id (district-draw: the channel's home district opens directly; since 30.10 (E2)
  *                                        the server says 'camp' there for a channel in the Prologue — city.js homePick),
  *                                        hm.camp / cp (start camp «Перепутье» is open);
@@ -83,6 +83,11 @@ function detectTown0(s: TownSignals): { id: string; via: TownSource } {
   return { id: FAIR, via: 'default' };
 }
 
+/** city.js townLs(): the localStorage key of the last chosen town, per channel (`lgCityTown@<channel>`). */
+export function townLsKey(pathname: string): string {
+  return 'lgCityTown@' + ((/\/c\/([\w]+)/.exec(pathname) || [])[1] || '-').toLowerCase();
+}
+
 /** Read the signals from a page (browser only). */
 export function readTownSignals(win: any, doc: Document, hero: HeroTownFlags | null, fc = false): TownSignals {
   let where: string | null = null;
@@ -92,6 +97,8 @@ export function readTownSignals(win: any, doc: Document, hero: HeroTownFlags | n
   const picker = doc.querySelector<HTMLElement>('#tab-city .cy-tp [data-town][aria-current="true"]')?.dataset.town ?? null;
   let session: string | null = null;
   try { session = win.sessionStorage?.getItem('lgCityTown') ?? null; } catch { /* blocked */ }
+  // site 07.11: the last chosen town also survives a new tab — localStorage `lgCityTown@<channel>` (city.js townLs)
+  if (session == null) try { session = win.localStorage?.getItem(townLsKey(win.location?.pathname || '')) ?? null; } catch { /* blocked */ }
   let fcOk = false; try { fcOk = fc && !!win.LGFairCatsCity; } catch { /* none */ }
   return { where, dom, picker, session, hero, fc: fcOk };
 }

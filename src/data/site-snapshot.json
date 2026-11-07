@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-06",
+  "at": "2026-11-07",
   "source": "https://play.multidonate.ru/c/…",
   "scripts": ["/c/…/cityfair.js", "/c/…/doodle.js", "/c/…/questdungeon.js", "/c/…/questfoes.js", "/lib/game-data.js", "/lib/inventory.js", "/lib/site-chat.js", "/lib/site-chatone.js", "/lib/site-dm.js", "/lib/site-ui.js", "/lib/ui-kit.js", "/lib/world.js", "/site/achievements.js", "/site/app.js", "/site/auction.js", "/site/b-board.js", "/site/b-forge.js", "/site/b-hall.js", "/site/b-magic.js", "/site/b-shop.js", "/site/b-tent.js", "/site/b-trainer.js", "/site/campart.js", "/site/campmap.js", "/site/city.js", "/site/cityart.js", "/site/citybake.js", "/site/citygl.js", "/site/cityhw.js", "/site/citymap.js", "/site/cityshop.js", "/site/citystore.js", "/site/craftworld.js", "/site/fc-art.js", "/site/fc-city.js", "/site/fc-map.js", "/site/friends.js", "/site/hwnpc.js", "/site/itemgrid.js", "/site/lore.js", "/site/mine-art.js", "/site/mine-biome.js", "/site/mine.js", "/site/mine3.js", "/site/news.js", "/site/ore-art.js", "/site/pick-art.js", "/site/q/artkit.js", "/site/q/battle.js", "/site/q/battlecrowd.js", "/site/q/crowdcam.js", "/site/q/shelf.js", "/site/quest.js", "/site/shard-art.js", "/site/skills.js", "/site/start.js", "/site/tk-art.js", "/site/tk-city.js", "/site/tk-map.js", "/site/townart.js", "/site/towngen.js", "/site/trade.js", "/site/worldmap.js"],
   "buildings": ["anvil", "auction", "board", "forge", "gate", "hall", "jail", "magic", "mine", "mineboard", "shop", "storage", "tent", "trainer"],
@@ -56,7 +56,7 @@
     "/lib/ui-kit.js": "47688a61f1ab",
     "/lib/world.js": "3eb6977eb304",
     "/site/achievements.js": "d67de8687b8f",
-    "/site/app.js": "b17b1a02c507",
+    "/site/app.js": "a9ffbc067375",
     "/site/auction.js": "3a68825db0c5",
     "/site/b-board.js": "6f3739cadeeb",
     "/site/b-forge.js": "ef0417baafc5",
@@ -67,7 +67,7 @@
     "/site/b-trainer.js": "285d7a9a841c",
     "/site/campart.js": "7e96d784d224",
     "/site/campmap.js": "e898a274ab98",
-    "/site/city.js": "60f466ca0b01",
+    "/site/city.js": "386eda6793e4",
     "/site/cityart.js": "7c5ede673121",
     "/site/citybake.js": "8fed7d677dfc",
     "/site/citygl.js": "f63c4cd86c57",
@@ -106,6 +106,6 @@
     "/site/towngen.js": "4fdf4654a034",
     "/site/trade.js": "cef27da77196",
     "/site/worldgeo.json": "0a84d1a1ca47",
-    "/site/worldmap.js": "62172b48d3e7"
+    "/site/worldmap.js": "4baf52b1e590"
   }
 }
