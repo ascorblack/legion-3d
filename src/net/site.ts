@@ -21,6 +21,7 @@ import { fairCatsScene, fairCatsLayout, isFairId, type FcSiteMap } from './fairc
 import { townKitScene, kitOf, kitBuildState, kitSiteBuildings } from './townkit';
 import { readSitePals } from '../world/palette';
 import { createJailHub, jailFromMe, jailList, jailSeats, jailGeoOf, type JailHub } from './jail';
+import { questFormFill } from '../quest/model';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
 const W = (typeof window !== 'undefined' ? window : globalThis) as any;   // importable in node tests (pure helpers below)
@@ -559,8 +560,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     unsubs.push(B.on('sse:jail', onJail));
     unsubs.push(B.on('jail:list', onJail));
     unsubs.push(B.on('hero:act', onHero));
-    unsubs.push(B.on('sse:q', (q) => store.setQuest(q)));
-    if (B.last['sse:q']) store.setQuest(B.last['sse:q']);
+    unsubs.push(B.on('sse:q', (q) => store.setQuest(questFormFill.fill(q))));
+    if (B.last['sse:q']) store.setQuest(questFormFill.fill(B.last['sse:q']));
     if (B.last['city:enter']) onEnter(B.last['city:enter']);
   }
   // Fallback snapshot: the site holds walkers privately; peek() gives positions (no looks) — fetch state once for full data.
@@ -568,7 +569,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     const st = await api<any>('/api/city/state');
     if (st && st.ok) applyBatch(st);
   }
-  if (me.ql) store.setQuest(me.ql);
+  if (me.ql) store.setQuest(questFormFill.fill(me.ql));
   unsubs.push(jail.on(() => syncJail()));
   // who sits in the cage now: the same GET the site's City makes when it opens (city.js jailLoad) — once, the fair only
   { // the City's own GET /api/jail (teed) when it opened under us, else the same GET once (city.js jailLoad) — the fair only
@@ -606,7 +607,9 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   const overlay = (): string | null => {
     const t = performance.now(); if (t - ovAt < 250) return ovVal; ovAt = t;
     ovVal = anyShown('.cy-room') ? 'room' : anyShown('.mn') ? 'mine' : anyShown('.tr-win') ? 'trade'
-      : anyShown('.mn-board-w') ? 'board' : anyShown('.cy-read') ? 'read' : anyShown(DIALOGS) ? 'dialog' : null;
+      : anyShown('.mn-board-w') ? 'board' : anyShown('.cy-read') ? 'read'
+      // site 07.11: the guild district (guildhall.js) is a full-screen place of its own over the sleeping City
+      : anyShown(DISTRICT) ? 'district' : anyShown(DIALOGS) ? 'dialog' : null;
     syncTee();
     return ovVal;
   };
@@ -731,6 +734,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
 /* ------------------------------------------------------------------ overlay detection */
 /** Site dialogs that may cover the game. Our own UI (#l3d-*) and the town picker inside the hidden 2D view are excluded below. */
 const DIALOGS = '.su-layer, dialog[open], [role="dialog"], [aria-modal="true"]';
+/** The site's guild district (07.11, guildhall.js open(): `.gd-root` on <body> / the fullscreen element, html.gd-full). */
+export const DISTRICT = '.gd-root';
 // .fr-back: the site's friends window (29.10), .cy-jw: the Jail window (30.10) — both lifted over the live 3D (features friends / jail)
 const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view, .fr-back, .cy-jw';
 /** Really on screen: connected, not [hidden], rendered, not visibility:hidden (incl. inherited — e.g. our HIDE_CSS), has a box. */

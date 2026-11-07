@@ -122,8 +122,9 @@ function cardOf0(v: QuestView | null, me: { login: string; role: string }, baseC
     const g = q.bg, M = g.mech;
     let urge: Card['urge'];
     if (M) urge = M.fake ? { kind: 'silent', text: 'ФИНТ — не пиши!' } : M.fam === 'silence' ? { kind: 'silent', text: 'Тишина: молчи' } : M.me ? { kind: M.how ? 'word' : 'info', text: M.how || M.tip || 'Цель — ты!' } : M.how || M.word ? { kind: 'word', text: String(M.how || M.word) } : { kind: 'info', text: M.name };
+    else if (Array.isArray(g.bite) && g.bite.length && g.zn) urge = { kind: 'info', text: `Волк кусает площадк${g.bite.length > 1 ? 'и' : 'у'} ${g.bite.join(' и ')}` };
     else if (g.st === 'party') urge = g.acted ? { kind: 'ok', text: 'ход сделан' } : { kind: 'say', text: baseCmd(me.role) || 'удар' };
-    return { icon: '👹', title: `${g.name} · фаза ${g.ph} из ${g.phs}`, right: M?.until ? '' : `босс ${Math.round((g.hp || 0) * 100)}%`, until: M?.until, where: g.in ? (g.my > 0 ? 'ты в бою' : 'твой герой пал') : 'ты не в этом бою', hp: g.in ? g.my : null, urge, note: M && M.name ? M.name : undefined, inParty };
+    return { icon: '👹', title: `${g.name} · фаза ${g.ph} из ${g.phs}`, right: M?.until ? '' : `босс ${Math.round((g.hp || 0) * 100)}%`, until: M?.until, where: g.in ? (g.my > 0 ? 'ты в бою' : 'твой герой пал') : 'ты не в этом бою', hp: g.in ? g.my : null, urge, note: bossNote(g) || undefined, inParty };
   }
   if (q.tr) {
     const T = q.tr, act = T.st === 'act' || T.st === 'wait';
@@ -163,6 +164,24 @@ function cardOf0(v: QuestView | null, me: { login: string; role: string }, baseC
   const urge: Card['urge'] = q.gather && !inParty ? { kind: 'say', text: hwG ? 'портал' : 'поход' } : undefined;
   return { icon: hwG ? '🎃' : '🗺', title: hwG ? `Сбор у портала${q.t ? ' · ' + q.t : ''}` : `${KIND_RU[q.k] || 'Поход'}${q.t ? ' · ' + q.t : ''}`, right: q.n ? `отряд ${q.n}` : '', until: q.gather?.until, inParty,
     where: inParty ? 'ты в отряде' : q.party === 'ghost' ? 'твой герой — призрак в этом походе' : q.party === 'q' ? 'ты в очереди в отряд' : 'ты не в отряде', urge };
+}
+const WING_RU = ['Левое крыло', 'Центр', 'Правое крыло'];
+/** Site 07.11 (quest.js bossHtml): the mechanic's name plus what the card adds now — targets (tgn), nets, the wings (HPG10)
+ *  with need / got, per-word counters (HPG1), hunters with their own health (adds with count 0). */
+export function bossNote(g: any): string {
+  const M = g && g.mech, out: string[] = [];
+  if (M && M.name) out.push(String(M.name));
+  if (M && Array.isArray(M.tgn) && M.tgn.length) out.push('цели: ' + M.tgn.join(', '));
+  if (M && Array.isArray(M.nets) && M.nets.length) out.push(`сеть на ${M.nets.join(', ')} — пропустишь ход`);
+  if (M && M.id === 'HPG1' && Array.isArray(g.wc) && Array.isArray(M.words)) out.push(M.words.map((w: string, i: number) => `${w} ${+g.wc[i] || 0} из ${M.need}`).join(' · '));
+  const W = g && g.wings;
+  if (W && Array.isArray(W.z) && M && M.id === 'HPG10') {
+    const my = g.area ? W.z.findIndex((z: unknown) => Array.isArray(z) && z.includes(g.area)) : -1;
+    out.push(W.z.slice(0, 3).map((z: number[], i: number) => `${i === my ? 'ты здесь · ' : ''}${WING_RU[i] || ''} ${+(W.got || [])[i] || 0}/${+(W.need || [])[i] || 0}`).join(' · '));
+  }
+  const hunt = (Array.isArray(g && g.adds) ? g.adds : []).filter((a: unknown) => Array.isArray(a) && !+a[1]);
+  if (hunt.length) out.push('«удар ' + hunt.map((a: any[]) => `${a[0]}» ${Math.round((+a[2] || 0) * 100)}%`).join(' · «удар '));
+  return out.join(' · ');
 }
 function meIn(b: any, me: { login: string; role: string }) {
   const i = b.me, p = i >= 0 && b.form ? b.form[i] : null, f = !p && Array.isArray(b.mf) ? b.mf : null;

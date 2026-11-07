@@ -170,10 +170,20 @@ export interface BattleState {
   fighters: number;
   me: { st: 'on' | 'reserve' | 'out' | 'dead' | 'fled'; hp: number | null; side: Side | ''; role: string };
 }
-export interface Platform { n: number; x: number; z: number; r: number; nb: number[]; gone: boolean; danger: boolean; safe: boolean; mine: boolean; goal: boolean }
+/** `net` (site 07.11, mech.nets): a net over the platform — a jump there skips the turn (also `danger`, never the goal);
+ *  `wing` (HPG10): the platform belongs to MY wing of the arena. */
+export interface Platform { n: number; x: number; z: number; r: number; nb: number[]; gone: boolean; danger: boolean; safe: boolean; mine: boolean; goal: boolean; net?: boolean; wing?: boolean }
+export interface BossWing { name: string; zones: number[]; need: number; got: number; ok: boolean; mine: boolean }
 export interface BossState {
   name: string; title: string; ph: number; phs: number; hp: number; rage: boolean; st: string; danger: number;
   adds: { name: string; count: number; hp: number; art: FoeArt }[];
+  /** site 07.11 (quest.js «q-hunt»): adds with count 0 are single targets with their own health (hunters, the walls of
+   *  Престольград: gate / catapults / archers) — «удар <name>»; a target at 0 no longer strikes. */
+  hunt: { name: string; hp: number; art: FoeArt }[];
+  /** site 07.11 (HPG10): the three wings with need / got (empty without `g.wings`) */
+  wings: BossWing[];
+  /** site 07.11: platforms the wolf bites (`g.bite` with `g.zn`, no mechanic) */
+  bite: number[];
   mech: { name: string; icon: string; fam: string; text: string; words: string[]; how: string; fake: boolean; silence: boolean; me: boolean; got: number; need: number; until: number } | null;
   zones: Platform[]; my: number | null; inFight: boolean;
 }
@@ -510,11 +520,14 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
   const words = mech ? [...(typeof mech.word === 'string' && mech.word ? [mech.word] : []), ...arr<string>(mech.words).filter((w) => typeof w === 'string')] : [];
   const fam = mech ? str(mech.fam) : '';
   const silence = fam === 'silence' && !['M94', 'M55'].includes(str(mech?.id));
-  const adds = arr<any[]>(src.adds).filter((a) => Array.isArray(a)).slice(0, 4).map((a) => ({ name: str(a[0], 'Прислужник'), count: Math.max(0, Math.round(num(a[1], 1))), hp: clamp01(a[2]), art: foeArt('', a[0]) }));
+  // site 07.11 (quest.js bossHtml): an add whose count is 0 is a hunter — one target with its own health — not a pack
+  const addsAll = arr<any[]>(src.adds).filter((a) => Array.isArray(a));
+  const hunt = addsAll.filter((a) => !num(a[1], 1)).slice(0, 6).map((a) => ({ name: str(a[0], 'Охотник'), hp: clamp01(a[2]), art: foeArt('', a[0]) }));
+  const adds = addsAll.filter((a) => num(a[1], 1)).slice(0, 4).map((a) => ({ name: str(a[0], 'Прислужник'), count: Math.max(0, Math.round(num(a[1], 1))), hp: clamp01(a[2]), art: foeArt('', a[0]) }));
   s.boss = {
     name: str(src.name, str(gb?.name, 'Босс')), title: str(src.title, str(gb?.title)), ph: num(src.ph, num(gb?.phase, 1)), phs: num(src.phs, num(gb?.phases, 1)),
     hp: clamp01(src.hp ?? gb?.hp), rage: !!src.rage, st: str(src.st, str(q.b?.st, 'party')), danger: num(src.danger, 0),
-    adds,
+    adds, hunt, wings: [], bite: arr<number>(src.bite).map(Number).filter(Number.isFinite),
     mech: mech ? { name: str(mech.name), icon: str(mech.icon, '⚡'), fam, text: str(mech.text), words, how: str(mech.how), fake: !!mech.fake, silence, me: !!mech.me,
       got: num(mech.got, 0), need: num(mech.need, 0), until: num(mech.until, 0) } : null,
     zones: [], my: g && g.in ? num(g.my, 0) : null, inFight: !!(g && g.in) || (q.b ? q.b.hp != null : false),
@@ -523,6 +536,14 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
   const zn = src.zn && typeof src.zn === 'object' ? src.zn : null;
   if (zn && Array.isArray(zn.a) && zn.a.length) {
     const gone = new Set(arr<number>(zn.gone).map(Number));
+    const nets = new Set((mech ? arr<number>(mech.nets) : []).map(Number));
+    // wings (HPG10): the site draws the arena with MY wing as the platforms to keep (zonesHtml {id: 'M32', zones: W.z[my]})
+    const Wg = src.wings && typeof src.wings === 'object' && Array.isArray(src.wings.z) ? src.wings : null;
+    const area0 = num(src.area, 0);
+    const myWing = Wg && area0 ? Wg.z.findIndex((z: unknown) => Array.isArray(z) && z.map(Number).includes(area0)) : -1;
+    const wingZ = new Set(myWing >= 0 ? arr<number>(Wg!.z[myWing]).map(Number) : []);
+    // the wolf's bite (no mechanic): the bitten platforms are the bad ones (zonesHtml {id: 'HVB2', zones: g.bite})
+    const biteZ = new Set(!mech ? s.boss.bite : []);
     const listed = new Set((mech ? arr<number>(mech.zones) : []).map(Number));
     const inv = str(mech?.id) === 'M32';
     const pts = zn.a.filter((z: any) => Array.isArray(z)).slice(0, 12).map((z: any) => {
@@ -537,18 +558,35 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
     const area = num(src.area, 0);
     const posMech = fam === 'position';
     const zones: Platform[] = pts.map((p: { cx: number; cy: number; n: number; nb: number[] }) => {
-      const danger = posMech && listed.size ? (inv ? !listed.has(p.n) : listed.has(p.n)) : false;
-      return { n: p.n, x: -1 + ((p.cx - x0) / W - 0.5) * 7, z: ((p.cy - y0) / H - 0.5) * 6, r: 1.25, nb: p.nb, gone: gone.has(p.n), danger, safe: posMech && !danger && !gone.has(p.n), mine: p.n === area, goal: false };
+      const net = nets.has(p.n);
+      const danger = net || biteZ.has(p.n) || (posMech && listed.size ? (inv ? !listed.has(p.n) : listed.has(p.n)) : false);
+      const wing = wingZ.has(p.n);
+      return { n: p.n, x: -1 + ((p.cx - x0) / W - 0.5) * 7, z: ((p.cy - y0) / H - 0.5) * 6, r: 1.25, nb: p.nb, gone: gone.has(p.n), danger,
+        safe: (posMech || wing) && !danger && !gone.has(p.n), mine: p.n === area, goal: false, ...(net ? { net } : {}), ...(wing ? { wing } : {}) };
     });
     // the one to stand on: my platform if safe, else the first safe neighbour (any safe one when mech.any or I am nowhere)
     const mineP = zones.find((z) => z.mine);
-    if (posMech) {
+    if (posMech || wingZ.size) {
       let goal = mineP && mineP.safe ? mineP : undefined;
       if (!goal) goal = zones.find((z) => z.safe && (!mineP || mech?.any || mineP.nb.includes(z.n)));
       if (!goal) goal = zones.find((z) => z.safe);
       if (goal) goal.goal = true;
     }
     s.boss.zones = zones;
+    if (Wg) {
+      const NM = ['Левое крыло', 'Центр', 'Правое крыло'];
+      s.boss.wings = Wg.z.slice(0, 3).map((z: unknown, i: number) => {
+        const need = num(arr<number>(Wg.need)[i], 0), got = num(arr<number>(Wg.got)[i], 0);
+        return { name: NM[i] || `Крыло ${i + 1}`, zones: arr<number>(z).map(Number).filter(Number.isFinite), need, got, ok: got >= need, mine: i === myWing };
+      });
+    }
+  } else if (src.wings && typeof src.wings === 'object' && Array.isArray(src.wings.z)) {
+    // wings without platforms: still the counts (the site shows them in the mechanic card)
+    const NM = ['Левое крыло', 'Центр', 'Правое крыло'], W2 = src.wings, area1 = num(src.area, 0);
+    s.boss.wings = W2.z.slice(0, 3).map((z: unknown, i: number) => {
+      const need = num(arr<number>(W2.need)[i], 0), got = num(arr<number>(W2.got)[i], 0), zs = arr<number>(z).map(Number).filter(Number.isFinite);
+      return { name: NM[i] || `Крыло ${i + 1}`, zones: zs, need, got, ok: got >= need, mine: !!area1 && zs.includes(area1) };
+    });
   }
   // status + commands (boss overrides the plain battle commands while a mechanic runs)
   const B = s.boss;
@@ -568,12 +606,41 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
     } else if (B.mech.how) s.cmds.push({ kind: 'word', text: B.mech.how.toLowerCase(), note: B.mech.need ? `${B.mech.name} · ${B.mech.got}/${B.mech.need}` : B.mech.name });
     else for (const w of B.mech.words.slice(0, 3)) s.cmds.push({ kind: 'word', text: w.toLowerCase(), note: B.mech.name });
     if (B.mech.me) s.cmds.unshift({ kind: 'info', text: 'Цель — ты!', note: B.mech.text });
+    // site 07.11 (quest.js bossHtml): the mechanic's targets, what only the stream shows, per-word counters, the wings
+    const tgn = arr<string>(mech?.tgn).filter((x) => typeof x === 'string' && x);
+    if (tgn.length) s.cmds.push({ kind: 'info', text: `Цели: ${tgn.join(', ')}` });
+    const mid = str(mech?.id);
+    if (mid === 'HV13') s.cmds.push({ kind: 'info', text: 'Какие глаза настоящие (красные, крупнее) — видно только на стриме' });
+    if (mid === 'HPG7') s.cmds.push({ kind: 'info', text: 'Какой двойник настоящий (светится корона) — видно только на стриме' });
+    if (mid === 'HPG1' && Array.isArray(src.wc) && B.mech.words.length)
+      s.cmds.push({ kind: 'info', text: B.mech.words.map((w, i) => `${w} ${num(src.wc[i], 0)} из ${B.mech!.need}`).join(' · ') });
+    if (B.wings.length && mid === 'HPG10') wingCmds(B, s);
+    const net = B.zones.filter((z) => z.net && !z.gone).map((z) => z.n);
+    if (net.length) s.cmds.push({ kind: 'info', text: `под сетью: ${net.join(', ')}`, note: 'прыжок туда — пропустишь ход' });
     s.cmds.push(...keep);
+  } else if (B.bite.length && B.zones.length) {
+    // site 07.11 (quest.js «Укус волка», no mechanic): the wolf bites these platforms; the site offers no buttons here
+    const mineP = B.zones.find((z) => z.mine);
+    s.cmds.push({ kind: 'info', text: `Волк кусает площадк${B.bite.length > 1 ? 'и' : 'у'} ${B.bite.join(' и ')}`, note: mineP && B.bite.includes(mineP.n) ? 'твою площадку тоже' : 'Укус волка' });
   } else if (B.st === 'party' || (!s.battle && !B.mech)) {
-    if (!s.cmds.length) s.cmds.push({ kind: 'say', text: baseOf(s.myRole), note: 'бей босса' });
+    // site 07.11: «Твой ход принят» once the party move is in (g.acted)
+    if (src.acted && B.st === 'party') s.cmds.push({ kind: 'ok', text: 'ход принят' });
+    else if (!s.cmds.length) s.cmds.push({ kind: 'say', text: baseOf(s.myRole), note: 'бей босса' });
   }
-  for (const a of B.adds) if (a.count > 0 && a.hp > 0) s.cmds.push({ kind: 'say', text: `удар ${a.name.toLowerCase()} 1`, note: `прислужники ×${a.count}: пока живы, урон по боссу вдвое меньше`, dim: true });
+  if (B.hunt.length) {
+    // the walls of Престольград (a target named «ворота») or the hunters: «удар <name>» each; without a name — the gate / the elder huntsman
+    const walls = B.hunt.some((h) => h.name.toLowerCase() === 'ворота');
+    for (const h of B.hunt) if (h.hp > 0) s.cmds.push({ kind: 'say', text: `удар ${h.name.toLowerCase()}`, note: `${Math.round(h.hp * 100)}% · ${walls ? 'у ворот, катапульт и стрелков своё здоровье' : 'у каждого охотника своё здоровье'}`, dim: true });
+  }
+  for (const a of B.adds) if (a.count > 0 && a.hp > 0) s.cmds.push({ kind: 'say', text: `удар ${a.name.toLowerCase()} 1`, note: `прислужники ×${a.count}: ${a.name.toLowerCase() === 'волк' ? 'пока живы, стая кусает бойцов каждый ход' : 'пока живы, урон по боссу вдвое меньше'}`, dim: true });
   if (q.b?.gb?.forbid) s.cmds.push({ kind: 'info', text: 'Босс запретил прямые слова — пиши синонимом' });
+}
+
+/** HPG10 wings: where I stand, then every wing «name (площадки …): got из need». */
+function wingCmds(B: BossState, s: SceneState) {
+  const mine = B.wings.find((w) => w.mine);
+  if (mine) s.cmds.push({ kind: mine.ok ? 'ok' : 'info', text: `ты здесь: ${mine.name} · ${mine.got} из ${mine.need}`, note: `площадки ${mine.zones.join(', ')}` });
+  for (const w of B.wings) if (!w.mine) s.cmds.push({ kind: 'info', text: `${w.name}: ${w.got} из ${w.need}${w.ok ? ' ✓' : ''}`, note: `площадки ${w.zones.join(', ')}`, dim: true });
 }
 
 /* ---- vote ---- */
@@ -739,6 +806,17 @@ function dungeonOf(q: any, s: SceneState) {
   s.title = s.dungeon.name; s.status = D.esc ? 'Своды рушатся!' : s.dungeon.name;
   if (V) s.until = num(V.end, 0);
   if (D.esc) s.cmds.push({ kind: 'say', text: 'бежать', note: 'своды рушатся' });
+  // site 07.11 (quest.js dgHtml g.sum): the dungeon's summary
+  const M = D.sum && typeof D.sum === 'object' ? D.sum : null;
+  if (M) {
+    const stars = '★'.repeat(Math.max(1, Math.min(5, Math.round(num(M.stars, 1)))));
+    s.status = `Итог данжа «${str(M.name, s.dungeon.name)}» ${stars}`;
+    const parts = [`этажей ${num(M.fl)}`, `комнат ${num(M.rooms)}${num(M.total) ? ' из ' + num(M.total) : ''}`, `сундуков ${num(M.chests)}`, ...(M.vault ? ['сокровищница открыта'] : [])];
+    s.cmds.push({ kind: 'info', text: s.status, note: parts.join(' · ') });
+    s.cmds.push({ kind: 'ok', text: M.test ? 'Тестовый данж — награды не выдавались' : `каждому: +${num(M.xp)} опыта · +${num(M.coins)} бронзы` });
+    const it = arr<any[]>(M.items).filter((x) => Array.isArray(x)).map((x) => `${str(x[0])} — ${str(x[1])}`);
+    if (it.length) s.cmds.push({ kind: 'info', text: `Вещи: ${it.slice(0, 6).join(' · ')}` });
+  }
   if (V && !V.done && V.mode !== 'ring') for (const o of s.dungeon.opts) s.cmds.push({ kind: 'num', text: String(o.n), note: o.label, dim: !!V.my && V.my !== o.n });
 }
 

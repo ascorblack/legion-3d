@@ -2,11 +2,14 @@
  * Crowd: other players' avatars. Create/update/remove on store 'walkers'; each frame place them on the ground,
  * pick LOD and draw budget nearest-first among those in view (CrowdLod), and set their label anchors.
  * Also re-applies the own appearance when the store replaces it. Hidden while a 3D room is active.
+ * The site's «Только друзей» (localStorage lgCityFr + LGFriends, src/net/friends-only.ts) is honoured: while it is on only
+ * friends are drawn, as in the site's own City.
  */
 import * as THREE from 'three';
 import type { Avatar } from '../contracts/modules';
 import { CrowdLod } from '../engine';
 import { toX, toZ } from '../world/coords';
+import { FriendsOnly, pageFriendsDeps } from '../net/friends-only';
 import { coreFeature } from './types';
 
 /** A walker whose body is this close to the camera (m, horizontal) is not drawn: players idling on the spawn point
@@ -22,6 +25,7 @@ export default coreFeature({
     // app: identity of the Appearance object last applied (cheap check first; JSON only when the object was replaced)
     const avs = new Map<string, { av: Avatar; key: string; app: unknown; lod: number; slot: number }>();
     const crowd = new CrowdLod(64);
+    const fo = ctx.dev.friendsOnly = new FriendsOnly(pageFriendsDeps());
     let meKey = JSON.stringify(me.app), meApp: unknown = me.app, meTool = false;
     labels.set(me.login, { name: me.app.name, level: me.app.level, me: true });
 
@@ -69,8 +73,10 @@ export default coreFeature({
       const world = ctx.world();
       // draw/LOD budget per quality, nearest-first among those in view (the camera is final for this frame)
       crowd.begin(engine.camera, engine.quality);
+      fo.tick(performance.now());
       for (const w of store.walkers.values()) {
         const a = avs.get(w.login); if (!a) continue;
+        if (!fo.allows(w.login)) { a.slot = -1; continue; }   // «Только друзей»: not a friend
         const p = a.av.root.position;
         p.set(toX(w.x), world.groundAt(w.x, w.y), toZ(w.y));
         a.slot = crowd.add(p.x, p.y, p.z, a.lod);
@@ -79,6 +85,7 @@ export default coreFeature({
       engine.camera.getWorldPosition(_cam);
       for (const w of store.walkers.values()) {
         const a = avs.get(w.login); if (!a) continue;
+        if (a.slot < 0) { a.lod = -1; a.av.root.visible = false; anchors.get(w.login)?.set(0, -999, 0); continue; }
         const q = a.av.root.position;
         const lod = Math.hypot(q.x - _cam.x, q.z - _cam.z) < CAM_CLEAR && Math.abs(q.y + 0.8 - _cam.y) < 1.6 ? -1 : crowd.lod(a.slot);
         a.lod = lod;

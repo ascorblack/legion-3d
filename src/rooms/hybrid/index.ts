@@ -34,7 +34,7 @@ export async function createHybridRoom(env: RoomEnv): Promise<RoomScene> {
     const side = spec.side || 'left';
     const open = () => env.showSitePanel?.({ side });
     if (desk) {
-      R.interact({ id: 'room:panel:' + id, label: spec.verb ? `${spec.verb}` : `Открыть: ${env.building.title || id}`, icon: env.building.icon || '📋',
+      R.interact({ id: 'room:panel:' + id, label: spec.verb ? (typeof spec.verb === 'function' ? spec.verb(env) : spec.verb) : `Открыть: ${env.building.title || id}`, icon: env.building.icon || '📋',
         hit: hitBox(desk.x, desk.y, desk.z, desk.w, desk.h, desk.d, 'room:hit:panel'), reach: 4, use: open });
     }
     const scene = R.finish();

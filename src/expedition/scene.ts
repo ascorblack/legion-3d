@@ -308,6 +308,8 @@ export class ExpeditionScene implements RoomScene {
     const adds = s.boss?.adds || [];
     let i = foes.length;
     for (const a of adds) for (let k = 0; k < Math.min(3, a.count); k++) foes.push({ i: i++, art: a.art, type: a.art, side: 'R', lead: false, hp: a.hp, dead: a.hp <= 0, name: a.name });
+    // site 07.11: hunters / the walls' targets — one figure each with its own health
+    for (const h of s.boss?.hunt || []) foes.push({ i: i++, art: h.art, type: h.art, side: 'R', lead: false, hp: h.hp, dead: h.hp <= 0, name: h.name });
   }
   private foesFromAdds(s: SceneState) {
     const foes: FoeState[] = [];

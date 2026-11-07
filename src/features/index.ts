@@ -57,6 +57,7 @@ import jail from './jail';
 import mineHold from './mine-hold';
 import geomlint from './geomlint';
 import daynight from './daynight';
+import sitePlaces from './site-places';
 
 export const FEATURES: (Feature | CoreFeature)[] = [
   settings, itemModels, menus, camera, crowd, labels, doors, controls, rooms, contentRooms, overlay, classic, quest, photo, debug, whatsnew, seasonal, sound,
@@ -84,6 +85,7 @@ export const FEATURES: (Feature | CoreFeature)[] = [
   mineHold,
   geomlint,
   daynight,
+  sitePlaces,
 ];
 
 /** Run every feature's setup in order. A failing feature is logged and skipped (the game still starts). */

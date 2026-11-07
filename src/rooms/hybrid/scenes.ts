@@ -15,13 +15,18 @@ import { faceTo } from '../common/npc';
 export interface DeskBox { x: number; y: number; z: number; w: number; h: number; d: number }
 export interface HybridSpec {
   side?: 'left' | 'right' | 'full';
-  /** Prompt verb for the desk, e.g. «Навыки у тренера». */
-  verb?: string;
+  /** Prompt verb for the desk, e.g. «Навыки у тренера» (a function: per room env). */
+  verb?: string | ((env: RoomEnv) => string);
   autoOpen?: boolean;
   /** Scene-mode framing: focus point (default: the desk box centre) and the hero's distance from it (default 1.8 m). */
   stage?: { focus?: [number, number, number]; dist?: number };
   build(R: RoomBase, env: RoomEnv): DeskBox | null;
 }
+
+/** Site 07.11 (b-hall.js r.hall.w): the hall of a district town keeps the TOWN's treasury — contributions of the alliance's
+ *  players, spent by the Mayor, the head of the managing guild and the streamer; no hall store, only «Взнос в казну». The
+ *  fair's hall (and the camp's) keeps the channel's treasury and the hall store. */
+export const districtHall = (env: Pick<RoomEnv, 'town'>): boolean => !!env.town && env.town.id !== 'camp';
 
 const npcBox = (x: number, z: number): DeskBox => ({ x, y: 0.8, z, w: 0.9, h: 1.6, d: 0.9 });
 
@@ -185,7 +190,7 @@ export const HYBRID_SCENES: Record<string, HybridSpec> = {
   /* ---------------------------------------------------------------- hall: Ратуша */
   hall: {
     // site 03.11 (b-hall.js hall4): the treasury window — drag ore from the bag to «Пожертвовать» / the hall's store
-    side: 'left', verb: 'Казна и склад Ратуши',
+    side: 'left', verb: (env) => (districtHall(env) ? 'Казна города' : 'Казна и склад Ратуши'),
     build(R, env) {
       const K = R.kit, P = R.pal, W = 10, D = 9, H = 4.4;
       R.bg = '#18142a';
@@ -231,7 +236,9 @@ export const HYBRID_SCENES: Record<string, HybridSpec> = {
       wallLamp(K, -1.3, 2.4, D / 2, Math.PI, { real: 1 }); wallLamp(K, 1.3, 2.4, D / 2, Math.PI);
       bunting(K, -W / 2 + 0.1, H - 0.2, 0.4, W / 2 - 0.1, H - 0.2, 0.4, 14, ['#a3122a', '#ffcf4a', '#3a6aa8', '#ffffff'], 0.35);
       R.npc({ seed: 'Мастер-строитель', name: 'Мастер-строитель', x: 1.7, z: -D / 2 + 0.95, y: DAIS, face: Math.PI, look: { hat: 'cap', shape: 'box', color: '#c9884a', acc: ['glasses'] },
-        hello: ['Добро пожаловать в Ратушу!', 'Всё, что сдают скупщику шахты, — на нашем складе.', 'Руда из шахты? Казна примет — перетащи её из сумки.'], lines: ['Город растёт — и мы с ним.', 'На стройки нужна казна.'], emote: { anim: 'wave', every: 15 } });
+        hello: districtHall(env) ? ['Добро пожаловать в Ратушу!', 'Казна города — взносы игроков альянса.', 'Тратят её Мэр, глава гильдии-управляющей и стример.']
+          : ['Добро пожаловать в Ратушу!', 'Всё, что сдают скупщику шахты, — на нашем складе.', 'Руда из шахты? Казна примет — перетащи её из сумки.'],
+        lines: districtHall(env) ? ['Город растёт — и мы с ним.', 'Стены и башни строятся из казны города.'] : ['Город растёт — и мы с ним.', 'На стройки нужна казна.'], emote: { anim: 'wave', every: 15 } });
       R.exitDoor();
       R.spawn = { x: 0.6, z: D / 2 - 0.9, face: 0 };
       return { x: 1.6, y: 0.9, z: -D / 2 + 1.75, w: 2.8, h: 1.8, d: 1.4 };

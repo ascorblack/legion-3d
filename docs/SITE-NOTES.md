@@ -59,6 +59,21 @@ so the extension must treat every internal API as unstable and degrade gracefull
   awning, no sack on it). app.js / inventory.js `feat/candy-tile`: the Halloween candies (`hero.hw.c`) are a «не вещь» tile after
   the items of the bag (`data.pins`; filter «Все»; no place taken, no actions, «9999+», hint on hover / tap) instead of the counter
   next to «Монеты» — ours: `candyCellHtml` in the bag (src/ui/card.ts).
+- **07.11 afternoon.** `/site/guildhall.js` (soft script of the City tab, css `guildhall.css`): `LGGuildDistrict` (UMD: CAP 100 houses,
+  TIER_MAX 5 = guild level, UNLOCK house izba/stone/tower · roof · street path/pave · banner, DECOR lamps 2 / flowers 3 / benches 3 / well 4 /
+  flags 5, `layout({n, tier, opts, biome, seed, name})` → a Town Kit input T `guild-district` (rows of member houses on both sides of an avenue,
+  «Главное здание» `ghall` + plaza on top, «Ворота» `gate` at the bottom), `LGGuildDistrictArt` (tk-art houses / hall / flags) and
+  `LGGuildHall` (open/close/pick/index/debug). GET `/api/guildhall` (index: `{ok, mine, guilds}`; 409 `unavailable` «недоступен в этом сезоне»
+  for us on 07.11) → a `.gd-entry` «🏰 Гильдейский район» button in the City HUD `.cy-hud`; open(gid) appends a full-screen `.gd-root` (Pixi,
+  own WASD/E/Esc on window, `html.gd-full`), puts the City to sleep (`LGCity.sleep`, city leave) and wakes it on «В город». Presence:
+  POST `/api/guildhall/act {op:'here', guild, x, y}` every 3 s (`leave`, `hall`, `house`, `myHouse`, `opt`, `moveStay/moveLeave`). Not a quarter
+  of a town and not a hall interior: a place of its own. 3D: overlay 'district' (src/net/site.ts DISTRICT) + pause entry (src/features/site-places.ts).
+  `/site/playerstart.js` (hero `ps`): «Старт игрока» goals box at the top of `#tab-hero` — no overlay, no keys. Tabs `war` (warcmd.js, ME.cw, SSE
+  `war` / `wa` + a `.wa-bar` siege alert) and `season` (season.js, ME.ss) — 404 for us. city.js `.cy-fro` eye button (hero `fo`) = «Только друзей»
+  (S.onlyFr, localStorage `lgCityFr`, LGFriends.friends()). quest.js: arena nets `M.nets`, wings `g.wings {z, need, got}` (HPG10), hunters (adds
+  with count 0), the wolf's bite `g.bite`, `M.tgn`, `g.wc` (HPG1), dungeon summary `dgn.sum`; app.js `questFormFill`: `b.form` only when it changes
+  (key `b.fk`). b-hall.js `r.hall.w`: a district town's own treasury (alliance contributions; Mayor, managing guild head, streamer), no hall store.
+  app.js: «Выбросить» (hero `ht`, INV.trashAsk). Our follow-ups: .local/drift1107/FINDINGS.md.
 - **Single chat (30.10).** app.js `oneIsOn = hero.c1 && (hero.cc || hero.mc) && LGChatOne`: then LGDm never shows its own window; its
   `open()` asks the single chat to show «Личные» (and waits for it) only while nobody listens on LGDm — our DM bridge does not listen then.
 - **Camp (30.10 E2).** campmap.js moved to the «Пролог» module (same URL, same API). city.js `homePick(hm) = {id: hm.id}`: the server

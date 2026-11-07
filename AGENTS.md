@@ -60,6 +60,9 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   builder (`src/world/faircats.ts`, terrain `src/world/townkit.ts`, ground `fcground.ts townKitGround`); levels shrink plots,
   a running construction is closed with scaffolding. Fixture `test/fixtures/townkit-map.json` (`node scripts/fixture-townkit.mjs
   <site copy> [--kit=<towns file>]`), dev `dist-dev/game.html?tk=<id>[&biome=ice]`. Old LGTownGen towns are unchanged.
+- Guild district (site 07.11, guildhall.js): a full-screen place of the site over the sleeping City. 3D yields to it (overlay 'district') and
+  offers it in the pause menu while the site shows its `.gd-entry`; no 3D district yet — its layout is a Town Kit input that our
+  `townKitScene` already accepts (plan: .local/drift1107/FINDINGS.md).
 - Site contract: `src/data/site-contract.json` is checked statically (`npm run drift`) and at runtime (boot guard in
   `src/net/site.ts` via `src/net/contract.ts`; `node e2e/contract.mjs` against the live page).
 - Asset models of the new fair / Town Kit (`src/world/fcart/`: registry, civic / shops / houses models) are pinned to the

@@ -21,6 +21,7 @@ import type { Bus } from '../bridge/bridge';
 import { createStore } from '../store/store';
 import { lookStyle, styleId } from './site';
 import { setFetchTee } from './fetch-tee';
+import { questFormFill } from '../quest/model';
 
 const W = window as any;
 const bus = (): Bus | null => W.__L3D_BUS || null;
@@ -93,10 +94,10 @@ export async function connectExpedition(meData?: any): Promise<ExpSiteSession | 
   const unsubs: (() => void)[] = [];
   if (B) {
     for (const t of ['sse:me', 'me', 'hero:act']) unsubs.push(B.on(t, onHero));
-    for (const t of ['sse:q', 'q']) unsubs.push(B.on(t, (q) => { if (q && typeof q === 'object') store.setQuest(q); }));
+    for (const t of ['sse:q', 'q']) unsubs.push(B.on(t, (q) => { if (q && typeof q === 'object') store.setQuest(questFormFill.fill(q)); }));
   }
-  if (me.ql) store.setQuest(me.ql);
-  if (B?.last['sse:q']) store.setQuest(B.last['sse:q']);   // the live view wins over the /api/me snapshot
+  if (me.ql) store.setQuest(questFormFill.fill(me.ql));
+  if (B?.last['sse:q']) store.setQuest(questFormFill.fill(B.last['sse:q']));   // the live view wins over the /api/me snapshot
 
   const post = async (p: string, b: unknown): Promise<ApiResult> => {
     const r = await api<ApiResult>(p, b);

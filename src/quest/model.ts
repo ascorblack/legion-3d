@@ -66,6 +66,8 @@ export interface QuestBattle {
   /** me in formation but past the 420 drawn places: [role, side] */
   mf?: [role: string, side?: Side];
   form: FormEntry[];
+  /** site 07.11: key of `form` — the server sends `form` only when it changes (QuestFormFill puts it back) */
+  fk?: string | number;
   /** all fighters incl. reserve (form is only the drawn part) */
   fighters?: number;
   foes: FoeEntry[];
@@ -94,7 +96,14 @@ export interface BossMech {
   id?: string; name: string; icon?: string; fam?: 'silence' | 'position' | string;
   text?: string; word?: string; words?: string[]; opts?: string[]; zones?: number[]; any?: boolean;
   how?: string; tip?: string; fake?: boolean; me?: boolean; until?: number; need?: number; got?: number;
+  /** site 07.11 (quest.js zonesHtml): platforms under a net — a jump there skips the turn («🕸 под сеть N») */
+  nets?: number[];
+  /** site 07.11: the targets of the mechanic («Цели: …») */
+  tgn?: string[];
 }
+/** Site 07.11 (quest.js wingsHtml, mechanic HPG10): the arena split into three wings (Левое крыло / Центр / Правое крыло):
+ *  `z[i]` the platforms of wing i, `need[i]` / `got[i]` how many heroes it needs / has. */
+export interface BossWings { z: number[][]; need: number[]; got: number[] }
 /** Arena platforms: a = [n, neighbours, polygon points (stream px)], gone = destroyed. */
 export interface BossZones { a: [n: number, nb: number[], pts: [number, number][]][]; gone?: number[] }
 export interface QuestBossGen {
@@ -109,6 +118,8 @@ export interface QuestBossGen {
   limit?: number; round?: number; form?: string; rage?: boolean;
   zn?: BossZones; area?: number;
   mech?: BossMech | null;
+  /** site 07.11: wings of the arena (HPG10), the wolf's bite on platforms (no mechanic), per-word counters (HPG1) */
+  wings?: BossWings; bite?: number[]; wc?: number[];
 }
 
 /* ------------------------------------------------------------------ other stage blocks */
@@ -170,6 +181,9 @@ export type DgnOpt = [n: number, key: string, label: string, icon: string, votes
 export interface QuestDungeon {
   name?: string; at?: number; room?: { floor?: number; seed?: string | number; [k: string]: unknown }; fl?: number; rn?: string; esc?: boolean;
   vote?: { id: number; title: string; end: number; done?: boolean; win?: number; my?: number; mode?: 'ring' | string; opts: DgnOpt[] };
+  /** site 07.11 (quest.js dgHtml): the dungeon's summary at its end — stars, floors, rooms (of total), chests, the vault,
+   *  rewards per hero (none in a test dungeon), items [name, who]. */
+  sum?: { name?: string; stars?: number; fl?: number; rooms?: number; total?: number; chests?: number; vault?: boolean; test?: boolean; xp?: number; coins?: number; items?: [string, string][] };
 }
 /** live 31.10 (inside the finished boss view): `rar` rarity, `top` the leaders [login, name, votes], `rnd` the weight of
  *  «случайно», `my` '' / '*' (random) / the login voted for */
@@ -317,6 +331,28 @@ export function puzzleTask(P: QuestPuzzle): string {
     default: return '';
   }
 }
+
+/* ------------------------------------------------------------------ battle form by key (site 07.11) */
+
+/**
+ * Site 07.11 (app.js questFormFill): the server sends the battle `form` (heroes on the stream frame) only when it changes,
+ * keyed by `b.fk`; views in between carry just the key. The site keeps the last form per key and puts it back into every
+ * view (`b.form = cached` for the same key, `[]` for a key it has not seen). We read the SSE / /api/me views ourselves,
+ * so the same fill runs on every view before it reaches the store. Mutates `q` like the site; returns it.
+ */
+export class QuestFormFill {
+  private last: { k: unknown; f: unknown[] } | null = null;
+  fill<T>(q: T): T {
+    const b = q && typeof q === 'object' ? (q as { b?: { fk?: unknown; form?: unknown } }).b : null;
+    if (!b || typeof b !== 'object' || !b.fk) return q;
+    if (Array.isArray(b.form)) this.last = { k: b.fk, f: b.form };
+    else b.form = this.last && this.last.k === b.fk ? this.last.f : [];
+    return q;
+  }
+  reset(): void { this.last = null; }
+}
+/** One per page (both views of the quest — the City HUD and the 3D expedition — read the same SSE `q`). */
+export const questFormFill = new QuestFormFill();
 
 /* ------------------------------------------------------------------ guards */
 

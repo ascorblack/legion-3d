@@ -837,6 +837,108 @@
       "re": "\"lgCityTown@\" \\+|'lgCityTown@' \\+",
       "severity": "degrade",
       "why": "site 07.11 keeps the last chosen town across tabs in localStorage lgCityTown@<channel> (townLs); src/net/town.ts readTownSignals falls back to it — otherwise a new tab boots 3D in the fair while the site shows the district town"
+    },
+    {
+      "id": "LGGuildDistrict (guild district layout, guildhall.js)",
+      "file": "guildhall.js",
+      "re": "const CAP = 100[\\s\\S]*function layout\\(o\\)[\\s\\S]*return \\{ CAP, TIER_MAX",
+      "severity": "degrade",
+      "why": "site 07.11: the guild district is a Town Kit town of its own (LGGuildDistrict.layout → LGTownKitMap.town), opened over the sleeping City; src/net/site.ts reports its root as the overlay 'district', src/features/site-places.ts — FINDINGS .local/drift1107 plan for a 3D district"
+    },
+    {
+      "id": "LGGuildDistrictArt (guild district art, guildhall.js)",
+      "kind": "global",
+      "name": "LGGuildDistrictArt",
+      "file": "guildhall.js",
+      "keys": [
+        "draw",
+        "houseProps",
+        "hall",
+        "house"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "the district is drawn by the Town Kit art (LGTownKitArt.drawTown) plus these houses / the main hall — the source of a future 3D district (FINDINGS .local/drift1107)"
+    },
+    {
+      "id": "LGGuildHall (open / pick / index)",
+      "kind": "keys",
+      "obj": "LGGuildHall",
+      "file": "guildhall.js",
+      "keys": [
+        "open",
+        "close",
+        "pick",
+        "index",
+        "debug"
+      ],
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "the guild district window: the pause-menu entry presses its .gd-entry button (src/features/site-places.ts)"
+    },
+    {
+      "id": "guildhall.js .gd-entry in .cy-hud, .gd-root over the sleeping City",
+      "file": "guildhall.js",
+      "re": "querySelector\\('\\.cy-hud'\\)[\\s\\S]*b\\.className = 'gd-entry'[\\s\\S]*root\\.className = 'gd-root'[\\s\\S]*LGCity\\.sleep\\(\\)",
+      "severity": "degrade",
+      "why": "src/features/site-places.ts shows «Гильдейский район» while .cy-hud .gd-entry exists; src/net/site.ts overlay() = 'district' while .gd-root is shown (the 3D hides and pauses) — otherwise the district opens under our canvas"
+    },
+    {
+      "id": "city.js «Только друзей» (lgCityFr, LGFriends.friends, .cy-fro)",
+      "file": "city.js",
+      "re": "lgCityFr[\\s\\S]*cy-fro[\\s\\S]*LGFriends\\.friends\\(\\)",
+      "severity": "degrade",
+      "why": "site 07.11 eye button .cy-fro (S.onlyFr, localStorage lgCityFr) — the 3D crowd draws only friends while it is on (src/net/friends-only.ts, src/features/crowd.ts)"
+    },
+    {
+      "id": "app.js questFormFill (b.form by b.fk)",
+      "file": "app.js",
+      "re": "b\\.fk[\\s\\S]{0,200}b\\.form",
+      "severity": "degrade",
+      "why": "site 07.11: the battle form is sent only when it changes (key b.fk); src/quest/model.ts QuestFormFill puts it back like app.js — otherwise the 3D expedition loses the party between form updates"
+    },
+    {
+      "id": "quest.js arena nets (M.nets, «под сеть»)",
+      "file": "quest.js",
+      "re": "M\\.nets",
+      "severity": "degrade",
+      "why": "src/expedition/adapter.ts bossOf: net platforms are never the platform to jump to"
+    },
+    {
+      "id": "quest.js wings (HPG10, g.wings z / need / got)",
+      "file": "quest.js",
+      "re": "function wingsHtml\\(g\\)[\\s\\S]{0,400}W\\.got\\[i\\][\\s\\S]{0,80}W\\.need\\[i\\]",
+      "severity": "degrade",
+      "why": "src/expedition/adapter.ts BossState.wings + wingCmds, src/quest/index.ts bossNote"
+    },
+    {
+      "id": "quest.js hunters (adds with count 0) and the wolf's bite (g.bite)",
+      "file": "quest.js",
+      "re": "filter\\(\\(a\\) => !\\+a\\[1\\]\\)[\\s\\S]*g\\.bite && g\\.zn",
+      "severity": "degrade",
+      "why": "src/expedition/adapter.ts: hunters «удар <name>» with their own health, bitten platforms red"
+    },
+    {
+      "id": "quest.js dungeon summary (g.sum)",
+      "file": "quest.js",
+      "re": "g\\.sum",
+      "severity": "degrade",
+      "why": "src/expedition/adapter.ts dungeonOf: «Итог данжа»"
+    },
+    {
+      "id": "app.js tabs war / season (ME.cw, ME.ss)",
+      "file": "app.js",
+      "re": "ME\\.cw[\\s\\S]*ME\\.ss",
+      "severity": "degrade",
+      "why": "src/features/site-places.ts offers «Бой армий» / «Сезоны» while the site shows their tab buttons"
+    },
+    {
+      "id": "b-hall.js district town treasury (r.hall.w)",
+      "file": "b-hall.js",
+      "re": "hall\\.w",
+      "severity": "degrade",
+      "why": "src/rooms/hybrid/scenes.ts districtHall: «Казна города» (no hall store) in a district town"
     }
   ]
 }
