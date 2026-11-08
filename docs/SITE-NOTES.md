@@ -78,6 +78,18 @@ so the extension must treat every internal API as unstable and degrade gracefull
   `open()` asks the single chat to show «Личные» (and waits for it) only while nobody listens on LGDm — our DM bridge does not listen then.
 - **Camp (30.10 E2).** campmap.js moved to the «Пролог» module (same URL, same API). city.js `homePick(hm) = {id: hm.id}`: the server
   puts `'camp'` into `hm.id` for a channel in the Prologue; `hm.camp` no longer keeps fair/camp open next to a district `hm.id`.
+- **Coins only, «Рябинень», one mine (08.11 afternoon).** cityshop.js: no more channel-points prices — a hero without `cs` sees
+  «сейчас не купить · Покупки в «Городе» тебе пока закрыты» with the good's coin price (`+it.coins`, else «Пока не продаётся»);
+  `can = !!h && (it.mat ? h.ef && c : csOn() && c > 0)` (looks included); «Да» sends `/api/cityBuy {item, price, n?, town?}` (`n` = the
+  quantity, hero `bq`). b-tent.js: booth samples are bought for coins — `buyAsk({id: 'look-<booth>-<sample id without #>', name, coins:
+  booth.price, look: true, pos})`; owned ones are still worn with `/api/wear`. `lockedHere` spares the squad's «край» (`homeHere`);
+  `shopView` filters a lv3 district town's goods by building level (`LGTownGen.goodsOk`). city.js: `hm.none` = the channel has no city yet
+  (homePick → null), `fairGone` → `homeAway`, `homeBack()` = where a closed town sends you (the channel city or the open camp); with nowhere
+  to go the City is shut down: `#tab-city .cy-err.cy-shut` with `NO_CITY`. The old fair is called «Рябинень» («Ярмарочный Край»; picker row
+  only when `T.fair`, reason `T.fw`). Every town's mine door opens the channel's one mine `home` (MINE_FROM brings you back to the town).
+  quest.js `hero.q2`: «отступаем» in a corner block `.q-pbc`, say history ↑/↓ (localStorage `lgQSayH:<ch>`), the say box under `.ql-r1`,
+  «ты примерно тут» for a hero in reserve. worldmap.js: squads of all channels (`d.sq`), the travel route (`d.route`). Our follow-ups:
+  .local/drift1108b/FINDINGS.md.
 
 ## Auth / user
 - Cookie `lsid` (httpOnly). `GET /api/me` → `{ ok, user:{login,name}, hero, roles, classes, ench, ql, now, … }`.

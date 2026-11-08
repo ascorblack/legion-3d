@@ -3,11 +3,12 @@
  * (port of city.js stockOf / goodsOf / coinsFor / lockedHere / buyAsk, 23–25.10; since 31.10 they live in the site's
  * /site/cityshop.js, moved unchanged — site-contract «shop rules» watches them there). Pure module: no DOM, no three.
  *
- * Money: `coins` are bronze (1 silver = 100, 1 gold = 10 000). `price` is in channel points (on stream only).
- * A hero with `cs` buys for coins at any time (POST /api/cityBuy {item, price, town?}); without `cs` the goods are
- * «купить можно на стриме, за баллы канала». Enchant materials (star/sphere) are bought for coins through
- * POST /api/buymat {mat, ack?} when the hero has `ef`. Tent looks (booth samples) are points-only; owned ones are worn
- * with POST /api/wear {field, value}.
+ * Money: `coins` are bronze (1 silver = 100, 1 gold = 10 000). `price` is the old channel-points price (08.11: no longer sold for points).
+ * A hero with `cs` buys for coins at any time (POST /api/cityBuy {item, price, n?, town?}); without `cs` the goods are
+ * «сейчас не купить · Покупки в «Городе» тебе пока закрыты» (08.11; before: «на стриме, за баллы канала»). Enchant
+ * materials (star/sphere) are bought for coins through POST /api/buymat {mat, ack?} when the hero has `ef`. Tent looks
+ * (booth samples) are bought for coins since 08.11 like any good (item id `look-<booth>-<sample id without #>`, price = the
+ * booth's `price`, b-tent.js ask → buyAsk); owned ones are worn with POST /api/wear {field, value}.
  */
 import type { Hero, Item } from '../../contracts';
 
@@ -94,6 +95,21 @@ export function goodsOf(id: string, s: ShopStock | TentStock | RowsStock | null)
   return [...(x.shelf1 || []), ...(x.shelf2 || []), ...(x.case || []), ...(x.mats || [])];
 }
 
+/** A district town's goods filter (cityshop.js shopView with `TOWN.meta.lv3`: LGTownGen.goodsOk by the building's level). */
+export type GoodsKeep = (it: StockItem, building: string) => boolean;
+/**
+ * cityshop.js shopView(id, st) for a hero with coin purchases (`cs`): in a lv3 district town a building sells only what its
+ * level allows — stands, shelves, case, materials and amulets are filtered (materials always stay; potions / food are not
+ * touched, like the site). No filter / no `cs` → the stock as it is.
+ */
+export function shopView<T extends ShopStock | TentStock | RowsStock | null>(st: T, id: string, h: Hero | null | undefined, keep?: GoodsKeep | null): T {
+  if (!st || !keep || !csOn(h)) return st;
+  const ok = (it: StockItem) => !it || !!it.mat || keep(it, id);
+  const L2 = (a?: StockItem[]) => (a || []).filter(ok);
+  const x = st as ShopStock & TentStock;
+  return { ...st, stands: (x.stands || []).map((t) => ({ ...t, top: L2(t.top), mid: L2(t.mid), case: L2(t.case) })), shelf1: L2(x.shelf1), shelf2: L2(x.shelf2), case: L2(x.case), mats: L2(x.mats), amulets: L2(x.amulets) } as T;
+}
+
 /** Stands of a forge-like shop: the site's `stands`, else one stand from the flat shelves. */
 export function standsOf(s: ShopStock | null): StockStand[] {
   if (!s) return [];
@@ -108,8 +124,10 @@ export interface PriceEnv {
   hero: Hero | null;
   /** /api/me .ench (coins for materials). */
   ench?: { coins?: { star?: number; sphere?: number }; out?: boolean } | null;
-  /** Foreign district town: price multiplier (>1) and the best deals locked. 1 = own city. */
+  /** District town price multiplier (city.js foreignK(): a foreign town, or the squad's own «край» before its boss). 1 = no mark-up. */
   foreignK?: number;
+  /** The town is the squad's «край» (city.js TOWN.acc.home, homeHere()): dearer, but nothing is locked. */
+  home?: boolean;
   /** District town id (sent as `town` with /api/cityBuy). */
   town?: string | null;
   /** Ids on the top row of any stand (locked in a foreign town). */
@@ -127,7 +145,8 @@ const matCoins = (it: StockItem, env: PriceEnv) => {
   const c = (env.ench && env.ench.coins) || ENCH_COINS_DEFAULT;
   return it.mat ? +((c as any)[it.mat] ?? (ENCH_COINS_DEFAULT as any)[it.mat]) || 0 : 0;
 };
-export const lockedHere = (it: StockItem, env: PriceEnv) => (env.foreignK || 1) > 1 && !!it
+/** cityshop.js lockedHere (08.11: not in the squad's own «край», `!homeHere()`). */
+export const lockedHere = (it: StockItem, env: PriceEnv) => (env.foreignK || 1) > 1 && !env.home && !!it
   && (!!it.mat || it.rarity === 'epic' || it.rarity === 'legendary' || !!(env.topIds && env.topIds.has(it.id)));
 /** Coin price for this hero (thief mark-up, foreign town ×k); 0 = not sold for coins. */
 export function coinsFor(it: StockItem, env: PriceEnv): number {
@@ -136,39 +155,46 @@ export function coinsFor(it: StockItem, env: PriceEnv): number {
   return b > 0 ? Math.round(thPrice(h, b) * (it.mat ? 1 : (env.foreignK || 1))) : 0;
 }
 
-export type OfferKind = 'coins' | 'mat' | 'points' | 'look' | 'locked' | 'wear';
+/** 08.11: «кабинка» samples of the tent are bought for coins like goods (b-tent.js ask → buyAsk). The good the site builds. */
+export function lookItem(b: Booth, s: BoothSample): StockItem {
+  return { id: 'look-' + b.key + '-' + String(s.id).replace(/^#/, ''), name: s.name, coins: +(b.price || 0) || 0, look: true, pos: s.pos } as unknown as StockItem;
+}
+
+/** 'closed': coin purchases are not open for this hero (no `cs`, a material without `ef`) — the site's «сейчас не купить». */
+export type OfferKind = 'coins' | 'mat' | 'closed' | 'locked' | 'wear';
 export interface Offer {
   kind: OfferKind;
   /** Coin price (bronze) when kind is coins/mat. */
   coins: number;
-  /** Channel points price (stream). */
-  points: number;
+  /** The good's own coin price shown while purchases are closed (cityshop.js cardHtml / popHtml `+it.coins`); 0 = «Пока не продаётся». */
+  list: number;
   /** A purchase/wear request is possible in principle (button shown). */
   can: boolean;
   /** Why the button is disabled (no hero, ghost, not enough coins) — empty = enabled. */
   why: string;
   /** Not enough coins (the card shows «У тебя … · не хватает …»). */
   poor: boolean;
-  /** Request to send on «Да». */
+  /** Request to send on «Да» (one piece; more with buyReq). */
   req: { path: string; body: Record<string, unknown> } | null;
   /** Toast on success. */
   okText: string;
-  /** Explanation for stream-only / locked goods. */
+  /** Explanation for closed / locked goods. */
   note: string;
-  /** Rank requirement note (points goods). */
+  /** Rank requirement note. */
   rank: string;
-  /** Thief mark-up and foreign-town multiplier (for the notes). */
-  thief: number; foreign: number;
+  /** Thief mark-up and district-town multiplier (for the notes); `home` = the multiplier is the squad's «край». */
+  thief: number; foreign: number; home: boolean;
+  /** How many pieces the site lets you buy at once (cityshop.js qmax: hero.bq, shop / food / potion). 1 = no quantity. */
+  qmax: number;
 }
 
 const PLACE: Record<string, string> = { tent: 'Шатре', shop: 'Торговых рядах', rows: 'Торговых рядах', forge: 'Кузне' };
 export const placeName = (b: string, h: Hero | null) => (b === 'magic' ? (msOn(h) ? String(h!.ms) : 'магической лавке') : PLACE[b] || 'Кузне');
-const pts = (n: number) => (+n || 0).toLocaleString('ru-RU');
 
-/** Everything the buy card needs for one good (mirror of the site's buyAsk + cardHtml price block). */
+/** Everything the buy card needs for one good (mirror of the site's buyAsk + cardHtml / popHtml price block, 08.11). */
 export function offerOf(it: StockItem, b: string, env: PriceEnv): Offer {
   const h = env.hero, name = it.name, k = thK(h), fk = env.foreignK || 1;
-  const base: Offer = { kind: 'points', coins: 0, points: +(it.price || 0) || 0, can: false, why: '', poor: false, req: null, okText: '', note: '', rank: it.rank ? String(it.rank) : '', thief: k, foreign: fk };
+  const base: Offer = { kind: 'closed', coins: 0, list: +(it.coins || 0) > 0 ? +(it.coins || 0) : 0, can: false, why: '', poor: false, req: null, okText: '', note: '', rank: it.rank ? String(it.rank) : '', thief: k, foreign: fk, home: !!env.home, qmax: 1 };
   // site buyAsk / popHtml (re-checked 03.11): the foreign-town lock comes first, then «закончились»
   if (lockedHere(it, env)) {
     return { ...base, kind: 'locked', note: 'Этот округ не принадлежит каналу: лучшие вещи торговец бережёт для своих. Захватите округ на стриме — откроется всё и по обычной цене.' };
@@ -178,25 +204,40 @@ export function offerOf(it: StockItem, b: string, env: PriceEnv): Offer {
     return { ...base, kind: 'mat', note: `«${name}» — закончились. Скоро завезут. Звёзды и сферы сейчас можно найти в походе, в шахте и в наградах.`, why: 'Закончились' };
   }
   const c = coinsFor(it, env);
+  // 08.11: `can` no longer excludes looks (`it.look`) — the tent's samples are bought for coins too
   const can = !!h && (it.mat ? !!(h.ef && c) : csOn(h) && c > 0);
   if (can) {
     const poor = !h!.ghost && (+h!.money || 0) < c;
     const why = h!.ghost ? 'Призраку не продают.' : poor ? 'Не хватает монет' : '';
+    const qmax = !it.mat && +(h as any).bq > 1 && c > 0 && (b === 'shop' || it.slot === 'food' || it.slot === 'potion')
+      ? Math.max(1, Math.min(+(h as any).bq, Math.floor((+h!.money || 0) / c))) : 1;
     const req = it.mat
       ? { path: '/api/buymat', body: { mat: it.mat, ...(k > 1 ? { ack: 1 } : {}) } }
       : { path: '/api/cityBuy', body: { item: it.id, price: c, ...(env.town ? { town: env.town } : {}) } };
     return {
-      ...base, kind: it.mat ? 'mat' : 'coins', coins: c, can: true, why, poor, req,
+      ...base, kind: it.mat ? 'mat' : 'coins', coins: c, can: true, why, poor, req, qmax,
       okText: it.mat ? `Заказано: «${name}» — принесут через пару секунд` : `Куплено: «${name}» — сейчас будет в сумке`,
     };
   }
   const why = !h ? 'Героя пока нет — он появится, когда ты напишешь в чат на стриме.' : '';
-  const note = it.price && !it.mat ? `В ${placeName(b, h)} на Ярмарке за ${pts(it.price)} баллов канала.`
-    : it.mat ? 'На стриме — за баллы канала; за монеты — когда откроется заточка.' : 'На Ярмарке во время стрима.';
+  // 08.11 (cityshop.js buyAsk): no more «на стриме, за баллы канала» — «сейчас не купить»
+  const note = it.mat ? 'За монеты - когда откроется заточка.' : 'Покупки в «Городе» тебе пока закрыты.';
   return { ...base, why, note };
 }
 
-/** Tent booth sample: owned → wear it; else points on stream. */
+/**
+ * The request for `qn` pieces (cityshop.js buyAsk «Да»: `{ item, price, n?, town? }` — `price` is one piece, `n` only above 1)
+ * and its toast. Null when the offer has no request.
+ */
+export function buyReq(of: Offer, qn = 1, name = ''): { path: string; body: Record<string, unknown>; okText: string } | null {
+  if (!of.req) return null;
+  const n = Math.max(1, Math.min(of.qmax || 1, Math.round(+qn || 1)));
+  if (of.req.path !== '/api/cityBuy' || n <= 1) return { ...of.req, okText: of.okText };
+  const { item, price, town } = of.req.body as { item: unknown; price: unknown; town?: unknown };
+  return { path: of.req.path, body: { item, price, n, ...(town !== undefined ? { town } : {}) }, okText: `Куплено: «${name}» ×${n} — сейчас будет в сумке` };
+}
+
+/** Tent booth sample: owned → wear it; else bought for coins (08.11, b-tent.js ask → buyAsk with lookItem). */
 export function sampleValue(b: Booth, s: BoothSample): string { return b.key === 'blush' ? String(!!(s.look && (s.look as any).blush)) : s.id; }
 export function sampleOwned(h: Hero | null, b: Booth, s: BoothSample): boolean {
   const own = (h && h.wardrobe && (h.wardrobe.own as any) && (h.wardrobe.own as any)[b.key]) || [];
@@ -209,13 +250,13 @@ export function sampleWorn(h: Hero | null, b: Booth, s: BoothSample): boolean {
   if (b.key === 'blush') return String(!!cur.blush) === sampleValue(b, s);
   return String(cur[b.key] ?? '').toLowerCase() === String(s.id).toLowerCase();
 }
-export function sampleOffer(h: Hero | null, b: Booth, s: BoothSample): Offer {
-  const base: Offer = { kind: 'look', coins: 0, points: +(b.price || 0) || 0, can: false, why: '', poor: false, req: null, okText: '', note: '', rank: '', thief: 1, foreign: 1 };
+export function sampleOffer(h: Hero | null, b: Booth, s: BoothSample, env?: PriceEnv): Offer {
   if (h && sampleOwned(h, b, s)) {
     const worn = sampleWorn(h, b, s);
-    return { ...base, kind: 'wear', can: !worn, why: worn ? 'Уже надето.' : h.busy ? 'Герой занят.' : '', req: { path: '/api/wear', body: { field: b.key, value: sampleValue(b, s) } }, okText: 'Надето' };
+    const base: Offer = { kind: 'wear', coins: 0, list: 0, can: !worn, why: worn ? 'Уже надето.' : h.busy ? 'Герой занят.' : '', poor: false, req: { path: '/api/wear', body: { field: b.key, value: sampleValue(b, s) } }, okText: 'Надето', note: '', rank: '', thief: 1, foreign: 1, home: false, qmax: 1 };
+    return base;
   }
-  return { ...base, note: `Облик — только за баллы канала: на стриме, в Шатре, кабинка «${b.title || ''}», образец №${s.n} — ${pts(b.price || 0)} баллов.` };
+  return offerOf(lookItem(b, s), 'tent', env ? { ...env, hero: h } : { hero: h });
 }
 
 /** Item shape the UI card builders expect (src/ui/card.ts cardHtml). */

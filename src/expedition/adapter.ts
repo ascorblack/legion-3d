@@ -280,7 +280,7 @@ const baseOf = (role: string) => BASE_CMD[role as Role] || 'удар';
 export const ZONE_RU = ['щиты', 'ближний бой', 'стрелки и маги', 'жрецы'] as const;
 export const HOW_RU: Record<string, string> = { win: 'Победа!', away: 'Враги сбежали', lose: 'Отряд разбит', retreat: 'Отступление' };
 
-export interface AdaptCtx { login: string; role: string; roster: Roster }
+export interface AdaptCtx { login: string; role: string; roster: Roster; /** /api/me q2 (quest.js q2On, 08.11) */ q2?: boolean }
 
 /* ------------------------------------------------------------------ the adapter */
 
@@ -315,7 +315,7 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   s.roll = q.roll ? { by: str(q.roll.by), n: num(q.roll.n), tier: str(q.roll.tier) } : null;
   s.late = arr<[number, string, number]>(q.late);
   // site 08.11 (quest.js pbHtml): only the place buttons the site shows this hero — role, in the fight, lair move made
-  s.placeActions = placeButtons(q, myRole);
+  s.placeActions = placeButtons(q, myRole, !!c.q2);
   const me = { login: c.login, role: myRole, in: inParty };
   // 28.10 (empty-party): nobody joined — the site shows only that; we show the empty gather place, nothing to type
   if (emptyParty(q)) {

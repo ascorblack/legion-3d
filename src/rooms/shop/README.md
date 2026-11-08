@@ -16,7 +16,7 @@ looking to −Z). Adding a scene = one function in `SHOP_SCENES` (shop/index.ts)
 
 | file | what |
 |---|---|
-| `common/stock.ts` | `GET /api/city/stock` types + cache, `stockOf/goodsOf/standsOf`, the site's purchase rules (`offerOf`, `sampleOffer`: coins vs channel points, thief ×k, foreign town lock/×k, materials via /api/buymat, tent looks → /api/wear) |
+| `common/stock.ts` | `GET /api/city/stock` types + cache, `stockOf/goodsOf/standsOf`, the site's purchase rules (`offerOf`, `buyReq`, `sampleOffer`: coins only since 08.11 — «сейчас не купить» without `cs`, thief ×k, foreign town / «край» ×k and lock, quantity `n`, lv3 `shopView`, materials via /api/buymat, tent samples bought for coins as `look-<booth>-<id>` (`lookItem`), owned ones → /api/wear) |
 | `common/kit.ts` | `RoomKit`: static batch (world `Batch`, ~10 draw calls), prop-kit parts baked in, shells (cutaway entrance wall + vestibule for the TP camera), windows, lanterns, signs, exit door (one-sided hit plane), collision solids (`free/groundAt/solidTop`), camera colliders, prioritised lights (`light(…, prio)`: the quality cap keeps the highest priorities), `splash()` fake light pools (one additive draw call) |
 | `common/decor.ts` | set dressing baked into the batch: bunting, string lights, baskets, sacks, plants, candles, wall lamps (+ light pools), cloths, paintings, hanging herbs, stools, books, mugs, rugs, braziers, wall shelves |
 | `common/items.ts` | item models: registry (`itemModels`) first for gear keys, local models otherwise (avatar weapon/shield/hat parts, armour mannequins, charms, potions, food by name, star/sphere); `bakeModels` merges all goods into one toon mesh + outline and keeps per-good vertex ranges |

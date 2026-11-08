@@ -42,7 +42,8 @@ function sitePb(): ((v: unknown, role: string) => string) | null {
   const parts = ['meIn', 'deadIn', 'pbWarn', 'pbTip', 'pbHtml'].map((n) => fnSource(QJ, n));
   const consts = ['GROUPS', 'PB_ATK'].map((n) => constSrc(QJ, n));
   if (parts.some((p) => !p) || consts.some((c) => !c)) return null;
-  const ctx: Record<string, unknown> = { esc, qaOn: () => true, lineSt: () => '', PBA: { k: '', at: 0 }, Date, Set, String, Math, X: null };
+  // q2On: quest.js 08.11 afternoon (hero.q2 — off here; test/site-1108b.test.ts runs it on)
+  const ctx: Record<string, unknown> = { esc, qaOn: () => true, q2On: () => false, lineSt: () => '', PBA: { k: '', at: 0 }, Date, Set, String, Math, X: null };
   vm.createContext(ctx);
   vm.runInContext(`${consts.join('\n')}\n${parts.join('\n')}\nglobalThis.__f = pbHtml;`, ctx, { timeout: 5000 });
   return (v, role) => { ctx.X = { say: () => {}, login: () => 'player1', hero: () => ({ role, money: 100 }), moneyText: (n: number) => `${n} м` }; return (ctx.__f as (v: unknown) => string)(v); };

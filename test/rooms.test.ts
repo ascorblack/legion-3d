@@ -76,14 +76,14 @@ describe('stock', () => {
     expect(offerOf(it, 'forge', env(heroOf({ money: 100 }))).poor).toBe(true);
     expect(offerOf(it, 'forge', env(heroOf({ money: 9999, ghost: true }))).why).toBe('Призраку не продают.');
     const none = offerOf(it, 'forge', env(null));
-    expect(none.kind).toBe('points'); expect(none.can).toBe(false); expect(none.req).toBeNull();
+    expect(none.kind).toBe('closed'); expect(none.can).toBe(false); expect(none.req).toBeNull();
   });
 
-  it('without hero.cs goods are «купить можно на стриме» for channel points', () => {
+  it('without hero.cs goods are «сейчас не купить» with their coin price (08.11: no more channel points)', () => {
     const it = ST.forge!.stands![0].top![0] as StockItem;
     const o = offerOf(it, 'forge', env(heroOf({ cs: undefined })));
-    expect(o.kind).toBe('points'); expect(o.points).toBe(400); expect(o.req).toBeNull();
-    expect(o.note).toContain('400 баллов');
+    expect(o.kind).toBe('closed'); expect(o.list).toBe(32); expect(o.req).toBeNull();
+    expect(o.note).toBe('Покупки в «Городе» тебе пока закрыты.');
   });
 
   it('thief mark-up and foreign towns (best deals locked)', () => {
@@ -101,10 +101,11 @@ describe('stock', () => {
     expect(o.kind).toBe('mat'); expect(o.coins).toBe(300);
     expect(o.req).toEqual({ path: '/api/buymat', body: { mat: 'star' } });
     expect(offerOf(star, 'forge', env(heroOf({ money: 5000, thK: 2 }))).req!.body).toEqual({ mat: 'star', ack: 1 });
-    expect(offerOf(star, 'forge', env(heroOf({ ef: undefined }))).kind).toBe('points');
+    expect(offerOf(star, 'forge', env(heroOf({ ef: undefined }))).kind).toBe('closed');
+    expect(offerOf(star, 'forge', env(heroOf({ ef: undefined }))).note).toBe('За монеты - когда откроется заточка.');
   });
 
-  it('tent looks: owned → /api/wear, else points on stream', () => {
+  it('tent looks: owned → /api/wear, else bought for coins (08.11: look-<booth>-<id>)', () => {
     const T = ST.tent as TentStock, shape = T.booths![0];
     const h = heroOf();   // owns shapes tall + bean, wears bean
     const worn = sampleOffer(h, shape, shape.samples!.find((s) => s.id === 'bean')!);
@@ -112,7 +113,8 @@ describe('stock', () => {
     const tall = sampleOffer(h, shape, shape.samples!.find((s) => s.id === 'tall')!);
     expect(tall.kind).toBe('wear'); expect(tall.req).toEqual({ path: '/api/wear', body: { field: 'shape', value: 'tall' } });
     const box = sampleOffer(h, shape, shape.samples!.find((s) => s.id === 'box')!);
-    expect(box.kind).toBe('look'); expect(box.req).toBeNull(); expect(box.points).toBe(3000);
+    expect(box.kind).toBe('coins'); expect(box.coins).toBe(3000);
+    expect(box.req).toEqual({ path: '/api/cityBuy', body: { item: 'look-shape-box', price: 3000 } });
   });
 });
 

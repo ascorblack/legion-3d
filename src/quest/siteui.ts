@@ -81,7 +81,7 @@ function skipped(el: Element, scope: Element): boolean {
   return false;
 }
 function groupOf(el: Element, scope: Element): Element | null {
-  for (let p = el.parentElement; p && p !== scope; p = p.parentElement) if (has(p, 'qa-sel') || has(p, 'qa-pad') || has(p, 'qa-row') || has(p, 'q-pbg') || has(p, 'q-pzc') || has(p, 'q-hwg')) return p;
+  for (let p = el.parentElement; p && p !== scope; p = p.parentElement) if (has(p, 'qa-sel') || has(p, 'qa-pad') || has(p, 'qa-row') || has(p, 'q-pbg') || has(p, 'q-pbc') || has(p, 'q-pzc') || has(p, 'q-hwg')) return p;
   return null;
 }
 function titleOf(g: Element | null): string | undefined {
@@ -89,6 +89,7 @@ function titleOf(g: Element | null): string | undefined {
   if (has(g, 'qa-sel')) { const s = g.querySelector('span'); return (s && norm(s.textContent).replace(/:$/, '')) || norm(g.getAttribute('aria-label')) || undefined; }
   if (has(g, 'qa-row') && has(g.parentElement, 'q-pbg')) return titleOf(g.parentElement);   // place buttons: «Помочь своим», «Уйти из боя»
   if (has(g, 'q-pbg')) { const s = g.querySelector('span.muted'); return s ? norm(s.textContent) || undefined : undefined; }
+  if (has(g, 'q-pbc')) return norm(g.getAttribute('aria-label')) || undefined;   // 08.11 (q2): «отступаем» in the corner, «Уйти из боя»
   return undefined;
 }
 function labelOf(el: Element): { label: string; sub?: string } {

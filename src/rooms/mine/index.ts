@@ -44,8 +44,11 @@ export { MineClient } from './net';
 export { MineModel } from './state';
 export { MineScene } from './scene';
 
-/** Mine id of the current city: district towns have their own mine, the fair (home city) — 'home'. */
-export function mineIdOf(layoutId: string | undefined): string { return !layoutId || layoutId === 'fair' || layoutId === 'fairc' ? 'home' : layoutId; }
+/** Mine id of the current city. Site 08.11 (city.js mine door: `const c = "home"`): every town's mine door opens the
+ *  channel's one mine 'home' (district towns no longer have their own). The layout id is kept for a future change. */
+export function mineIdOf(layoutId: string | undefined): string { void layoutId; return 'home'; }
+/** city.js (08.11): the mine door while the channel's mine (hero.mn.home) is not open. */
+export const MINE_NO_CITY = 'Шахта канала откроется, когда у канала появится свой город - захватите округ на стриме';
 
 export interface MineRoomOpts {
   /** Inject a client (dev page / tests with a fake API). */
@@ -101,7 +104,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   let c = o.c;
   if (!c) c = takeMineKey() || undefined;
   if (!c) { try { c = mineIdOf(ctx.layout().id); } catch { c = 'home'; } }
-  if (!o.client && hero && hero.mn && !hero.mn[c] && !hero.mn[mineBase(c)]) throw new Error('Эта шахта закрыта');
+  if (!o.client && hero && hero.mn && !hero.mn[c] && !hero.mn[mineBase(c)]) throw new Error(mineBase(c) === 'home' ? MINE_NO_CITY : 'Эта шахта закрыта');
   // the site's own mine open (F8 in its 2D mine): it stays open, hidden under the 3D one — closing it would leave the mine,
   // and only the live City can open it again (a city enter inside the mine). Our enter takes the presence (one per page
   // tab key: the site's mine shows «Шахта открыта в другой вкладке» until F8 gives it back — src/features/mine-hold.ts)

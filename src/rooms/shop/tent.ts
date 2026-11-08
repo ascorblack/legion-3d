@@ -1,8 +1,9 @@
 /**
  * «Шатёр» (wardrobe looks): a round striped tent, a curtained booth per wardrobe category (stock.booths — shape, colour,
  * eyes, mouth, blush, hat, accessory, aura) with a mannequin wearing YOUR look plus the booth's sample (try-on), and the
- * amulets (stock.amulets, coins) on the velvet table in the middle. Looks are points-only on stream; owned ones are worn
- * with /api/wear (like the site's tent).
+ * amulets (stock.amulets, coins) on the velvet table in the middle. Since 08.11 the booth samples are bought for coins
+ * (b-tent.js ask → buyAsk: `look-<booth>-<id>`, the booth's price; src/rooms/common/stock.ts lookItem / sampleOffer);
+ * owned ones are worn with /api/wear (like the site's tent).
  */
 import * as THREE from 'three';
 import type { RoomBase } from '../common/base';
@@ -10,7 +11,9 @@ import { hitBox, inward, ONE_SIDED } from '../common/kit';
 import { stringLights, potPlant, stool, candle, painting, dot } from '../common/decor';
 import { GEO } from '../../world/batch';
 import type { TentStock, Booth, BoothSample } from '../common/stock';
-import { sampleOwned, sampleWorn } from '../common/stock';
+import { sampleOwned, sampleWorn, sampleOffer } from '../common/stock';
+import { moneyText } from '../../ui/money';
+import { coinStyle } from '../../ui/data';
 import { stripeColors } from '../../world/kit';
 import { createAvatarKit, appearanceFrom } from '../../avatar';
 import type { Avatar } from '../../contracts/modules';
@@ -125,7 +128,8 @@ export function buildTent(R: RoomBase, st: TentStock | null): void {
     K.geo('wood', new THREE.CylinderGeometry(0.5, 0.55, 0.12, 20), new THREE.Matrix4().makeTranslation(cx, 0.06, cz), Th.base);
     K.sign(`${b.icon ? '' : ''}${b.title || b.key}`, cx - Math.sin(ang) * 0.02, 2.72, cz - Math.cos(ang) * 0.02, 1.2, face, ch ? { ...Th.sign, rim: GOLDC } : Th.sign);
     K.solid(cx - 0.6, cx + 0.6, cz - 0.6, cz + 0.6, Infinity, false);
-    R.addTag({ name: b.title || b.key, rarity: b.key === 'aura' ? 'legendary' : 'epic', text: `${(+(b.price || 0)).toLocaleString('ru-RU')} б.` }, [cx - Math.sin(ang) * 0.62 + tx * 0.45, 0.95, cz - Math.cos(ang) * 0.62 + tz * 0.45, face, -0.2]);
+    // the booth's price tag: coins since 08.11 (cityfair.js priceTag «любой образец» — no points gem)
+    R.addTag({ name: b.title || b.key, rarity: b.key === 'aura' ? 'legendary' : 'epic', ...(+(b.price || 0) > 0 ? { coins: +(b.price || 0) } : { text: 'не продаётся' }) }, [cx - Math.sin(ang) * 0.62 + tx * 0.45, 0.95, cz - Math.cos(ang) * 0.62 + tz * 0.45, face, -0.2]);
     // mannequin: your look + the first sample (or the one you wear)
     const samples = b.samples || [];
     let av: Avatar | null = null;
@@ -145,12 +149,18 @@ export function buildTent(R: RoomBase, st: TentStock | null): void {
       R.combatFigure(av, cx, 0.12, cz, b.key);   // «Драки с котиками»: it can be knocked off its stand (src/combat/room.ts)
     } catch (e) { console.warn('[l3d rooms] mannequin', b.key, e); }
     const hit = hitBox(cx, 1.2, cz, 1.2, 2.4, 1.2, 'room:hit:booth:' + b.key);
+    // the prompt names the price (coins, 08.11): the card then buys exactly the sample picked there
+    const boothLabel = () => {
+      const t = b.title || b.key, of = cur ? sampleOffer(R.env.store.hero as typeof hero, b, cur, R.priceEnv()) : null, p = +(b.price || 0) || 0;
+      if (of && of.kind === 'coins') return `Примерить и купить: ${t} — ${moneyText(of.coins, of.coins, coinStyle())}`;
+      return `Примерить: ${t}${of && of.kind === 'wear' ? '' : p > 0 ? ' — ' + moneyText(p, p, coinStyle()) : ''}`;
+    };
     R.interact({
-      id: 'room:booth:' + b.key, label: `Примерить: ${b.title || b.key}`, icon: b.icon || '🪞', hit, reach: 4.5, proximity: false,
+      id: 'room:booth:' + b.key, label: boothLabel(), icon: b.icon || '🪞', hit, reach: 4.5, proximity: false,
       use: () => {
         const card = R.ensureCard();
         if (!cur) return;
-        card.openSample(b, cur, (s) => { cur = s; if (av) { av.setAppearance(appFor(s)); const m = mannequins.find((q) => q.av === av); av.setLod(m ? m.lod : 0); av.play('cheer'); } });
+        card.openSample(b, cur, (s) => { cur = s; if (av) { av.setAppearance(appFor(s)); const m = mannequins.find((q) => q.av === av); av.setLod(m ? m.lod : 0); av.play('cheer'); } }, R.priceEnv);
       },
     });
   });

@@ -1,8 +1,9 @@
 /**
  * Buy card (DOM, Shadow DOM with the game UI's own CSS): the item card of src/ui/card.ts (stats, comparison with the
  * equipped item, description) + the price and the site's purchase dialog: «Купить…» → «Купить «X» за Y? Да / Нет» →
- * POST exactly like the site (city.js buyAsk → act) → toast with the result. Stream-only, locked and look goods get
- * the site's explanations instead of a buy button.
+ * POST exactly like the site (cityshop.js buyAsk → act: the same id, price, quantity `n` and `town`) → toast with the result.
+ * Tent samples (08.11) are bought the same way (lookItem: `look-<booth>-<id>`). Closed (no coin purchases for this hero)
+ * and locked goods get the site's explanations instead of a buy button.
  *
  * While open, gameplay input is off and the pointer lock is released; Esc / E / «Закрыть» close it.
  */
@@ -12,7 +13,7 @@ import { CSS } from '../../ui/styles';
 import { cardHtml } from '../../ui/card';
 import { esc, rarOf, coinStyle, CLASS_NAME } from '../../ui/data';
 import { moneyParts } from '../../ui/money';
-import { offerOf, sampleOffer, tipItem, LOCK_T, type Offer, type PriceEnv, type StockItem, type Booth, type BoothSample } from './stock';
+import { offerOf, sampleOffer, buyReq, placeName, tipItem, LOCK_T, type Offer, type PriceEnv, type StockItem, type Booth, type BoothSample } from './stock';
 import { RARITY_HEX } from './items';
 import { setHtml } from '../../core/html';
 
@@ -49,6 +50,9 @@ const EXTRA_CSS = String.raw`
 .rm-bal { margin-top: 8px; font: 600 12.5px/1.45 var(--l3d-tx); color: var(--l3d-mute); } .rm-bal b { color: var(--l3d-ink); }
 .rm-q .lead { margin: 4px 0 0; font: 700 17px/1.3 var(--l3d-hd); }
 .rm-q .lead .money { white-space: nowrap; color: var(--l3d-gold); }
+.rm-qty { display: flex; align-items: center; gap: 8px; margin-top: 8px; font: 700 13px/1 var(--l3d-tx); color: var(--l3d-mute); }
+.rm-qty button { width: 30px; height: 30px; border-radius: 50%; border: 0; cursor: pointer; background: #ffffff14; color: var(--l3d-ink); font: 800 16px/1 var(--l3d-tx); }
+.rm-qty b { min-width: 22px; text-align: center; font: 400 17px/1 var(--l3d-num); color: var(--l3d-ink); }
 .rm-hint { margin-top: 10px; font: 600 11.5px/1.3 var(--l3d-tx); color: var(--l3d-mute); text-align: center; }
 .rm-hint kbd { display: inline-block; min-width: 18px; padding: 2px 5px; border-radius: 6px; background: #ffffff14; font: 800 11px/1 var(--l3d-tx); color: var(--l3d-ink); }
 .rm-samples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -65,12 +69,11 @@ const EXTRA_CSS = String.raw`
 export function moneyHtml(n: number, ref?: number): string {
   return `<span class="rm-money money">${moneyParts(n, ref, coinStyle()).map(([k, v, w]) => `<span class="p"><i class="coin ${k}"></i><b>${v}</b> ${esc(w)}</span>`).join('')}</span>`;
 }
-const ptsHtml = (n: number) => `<b>${(+n || 0).toLocaleString('ru-RU')}</b> баллов канала`;
 const kx = (k: number) => '×' + String(k).replace('.', ',');
 
 type View =
-  | { t: 'good'; it: StockItem; b: string; env: () => PriceEnv; step: 'card' | 'ask' | 'busy' }
-  | { t: 'sample'; booth: Booth; s: BoothSample; step: 'card' | 'ask' | 'busy'; onPick?: (s: BoothSample) => void };
+  | { t: 'good'; it: StockItem; b: string; env: () => PriceEnv; step: 'card' | 'ask' | 'busy'; qn: number }
+  | { t: 'sample'; booth: Booth; s: BoothSample; step: 'card' | 'ask' | 'busy'; qn: number; onPick?: (s: BoothSample) => void; env?: () => PriceEnv };
 
 export class BuyCard {
   private host: HTMLElement;
@@ -99,16 +102,16 @@ export class BuyCard {
    */
   openGood(it: StockItem, b: string, env: () => PriceEnv, step: 'card' | 'ask' = 'card'): void {
     const was = !!this.view;
-    this.view = { t: 'good', it, b, env, step };
+    this.view = { t: 'good', it, b, env, step, qn: 1 };
     if (!was) this.shown(true);
     this.render();
   }
   /** The good the open card is bound to (null for samples / closed). */
   get boundTo(): StockItem | null { return this.view && this.view.t === 'good' ? this.view.it : null; }
-  /** Card for a tent booth sample (try-on is done by the caller via onPick). */
-  openSample(booth: Booth, s: BoothSample, onPick?: (s: BoothSample) => void): void {
+  /** Card for a tent booth sample (try-on is done by the caller via onPick); `env` = the room's prices (coins since 08.11). */
+  openSample(booth: Booth, s: BoothSample, onPick?: (s: BoothSample) => void, env?: () => PriceEnv): void {
     const was = !!this.view;
-    this.view = { t: 'sample', booth, s, step: 'card', onPick };
+    this.view = { t: 'sample', booth, s, step: 'card', qn: 1, onPick, env };
     if (!was) this.shown(true);
     this.render();
   }
@@ -138,6 +141,8 @@ export class BuyCard {
     if (e.code === 'Escape' || e.code === 'KeyE') {
       e.preventDefault(); e.stopImmediatePropagation();
       if (this.view.step === 'ask') { this.view.step = 'card'; this.render(); } else if (this.view.step !== 'busy') this.close();
+    } else if ((e.code === 'ArrowLeft' || e.code === 'ArrowRight') && this.view.step === 'ask') {
+      if (this.box.querySelector('[data-q]')) { e.preventDefault(); e.stopImmediatePropagation(); this.qty(e.code === 'ArrowRight' ? 1 : -1); }
     } else if (e.code === 'Enter') {
       const b = this.box.querySelector<HTMLButtonElement>('[data-primary]:not([disabled])');
       if (b) { e.preventDefault(); e.stopImmediatePropagation(); b.click(); }
@@ -149,7 +154,13 @@ export class BuyCard {
   private offer(): Offer | null {
     const v = this.view, h = this.H.store.hero;
     if (!v) return null;
-    return v.t === 'good' ? offerOf(v.it, v.b, v.env()) : sampleOffer(h, v.booth, v.s);
+    return v.t === 'good' ? offerOf(v.it, v.b, v.env()) : sampleOffer(h, v.booth, v.s, v.env ? v.env() : undefined);
+  }
+  /** «−» / «+» of the quantity (cityshop.js buyAsk data-q): 1 … qmax. */
+  private qty(d: number) {
+    const v = this.view, of = this.offer();
+    if (!v || !of || v.step !== 'ask') return;
+    v.qn = Math.max(1, Math.min(of.qmax || 1, v.qn + d)); this.render();
   }
 
   render(): void {
@@ -174,10 +185,11 @@ export class BuyCard {
       price = `<div class="rm-price"><div class="lbl">Цена</div><div class="rm-pts">🔒 ${LOCK_T}</div></div><p class="note warn">${esc(of.note)}</p>`;
       acts = `<button type="button" class="btn ghost" data-close data-primary>Понятно</button>`;
     } else if (of.kind === 'coins' || of.kind === 'mat') {
-      price = `<div class="rm-price"><div class="lbl">Цена</div>${moneyHtml(of.coins)}${of.thief > 1 ? `<div class="rm-bal">Для тебя за воровство цена ${kx(of.thief)}.</div>` : ''}${of.foreign > 1 && of.kind === 'coins' ? `<div class="rm-bal">Чужой округ: цена ${kx(of.foreign)}.</div>` : ''}${of.rank ? `<div class="rm-bal">Звание не ниже «${esc(of.rank)}».</div>` : ''}</div>`;
+      price = `<div class="rm-price"><div class="lbl">Цена</div>${moneyHtml(of.coins)}${of.thief > 1 ? `<div class="rm-bal">Для тебя за воровство цена ${kx(of.thief)}.</div>` : ''}${of.foreign > 1 && of.kind === 'coins' ? `<div class="rm-bal">${of.home ? 'Край' : 'Чужой округ'}: цена ${kx(of.foreign)}.</div>` : ''}${of.rank ? `<div class="rm-bal">Звание не ниже «${esc(of.rank)}».</div>` : ''}</div>`;
       if (ask) {
-        const have = +(h?.money || 0);
-        price += `<div class="rm-q"><p class="lead">Купить «${esc(v.t === 'good' ? v.it.name : '')}» за ${moneyHtml(of.coins)}?</p>
+        const have = +(h?.money || 0), qn = Math.max(1, Math.min(of.qmax || 1, v.qn)), sum = of.coins * qn;
+        const qty = of.qmax > 1 ? `<div class="rm-qty" role="group" aria-label="Сколько штук"><button type="button" data-q="-1" aria-label="Меньше">−</button><b aria-live="polite">${qn}</b><button type="button" data-q="1" aria-label="Больше">+</button><small>шт., до ${of.qmax}</small></div>` : '';
+        price += `<div class="rm-q"><p class="lead">Купить «${esc(v.t === 'good' ? v.it.name : v.s.name)}» за ${moneyHtml(sum)}?</p>${qty}
           <div class="rm-bal">У тебя: ${moneyHtml(have, of.coins)}${of.poor ? `<br>Не хватает: ${moneyHtml(of.coins - have, of.coins)}` : ''}</div>${of.why ? `<div class="rm-why">${esc(of.why)}</div>` : ''}</div>`;
         acts = v.step === 'busy' ? `<button type="button" class="btn" disabled>Секунду…</button>`
           : `<button type="button" class="btn gold" data-yes data-primary${of.why ? ' disabled' : ''}>Да</button><button type="button" class="btn ghost" data-no>Нет</button>`;
@@ -190,9 +202,10 @@ export class BuyCard {
       acts = v.step === 'busy' ? `<button type="button" class="btn" disabled>Секунду…</button>`
         : `<button type="button" class="btn gold" data-yes data-primary${of.why ? ' disabled' : ''}>Надеть</button><button type="button" class="btn ghost" data-close>Закрыть</button>`;
     } else {
-      // points / look: the site's «купить можно на стриме»
-      price = `<div class="rm-price"><div class="lbl">На стриме</div>${of.points ? `<div class="rm-pts">${ptsHtml(of.points)}</div>` : ''}${of.rank ? `<div class="rm-bal">Звание не ниже «${esc(of.rank)}».</div>` : ''}</div>
-        <p class="note amber">«${esc(v.t === 'good' ? v.it.name : v.s.name)}» — купить можно на стриме. ${esc(of.note)}</p>${of.why ? `<div class="rm-why">${esc(of.why)}</div>` : ''}`;
+      // closed: the site's «сейчас не купить» (08.11) — the good's coin price (cardHtml «в <place>, за монеты» / popHtml «Пока не продаётся»)
+      const place = placeName(v.t === 'good' ? v.b : 'tent', h);
+      price = `<div class="rm-price"><div class="lbl">Цена</div>${of.list ? moneyHtml(of.list) : '<div class="rm-pts">Пока не продаётся</div>'}<div class="rm-bal">в ${esc(place)}, за монеты${of.rank ? `, звание не ниже «${esc(of.rank)}»` : ''}</div></div>
+        <p class="note amber">«${esc(v.t === 'good' ? v.it.name : v.s.name)}» — сейчас не купить. ${esc(of.note)}</p>${of.why ? `<div class="rm-why">${esc(of.why)}</div>` : ''}`;
       acts = `<button type="button" class="btn ghost" data-close data-primary>Понятно</button>`;
     }
     const fullBag = v.t === 'good' && h?.sg && typeof h.sg === 'object' && Number((h.sg as { used?: number }).used) === Number((h.sg as { cap?: number }).cap);
@@ -210,10 +223,11 @@ export class BuyCard {
     q('[data-no]').forEach((b) => b.onclick = () => { if (this.view) { this.view.step = 'card'; this.render(); } });
     q('[data-buy]').forEach((b) => b.onclick = () => { if (this.view) { this.view.step = 'ask'; this.render(); } });
     q('[data-yes]').forEach((b) => b.onclick = () => this.send());
+    q('[data-q]').forEach((b) => b.onclick = () => this.qty(+(b.dataset.q || 0)));
     q('[data-smp]').forEach((b) => b.onclick = () => {
       const v = this.view; if (!v || v.t !== 'sample') return;
       const s = (v.booth.samples || []).find((x) => x.pos === b.dataset.smp); if (!s) return;
-      v.s = s; v.step = 'card'; v.onPick?.(s); this.render();
+      v.s = s; v.step = 'card'; v.qn = 1; v.onPick?.(s); this.render();
     });
     const p = this.box.querySelector<HTMLButtonElement>('[data-primary]:not([disabled])') || this.box.querySelector<HTMLButtonElement>('[data-close]');
     try { p?.focus({ preventScroll: true }); } catch { /* ignore */ }
@@ -222,12 +236,13 @@ export class BuyCard {
   private async send() {
     const v = this.view, of = this.offer();
     if (!v || !of || !of.req || of.why || v.step === 'busy') return;
+    const rq = buyReq(of, v.qn, v.t === 'good' ? v.it.name : v.s.name)!;
     v.step = 'busy'; this.render();
     let r: ApiResult | null = null;
-    try { r = await this.H.actions.post<ApiResult>(of.req.path, of.req.body); } catch (e) { r = { ok: false, error: String((e as Error)?.message || e) }; }
+    try { r = await this.H.actions.post<ApiResult>(rq.path, rq.body); } catch (e) { r = { ok: false, error: String((e as Error)?.message || e) }; }
     if (this.view !== v) return;   // closed meanwhile
     if (!r || !r.ok) { v.step = 'card'; this.render(); this.H.toast((r && r.error) || 'Не получилось', true); return; }
-    this.H.toast(of.okText || 'Готово');
+    this.H.toast(rq.okText || 'Готово');
     try { window.dispatchEvent(new CustomEvent('l3d:sfx', { detail: { id: 'shop.buy' } })); } catch { /* no sound */ }
     this.H.onDone?.();
     this.closeByClick();

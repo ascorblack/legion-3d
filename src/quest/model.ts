@@ -782,7 +782,11 @@ export const PB_GROUPS: readonly [string, string][] = [['', ''], ['tg', 'Пом�
  * (whatever the role); after my move in the lair (`lair.acted`) the `act` group goes. Ordered by the site's groups.
  * Nothing when the hero has fallen (deadIn).
  */
-export function placeButtons(v: any, heroRole: unknown): PlaceButton[] {
+/** quest.js q2On() (08.11): /api/me `q2` — the new expedition tab (say history, «отступаем» in the corner, «примерно тут»). */
+export const q2Of = (h: unknown): boolean => !!(h && typeof h === 'object' && (h as { q2?: unknown }).q2);
+/** quest.js pbHtml (08.11, q2): «отступаем» leaves the groups for the corner block `.q-pbc` («Уйти из боя»), after them. */
+export const PB_CORNER = 'отступаем';
+export function placeButtons(v: any, heroRole: unknown, q2 = false): PlaceButton[] {
   const all: PlaceButton[] = v && v.pb && Array.isArray(v.pb.b) ? v.pb.b.filter((x: unknown) => isObj(x) && typeof (x as PlaceButton).t === 'string') : [];
   if (!all.length || deadIn(v)) return [];
   const r0 = String(heroRole || 'recruit'), role = r0 === 'legion' ? 'legionary' : r0;
@@ -795,7 +799,9 @@ export function placeButtons(v: any, heroRole: unknown): PlaceButton[] {
   let list = all.filter((x) => roleOk(x) && grpOk(x));
   if (!list.some(atk)) list = all.filter((x) => (roleOk(x) || atk(x)) && grpOk(x));
   if (v.lair && v.lair.acted) list = list.filter((x) => (x.g || '') !== 'act');
-  return PB_GROUPS.flatMap(([g]) => list.filter((x) => (x.g || '') === g));
+  const corner = q2 ? list.filter((x) => x.t === PB_CORNER) : [];
+  if (corner.length) list = list.filter((x) => !corner.includes(x));
+  return PB_GROUPS.flatMap(([g]) => list.filter((x) => (x.g || '') === g)).concat(corner);
 }
 
 /** battle.js FOE_TWO (08.11 adds `side`): the six ambush slots of a two-front battle, by foe index; later foes stand in the

@@ -34,7 +34,7 @@ describe('the camp is named by the channel style', () => {
     expect(pageCampName(null).name).toBe(CAMP_DEFAULT);
   });
   it('layoutName: fair / camp by style / district by the list', () => {
-    expect(layoutName({ id: 'fair', styleId: 'cats' })).toBe('Ярмарка');
+    expect(layoutName({ id: 'fair', styleId: 'cats' })).toBe('Рябинень');   // site 08.11
     expect(layoutName({ id: 'camp', styleId: 'cats' })).toBe('Кошачий привал');
     expect(layoutName({ id: 'camp', styleId: 'legion' })).toBe('Перепутье');
     expect(layoutName({ id: 'd7', styleId: 'cats' }, 'Сосновый Брод')).toBe('Сосновый Брод');
@@ -74,11 +74,11 @@ describe('townsView: the site\'s town picker as data', () => {
   it('Ярмарка, the camp by style, then the district towns with icon / size / biome / prices (city.js townPick)', () => {
     const v = townsView(towns());
     expect(v.rows.map((r) => r.id)).toEqual(['fair', 'camp', 'd3', 'd7', 'd12']);
-    expect(v.rows[0]).toMatchObject({ name: 'Ярмарка', icon: '🎪', sub: 'всегда открыта', current: true, disabled: false });
+    expect(v.rows[0]).toMatchObject({ name: 'Рябинень', icon: '🎪', sub: '★ · «Ярмарочный Край»', current: true, disabled: false });
     expect(v.rows[1]).toMatchObject({ name: 'Кошачий привал', icon: '⛺', current: false, disabled: false });
     expect(v.rows[2]).toMatchObject({ name: 'Медовая Падь', icon: '🌾', sub: '★ деревня · луга · округ канала' });
     expect(v.rows[3].sub).toBe('★★ посёлок · тайга · цены ×1,5');
-    expect(v.rows[4].sub).toBe('★★★ столица · льды · цены ×2 · край отряда · отряд в округе');
+    expect(v.rows[4].sub).toBe('★★★ столица · льды · цены ×2 · отряд в округе');   // 08.11: no «край отряда»
     expect(townsView(towns({ style: 'legion' })).rows[1].name).toBe('Перепутье');
   });
   it('marks the current town (camp, district) and nothing else', () => {
@@ -95,7 +95,7 @@ describe('townsView: the site\'s town picker as data', () => {
     expect(v.rows[1]).toMatchObject({ id: 'camp', disabled: true });
     expect(v.rows[2]).toMatchObject({ id: 'd7', disabled: false });
     const atFair = townsView(towns({}, { ok: true, quest: true, fair: true, list: [] }));
-    expect(atFair.rows[0]).toMatchObject({ disabled: false, sub: 'отряд здесь' });
+    expect(atFair.rows[0]).toMatchObject({ disabled: false, sub: '★ · «Ярмарочный Край»' });
   });
   it("the channel's home district drawn (hm.id, not camp): fair and camp are behind (greyed), the home town is open", () => {
     const v = townsView(towns({ hero: { cp: 1, tw: 1, hm: { id: 'd3' } }, current: 'd3' }));
@@ -114,7 +114,7 @@ describe('townsView: the site\'s town picker as data', () => {
   it('without any access the note says when district towns open', () => {
     const v = townsView(towns({ hero: {} }, { ok: true, list: [] }));
     expect(v.rows.map((r) => r.id)).toEqual(['fair']);
-    expect(v.note).toMatch(/откроются/);
+    expect(v.note).toMatch(/^Других городов пока нет\. Здесь только города вашего канала/);
   });
 });
 

@@ -988,6 +988,83 @@
       "re": "order = \\['R', 'L', 'F'\\]\\.filter",
       "severity": "degrade",
       "why": "src/quest/model.ts foeSideOf fallback for multi-front battles"
+    },
+    {
+      "id": "b-tent.js look buy (look-<booth>-<id>, coins)",
+      "file": "b-tent.js",
+      "re": "buyAsk\\(\\{ id: 'look-' \\+ b\\.key \\+ '-' \\+ String\\(smp\\.id\\)\\.replace\\(/\\^#/, ''\\), name: smp\\.name, coins: \\+b\\.price \\|\\| 0, look: true, pos: smp\\.pos \\}, 'tent'",
+      "severity": "degrade",
+      "why": "08.11: booth samples are bought for coins through buyAsk — the 3D tent sends the same good (src/rooms/common/stock.ts lookItem / sampleOffer)"
+    },
+    {
+      "id": "cityshop.js buyAsk can (looks too)",
+      "file": "cityshop.js",
+      "re": "const can = !!h && \\(it\\.mat \\? !!\\(h\\.ef && c\\) : csOn\\(\\) && c > 0\\);",
+      "severity": "degrade",
+      "why": "08.11: «Купить» exactly when the site can — `it.look` no longer excluded (src/rooms/common/stock.ts offerOf)"
+    },
+    {
+      "id": "cityshop.js cityBuy body {item, price, n?, town?}",
+      "file": "cityshop.js",
+      "re": "C\\.X\\.act\\('/api/cityBuy', \\{ item: it\\.id, price: c, \\.\\.\\.\\(qn > 1 \\? \\{ n: qn \\} : \\{\\}\\), \\.\\.\\.\\(inTown\\(\\) \\? \\{ town: C\\.TOWN\\.id \\} : \\{\\}\\) \\}",
+      "severity": "degrade",
+      "why": "the 3D buy card sends the same request (src/rooms/common/stock.ts buyReq)"
+    },
+    {
+      "id": "cityshop.js closed goods: «сейчас не купить», coins",
+      "file": "cityshop.js",
+      "re": "^(?=[\\s\\S]*Пока не продаётся)[\\s\\S]*Покупки в «Городе» тебе пока закрыты\\.",
+      "severity": "degrade",
+      "why": "08.11: no channel-points prices any more — closed goods show their coin price (src/rooms/common/stock.ts offerOf kind 'closed', card.ts)"
+    },
+    {
+      "id": "cityshop.js lockedHere !homeHere / shopView goodsOk",
+      "file": "cityshop.js",
+      "re": "lockedHere = \\(it\\) => foreignK\\(\\) > 1 && !homeHere\\(\\) &&[\\s\\S]*LGTownGen\\.goodsOk\\(it\\.id, it\\.rarity, lvB\\)",
+      "severity": "degrade",
+      "why": "the squad's «край» is dearer but not locked; lv3 towns sell by building level (src/rooms/common/stock.ts lockedHere / shopView, src/net/site.ts goodsKeepOf)"
+    },
+    {
+      "id": "city.js TOWN.acc (town prices)",
+      "file": "city.js",
+      "re": "acc: \\{ own: !!t\\.own, k: \\+t\\.k \\|\\| 2, why: t\\.why \\|\\| '', \\.\\.\\.\\(t\\.home \\? \\{ home: 1 \\} : \\{\\}\\) \\}",
+      "severity": "degrade",
+      "why": "the 3D shops' price multiplier in a district town (src/net/town.ts townPriceOf)"
+    },
+    {
+      "id": "city.js homeAway / homeBack (hm.none)",
+      "file": "city.js",
+      "re": "const homeAway = \\(\\) => \\{[^\\n]{0,80}!hm\\.none[\\s\\S]{0,200}const homeBack = \\(\\) => \\{",
+      "severity": "degrade",
+      "why": "08.11: hm.none = the channel has no city yet; fairGone renamed homeAway (src/net/town.ts homeAway / homeBack / homePick)"
+    },
+    {
+      "id": "city.js townShut (.cy-shut, NO_CITY)",
+      "file": "city.js",
+      "re": "const NO_CITY = '[^']+'[\\s\\S]*cy-err cy-shut",
+      "severity": "degrade",
+      "why": "08.11: a closed town without a channel city shuts the City down — the 3D yields to that panel (src/net/site.ts overlay 'shut', src/net/town.ts CITY_SHUT)"
+    },
+    {
+      "id": "city.js one channel mine (c = 'home')",
+      "file": "city.js",
+      "re": "const c = 'home', mn = X\\.hero\\(\\)\\.mn \\|\\| \\{\\};",
+      "severity": "degrade",
+      "why": "08.11: every town's mine door opens the channel's mine (src/rooms/mine/index.ts mineIdOf, src/features/mine-status.ts mineIdOfLayout)"
+    },
+    {
+      "id": "city.js townPick fairOk = T.fair (Рябинень)",
+      "file": "city.js",
+      "re": "fairOk = !!\\(T && T\\.fair\\);[\\s\\S]{0,2000}<b>Рябинень</b>",
+      "severity": "degrade",
+      "why": "08.11: the server opens «Рябинень» (the old fair) per hero (src/net/town.ts townsView)"
+    },
+    {
+      "id": "quest.js q2 corner «отступаем»",
+      "file": "quest.js",
+      "re": "q2On = \\(\\) => !!\\(X && X\\.hero && X\\.hero\\(\\) && X\\.hero\\(\\)\\.q2\\)[\\s\\S]*const corner = q2On\\(\\) \\? list\\.filter\\(\\(x\\) => x\\.t === 'отступаем'\\) : \\[\\];[\\s\\S]*q-pbc",
+      "severity": "degrade",
+      "why": "08.11: hero.q2 moves «отступаем» to the corner block (src/quest/model.ts placeButtons q2, src/quest/siteui.ts .q-pbc group)"
     }
   ]
 }

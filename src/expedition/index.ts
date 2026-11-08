@@ -30,7 +30,7 @@ export interface ViewHost {
   appOf(login: string): Appearance | null;
   style: string;
   quality(): number;
-  me(): { login: string; role: string };
+  me(): { login: string; role: string; q2?: boolean };
   /** ms clock (Date.now by default; dev pages may warp it) */
   now?(): number;
   hint?: string;
@@ -116,7 +116,7 @@ export class ExpeditionView {
       const v = this.buf.pick(this.now(), this.adj());
       this.shown = v;
       const me = this.host.me();
-      const s = adapt(v, { login: me.login, role: me.role, roster: this.roster });
+      const s = adapt(v, { login: me.login, role: me.role, roster: this.roster, q2: !!me.q2 });
       this.state = s;
       if (s.kind !== 'off') sc.setState(s);
       this.hud?.update(s, this.secLeft(s.until));

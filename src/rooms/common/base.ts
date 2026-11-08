@@ -23,7 +23,7 @@ import { Npc, type NpcDef } from './npc';
 import { BuyCard } from './card';
 import { TagAtlas, type TagSpec } from './tags';
 import { bakeModels, itemObject, type Placed } from './items';
-import { offerOf, topIdsOf, LOCK_T, type CityStock, type PriceEnv, type StockItem } from './stock';
+import { offerOf, topIdsOf, LOCK_T, type CityStock, type PriceEnv, type StockItem, type GoodsKeep } from './stock';
 import { separateBoxes } from './hits';
 import { moneyText } from '../../ui/money';
 import { coinStyle } from '../../ui/data';
@@ -48,10 +48,12 @@ export interface RoomEnv {
   hideSitePanel?(): void;
   /** Player feet in room space (m). */
   player(): { x: number; z: number };
-  /** District town: id and price multiplier (foreign town > 1). */
-  town?: { id: string; foreignK: number } | null;
+  /** District town: id and price multiplier (city.js foreignK: a foreign town or the squad's «край» > 1; `home` = «край»). */
+  town?: { id: string; foreignK: number; home?: boolean } | null;
   /** Scene variant override (BuildingDef.scene). */
   variant?: string;
+  /** District town (lv3): which goods its buildings' levels allow (cityshop.js shopView; from the layout, src/net/site.ts). */
+  goodsKeep?: GoodsKeep | null;
   /** /api/me .ench (material prices); optional. */
   ench?: { coins?: { star?: number; sphere?: number } } | null;
 }
@@ -66,8 +68,9 @@ export function envFromCtx(ctx: RoomContext): RoomEnv {
     toast: (t, bad) => ctx.ui.toast(t, bad), exit: () => ctx.exit(),
     showSitePanel: (o) => ctx.showSitePanel(o), hideSitePanel: () => ctx.hideSitePanel(),
     player: () => ({ x: ctx.player.x, z: ctx.player.z }),
-    town: L && L.id && L.id !== 'fair' && L.id !== 'fairc' ? { id: L.id, foreignK: +((L as any).foreignK || 1) || 1 } : null,
+    town: L && L.id && L.id !== 'fair' && L.id !== 'fairc' ? { id: L.id, foreignK: +((L as any).foreignK || 1) || 1, home: !!(L as any).home } : null,
     variant: def && def.scene ? def.scene : undefined,
+    goodsKeep: (L && typeof (L as any).goodsKeep === 'function' ? (L as any).goodsKeep : null) as GoodsKeep | null,
   };
 }
 
@@ -237,24 +240,26 @@ export class RoomBase {
   /** Price environment for the current hero. */
   priceEnv = (): PriceEnv => ({
     hero: this.env.store.hero as Hero | null, ench: this.env.ench || null,
-    foreignK: this.env.town ? this.env.town.foreignK : 1, town: this.env.town ? this.env.town.id : null,
+    foreignK: this.env.town ? this.env.town.foreignK : 1, home: !!(this.env.town && this.env.town.home), town: this.env.town ? this.env.town.id : null,
     topIds: topIdsOf(this.stock),
   });
   /**
    * Prompt label of a good, naming exactly the aimed item: «Купить: Коготок — 32 чешуйки» when it can be bought for
-   * coins here; «Осмотреть: Коготок — на стриме, 400 баллов» / «… — 🔒 после захвата» otherwise.
+   * coins here; «Осмотреть: Коготок — 32 чешуйки, сейчас не купить» / «… — пока не продаётся» / «… — 🔒 после захвата»
+   * otherwise (08.11: every price is in coins, no more channel points).
    */
   goodLabel(it: StockItem, b: string): string {
     const of = offerOf(it, b, this.priceEnv());
     if (of.kind === 'coins' || of.kind === 'mat') return `Купить: ${it.name} — ${moneyText(of.coins, of.coins, coinStyle())}`;
     if (of.kind === 'locked') return `Осмотреть: ${it.name} — 🔒 ${LOCK_T.toLowerCase()}`;
-    return `Осмотреть: ${it.name} — на стриме${of.points ? `, ${of.points.toLocaleString('ru-RU')} баллов` : ''}`;
+    return `Осмотреть: ${it.name} — ${of.list ? `${moneyText(of.list, of.list, coinStyle())}, сейчас не купить` : 'пока не продаётся'}`;
   }
   tagSpec(it: StockItem, b: string, hot = false): TagSpec {
     const of = offerOf(it, b, this.priceEnv());
     if (of.kind === 'coins' || of.kind === 'mat') return { name: it.name, rarity: it.rarity, coins: of.coins, poor: of.poor, hot };
     if (of.kind === 'locked') return { name: it.name, rarity: it.rarity, text: '🔒 после захвата', hot };
-    return { name: it.name, rarity: it.rarity, text: of.points ? `${of.points.toLocaleString('ru-RU')} б.` : 'на стриме', hot };
+    // closed: the good's coin price as the site's tag shows it (cityfair.js priceTag, 08.11 — no points gem any more)
+    return of.list ? { name: it.name, rarity: it.rarity, coins: of.list, hot } : { name: it.name, rarity: it.rarity, text: 'не продаётся', hot };
   }
   /**
    * Open the card of exactly this good (bound to it: the purchase uses g.it, never the current aim).

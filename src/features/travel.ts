@@ -16,7 +16,7 @@
 import type { CityLayout } from '../contracts';
 import type { Channel } from '../net/travel';
 import { channelPath, currentChannel } from '../net/travel';
-import { campName, pageCampName, FAIR, CAMP, type HeroTownFlags, type TownRow } from '../net/town';
+import { campName, pageCampName, FAIR, FAIR_NAME, CAMP, type HeroTownFlags, type TownRow } from '../net/town';
 import { runtimeContract, type ContractCheck } from '../net/contract';
 import CONTRACT from '../data/site-contract.json';
 import { mountTravel, type TravelPanelDeps } from '../ui/travel';
@@ -32,7 +32,7 @@ export const TRAVEL_CHECKS = ['LGCity.town (travel)', 'DOM .cy-town (town picker
 
 /** Where a layout is called in the UI: the camp by the channel's style, the fair, a district town by its name. */
 export function layoutName(L: Pick<CityLayout, 'id' | 'styleId'> & { title?: string }, cached?: string): string {
-  if (L.id === FAIR || L.id === 'fairc') return 'Ярмарка';
+  if (L.id === FAIR || L.id === 'fairc') return FAIR_NAME;   // site 08.11: the old fair is «Рябинень» (city.js town button)
   if (L.id === CAMP) return campName(L.styleId, W.MDDoodle?.names).name;
   return cached || String(L.title || L.id);
 }

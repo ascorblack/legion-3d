@@ -64,8 +64,8 @@ export function bagText(o: { pieces: number; shards: number }): string {
   const body = o.pieces && o.shards ? `${o.pieces} шт. + ${o.shards} ${oskW(o.shards)}` : o.pieces ? `${o.pieces} шт.` : `${o.shards} ${oskW(o.shards)}`;
   return 'в сумке ' + body;
 }
-/** The mine id of a city layout (fair → home), as src/rooms/mine/index.ts mineIdOf. */
-export const mineIdOfLayout = (layoutId: string | undefined): string => (!layoutId || layoutId === 'fair' || layoutId === 'fairc' ? 'home' : layoutId);   // the new cats fair is the home town too
+/** The mine id of a city layout, as src/rooms/mine/index.ts mineIdOf: since 08.11 every town's mine door opens 'home'. */
+export const mineIdOfLayout = (layoutId: string | undefined): string => { void layoutId; return 'home'; };
 
 /** A well-formed 'l3d:mine-status' detail, or null. */
 export function parseStatus(d: unknown): StatusDetail | null {

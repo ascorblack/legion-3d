@@ -26,7 +26,7 @@
 import type { RoomScene } from '../contracts/ext';
 import { ExpeditionView } from '../expedition';
 import { coreFeature } from './types';
-import { emptyParty } from '../quest/model';
+import { emptyParty, q2Of } from '../quest/model';
 import { questTown, cityTownShown, enterQuestTown, type QuestTown } from '../net/city-tab';
 import { RETURN_EVENT } from './expedition-only';
 
@@ -48,7 +48,7 @@ export default coreFeature({
       kit: ctx.kit,
       style: String(ctx.player.app?.styleId || 'cats'),
       quality: () => ctx.quality() as number,
-      me: () => ({ login: login(), role: String((store.hero as any)?.role || 'recruit') }),
+      me: () => ({ login: login(), role: String((store.hero as any)?.role || 'recruit'), q2: q2Of(store.hero) }),
       hintBottom: 58,
       // expedition-only game: Q does not leave (no city to go back to)
       ...(ctx.state.expeditionOnly ? { hint: HINT_LOCKED } : {}),

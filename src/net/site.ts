@@ -16,7 +16,7 @@ import CONTRACT from '../data/site-contract.json';
 import { runtimeContract, describeFails, type ContractCheck } from './contract';
 import { reportDrift } from '../core/drift';
 import { npcPlaces, makeOpts } from '../events/halloween/hwnpc';
-import { CAMP, FAIRC, campScene, detectTown, readTownSignals, townMeta, villageScene, type CampScene, type HeroTownFlags } from './town';
+import { CAMP, FAIRC, CITY_SHUT, campScene, detectTown, readTownSignals, townMeta, townPriceOf, villageScene, type CampScene, type HeroTownFlags } from './town';
 import { fairCatsScene, fairCatsLayout, isFairId, type FcSiteMap } from './faircats';
 import { townKitScene, kitOf, kitBuildState, kitSiteBuildings } from './townkit';
 import { readSitePals } from '../world/palette';
@@ -108,7 +108,12 @@ function buildLayout(hero: Hero | null, town: string, townMetaOf: any, jl = fals
   const M = W.LGCityMap, D = W.MDDoodle; if (!M || !D) return null;
   if (town === CAMP) return buildCampLayout(hero);
   if (town === FAIRC) return buildFairCatsLayout(hero, jl);
-  if (town !== 'fair') return townMetaOf ? (kit ? buildKitLayout(hero, town, townMetaOf) : buildTownLayout(hero, town, townMetaOf)) : null;
+  if (town !== 'fair') {
+    const L = townMetaOf ? (kit ? buildKitLayout(hero, town, townMetaOf) : buildTownLayout(hero, town, townMetaOf)) : null;
+    // the town's prices for the 3D shops: city.js TOWN.acc → foreignK / homeHere, cityshop.js shopView (lv3 goods by level)
+    if (L) Object.assign(L, townPriceOf(townMetaOf), { goodsKeep: goodsKeepOf(townMetaOf) });
+    return L;
+  }
   let L: any = null; try { L = D.location('fair', { esc: (s: unknown) => String(s ?? '') }); } catch { /* none */ }
   if (!L) return null;
   const ms = !!(hero && hero.ms), mn = !!(hero && hero.mn && Object.keys(hero.mn as object).length);
@@ -199,6 +204,14 @@ function buildTownLayout(hero: Hero | null, id: string, meta: any): CityLayout |
       sitePals: safe(() => readSitePals(W.LGCityArt?.PAL), undefined),
     } as CityLayout;
   } catch (e) { console.warn('[legion-3d] district town layout', id, e); return null; }
+}
+/** cityshop.js shopView (`TOWN.meta.lv3`): a building of a district town sells what its level allows
+ *  (LGTownGen.goodsOk(id, rarity, levels[building] || 1)); null = everything (no lv3, no towngen.js on the page). */
+function goodsKeepOf(meta: any): ((it: { id: string; rarity?: string }, b: string) => boolean) | null {
+  const G = W.LGTownGen;
+  if (!meta || !meta.lv3 || !G || typeof G.goodsOk !== 'function') return null;
+  const lv = (meta.levels && typeof meta.levels === 'object' ? meta.levels : {}) as Record<string, unknown>;
+  return (it, b) => safe(() => !!G.goodsOk(it.id, it.rarity, +(lv[b] as number) || 1), true);
 }
 /**
  * The new cats fair (site 04.11, /api/me `fc`, src/net/faircats.ts): LGFairCats (fc-map.js) for the geometry,
@@ -609,7 +622,10 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     ovVal = anyShown('.cy-room') ? 'room' : anyShown('.mn') ? 'mine' : anyShown('.tr-win') ? 'trade'
       : anyShown('.mn-board-w') ? 'board' : anyShown('.cy-read') ? 'read'
       // site 07.11: the guild district (guildhall.js) is a full-screen place of its own over the sleeping City
-      : anyShown(DISTRICT) ? 'district' : anyShown(DIALOGS) ? 'dialog' : null;
+      : anyShown(DISTRICT) ? 'district'
+      // site 08.11 (city.js townShut): the town is closed and the channel has no city to fall back to — the City is shut down
+      // and shows only its «… сейчас закрыт» panel with NO_CITY; the 3D yields to it (nothing to walk in)
+      : anyShown('#tab-city ' + CITY_SHUT) ? 'shut' : anyShown(DIALOGS) ? 'dialog' : null;
     syncTee();
     return ovVal;
   };
@@ -752,7 +768,7 @@ function anyShown(sel: string): boolean {
   const list = document.querySelectorAll(sel);
   for (let i = 0; i < list.length; i++) {
     const e = list[i];
-    if (sel === DIALOGS && (e.closest(OWN) || e.matches('.cy-room, .mn, .mn-board-w, .tr-win'))) continue;
+    if (sel === DIALOGS && (e.closest(OWN) || e.matches('.cy-room, .mn, .mn-board-w, .tr-win, ' + CITY_SHUT))) continue;
     if (shown(e)) return true;
   }
   return false;

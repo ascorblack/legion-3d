@@ -35,7 +35,7 @@ describe('formatting', () => {
     expect(bagOre({ r: { a: 'x' as never, b: -4, c: 2.9 } })).toEqual({ pieces: 2, shards: 0 });
   });
   it('mine id of a layout: fair → home', () => {
-    expect(mineIdOfLayout('fair')).toBe('home'); expect(mineIdOfLayout(undefined)).toBe('home'); expect(mineIdOfLayout('d12')).toBe('d12');
+    expect(mineIdOfLayout('fair')).toBe('home'); expect(mineIdOfLayout(undefined)).toBe('home'); expect(mineIdOfLayout('d12')).toBe('home');   // site 08.11: one channel mine from every town
   });
 });
 
@@ -270,10 +270,10 @@ describe('startMineStatus wiring', () => {
     b.off();
   });
 
-  it('digging in the mine of another town: no «В шахту» button here', () => {
+  it('site 08.11: every town\'s mine door opens the channel\'s mine — «В шахту» shows in a district town too', () => {
     const s = setup({ layoutId: 'd7', hero: { mn: { home: { i: 3, day: 0, cap: 600 } } } });
     s.setHero({ mn: { home: { i: -1, day: 0, cap: 600 } } });
-    expect(s.last()).toMatchObject({ kind: 'done', go: false });
+    expect(s.last()).toMatchObject({ kind: 'done', go: true });
     s.off();
   });
 

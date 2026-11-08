@@ -9,7 +9,7 @@
 import type { Store, Actions, QuestView } from '../contracts';
 import { onPageKeys } from '../engine/input';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
-import { bossName, deadIn, deadText, questWarnings, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
+import { bossName, deadIn, deadText, questWarnings, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, q2Of, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
 import { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, type SiteControls, type SiteBtn } from './siteui';
 import { setHtml } from '../core/html';
 export { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, findSite, qaSig, siteScope } from './siteui';
@@ -80,7 +80,7 @@ export function pressSiteSquad(doc: ParentNode, k: 'join' | 'leave', openPanel: 
 
 /** Pure: QuestView (+ own login/role) → what to show. Exported for tests. `fresh` = the newest view (the Prologue boss name:
  *  quest.js bn() takes NEW first, then the delayed CUR). */
-export function cardOf(v: QuestView | null, me: { login: string; role: string }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
+export function cardOf(v: QuestView | null, me: { login: string; role: string; q2?: boolean }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
   const c = cardOf0(v, me, baseCmd, fresh), D = c && v && v.on ? deadIn(v) : null;
   // site 08.11 (quest.js wkHtml + dg / lwHtml): the warnings the site shows under the title of every view
   const W = c && !c.empty ? questWarnings(v) : [];
@@ -89,7 +89,7 @@ export function cardOf(v: QuestView | null, me: { login: string; role: string },
   if (c && D) return { ...c, urge: { kind: 'info', text: '💀 Пал в бою · ' + deadText(D) } };
   return c;
 }
-function cardOf0(v: QuestView | null, me: { login: string; role: string }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
+function cardOf0(v: QuestView | null, me: { login: string; role: string; q2?: boolean }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
   if (!v || !v.on) return null;
   const q = v as any, inParty = q.party === 'in';
   // 28.10 (empty-party, quest.js v.nb): the gather ended with nobody — the site shows only this, nothing else of the view
@@ -106,7 +106,7 @@ function cardOf0(v: QuestView | null, me: { login: string; role: string }, baseC
       const ready = (b.sk || []).find((x: any) => !x[1]);
       urge = b.turn ? { kind: 'ok', text: `ход сделан: ${b.turn}` } : { kind: 'say', text: ready ? String(ready[0]) : cmd };
     }
-    const where = m.st === 'on' ? `ты на экране${multi && m.side ? ' · ' + SIDE_RU[m.side] : ''}` : m.st === 'reserve' ? 'ты в бою, но вне кадра стрима' : m.st === 'dead' ? 'твой герой пал' : m.st === 'fled' ? 'ты сбежал из боя' : 'ты не в этом бою';
+    const where = m.st === 'on' ? `ты на экране${multi && m.side ? ' · ' + SIDE_RU[m.side] : ''}` : m.st === 'reserve' ? (me.q2 ? 'ты в бою, но вне кадра стрима - примерное место на схеме' : 'ты в бою, но вне кадра стрима') : m.st === 'dead' ? 'твой герой пал' : m.st === 'fled' ? 'ты сбежал из боя' : 'ты не в этом бою';
     return { icon: '⚔', title: `Бой · ${b.title || q.t || ''} · раунд ${b.round}${b.maxR ? '/' + b.maxR : ''}`, right: stage, until: b.st === 'party' || b.st === 'tele' ? b.until : undefined, where, hp: b.hp, urge, inParty };
   }
   if (q.lair?.is) {
@@ -488,7 +488,7 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
   const tick = () => {
     const dl = Math.max(0, ((buf[buf.length - 1]?.v as any)?.dl || 0) + adj()) * 1000, now = Date.now();
     while (buf.length && buf[0].at + dl <= now) { shown = buf.shift()!.v; }
-    const me = { login: String(host.store.me?.login || ''), role: String(host.store.hero?.role || 'recruit') };
+    const me = { login: String(host.store.me?.login || ''), role: String(host.store.hero?.role || 'recruit'), q2: q2Of(host.store.hero) };
     const newest = host.store.quest;
     const merged = shown && newest ? mergeOwn(shown as QuestPayload, newest as QuestPayload, now, adj(), buf.map(r => r.v as QuestPayload)) : shown;
     // own party is not stream-delayed on the site either (quest.js partyOf): the chip, the «поход» hint and the button agree

@@ -10,19 +10,21 @@
 import type { Unsub } from '../../contracts';
 import type { Registry, RoomDef, RoomContext, RoomScene } from '../../contracts/ext';
 import { RoomBase, envFromCtx, type RoomEnv } from '../common/base';
-import { loadStock, stockOf, type CityStock, type ShopStock, type TentStock, type RowsStock } from '../common/stock';
+import { loadStock, stockOf, shopView, type CityStock, type ShopStock, type TentStock, type RowsStock } from '../common/stock';
 import { buildForge } from './forge';
 import { buildRows } from './rows';
 import { buildTent } from './tent';
 
 export type ShopSceneBuilder = (R: RoomBase, stock: CityStock | null, env: RoomEnv) => void | Promise<void>;
 
+/** The stock a building shows: stockOf + the district town's level filter (cityshop.js shopView). */
+const viewOf = (st: CityStock | null, id: string, env: RoomEnv) => shopView(stockOf(st, id, env.store.hero), id, env.store.hero, env.goodsKeep);
 export const SHOP_SCENES: Record<string, ShopSceneBuilder> = {
-  forge: (R, st, env) => buildForge(R, stockOf(st, 'forge', env.store.hero) as ShopStock | null, 'forge'),
-  magic: (R, st, env) => buildForge(R, stockOf(st, 'magic', env.store.hero) as ShopStock | null, 'magic'),
-  shop: (R, st, env) => buildRows(R, stockOf(st, 'shop', env.store.hero) as RowsStock | null, env),
-  rows: (R, st, env) => buildRows(R, stockOf(st, 'shop', env.store.hero) as RowsStock | null, env),
-  tent: (R, st, env) => buildTent(R, stockOf(st, 'tent', env.store.hero) as TentStock | null),
+  forge: (R, st, env) => buildForge(R, viewOf(st, 'forge', env) as ShopStock | null, 'forge'),
+  magic: (R, st, env) => buildForge(R, viewOf(st, 'magic', env) as ShopStock | null, 'magic'),
+  shop: (R, st, env) => buildRows(R, viewOf(st, 'shop', env) as RowsStock | null, env),
+  rows: (R, st, env) => buildRows(R, viewOf(st, 'shop', env) as RowsStock | null, env),
+  tent: (R, st, env) => buildTent(R, viewOf(st, 'tent', env) as TentStock | null),
 };
 export const SHOP_TITLES: Record<string, string> = { forge: 'Кузня', magic: 'Лавка звездочёта', shop: 'Лавка', rows: 'Торговые ряды', tent: 'Шатёр' };
 

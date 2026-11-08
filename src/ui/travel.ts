@@ -7,7 +7,7 @@
  * (≥ 2 characters, debounced, older one aborted — src/net/travel.ts). Everything else goes through `TravelPanelDeps`
  * (src/features/travel.ts), so the page itself never touches the site.
  */
-import { townsView, campName, CAMP, FAIR, type TownRow, type TownsView } from '../net/town';
+import { townsView, campName, CAMP, FAIR, FAIR_NAME, type TownRow, type TownsView } from '../net/town';
 import type { HeroTownFlags } from '../net/town';
 import { FindController, parseChannels, FIND_MAX_LEN, type Channel, type FindDeps, type FindState } from '../net/travel';
 import { setHtml } from '../core/html';
@@ -112,7 +112,7 @@ export function mountTravel(el: HTMLElement, d: TravelPanelDeps, start: Tab = 't
   const q = <T extends HTMLElement>(s: string) => el.querySelector<T>(s)!;
   const body = q('[data-body]'), here = q('[data-here]'), foot = q('[data-foot]');
 
-  const townName = (id: string) => towns?.rows.find((r) => r.id === id)?.name || (id === FAIR ? 'Ярмарка' : id === CAMP ? campName(d.style(), d.names()).name : id);
+  const townName = (id: string) => towns?.rows.find((r) => r.id === id)?.name || (id === FAIR ? FAIR_NAME : id === CAMP ? campName(d.style(), d.names()).name : id);
   const paintHere = () => {
     const ch = d.channel();
     setHtml(here, `<span>Путешествие · сейчас:</span><b>${esc(townName(d.currentTown()))}</b>${ch ? `<span class="ch">канал <b style="font:700 13px var(--l3d-tx);color:inherit">${esc(ch)}</b></span>` : ''}`);

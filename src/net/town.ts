@@ -22,7 +22,7 @@ import { KIT_PREFIX, kitTownOf } from './townkit';
 export const CAMP = 'camp';
 export const FAIR = 'fair';
 
-export interface HeroTownFlags { cp?: unknown; tw?: unknown; hm?: { id?: unknown; camp?: unknown } | null }
+export interface HeroTownFlags { cp?: unknown; tw?: unknown; hm?: { id?: unknown; camp?: unknown; none?: unknown } | null }
 export interface TownSignals {
   where?: string | null;
   /** `#tab-city .cy` present: its data-town ('' = none = fair); undefined: no built City DOM. */
@@ -39,15 +39,39 @@ export type TownSource = 'where' | 'dom' | 'picker' | 'session' | 'hero' | 'jail
 /** The new cats fair (city.js buildCats: `.cy[data-town="fairc"]`). */
 export const FAIRC = 'fairc';
 
-/** city.js fairGone(): the channel drew its home district — fair and camp are closed for it. Since 30.10 (E2) hm.camp no
- *  longer keeps them open: the server puts the camp into hm.id ('camp') itself. */
-export const fairGone = (h?: HeroTownFlags | null): boolean => {
-  const hm = h?.hm; return !!(hm && hm.id && hm.id !== FAIR && hm.id !== CAMP);
+/** city.js homeAway() (was fairGone() until 08.11): the channel drew its home district — fair and camp are closed for it.
+ *  Since 30.10 (E2) hm.camp no longer keeps them open: the server puts the camp into hm.id ('camp') itself. 08.11: `hm.none`
+ *  = the channel has no city of its own yet — then hm.id names nothing to open. */
+export const homeAway = (h?: HeroTownFlags | null): boolean => {
+  const hm = h?.hm; return !!(hm && hm.id && !hm.none && hm.id !== FAIR && hm.id !== CAMP);
 };
-/** city.js homePick(hm): the town the channel's stage opens (hm.id as is), or null. */
-export const homePick = (h?: HeroTownFlags | null): string | null => (h?.hm && h.hm.id ? String(h.hm.id) : null);
+/** The old name (city.js fairGone, renamed homeAway 08.11). */
+export const fairGone = homeAway;
+/** city.js homePick(hm): the town the channel's stage opens (hm.id as is), or null (08.11: none with `hm.none`). */
+export const homePick = (h?: HeroTownFlags | null): string | null => (h?.hm && h.hm.id && !h.hm.none ? String(h.hm.id) : null);
 /** city.js cpOn(): the camp is open for this hero. */
-export const campOpen = (h?: HeroTownFlags | null): boolean => !!(h && (h.cp || (h.hm && h.hm.camp))) && !fairGone(h);
+export const campOpen = (h?: HeroTownFlags | null): boolean => !!(h && (h.cp || (h.hm && h.hm.camp))) && !homeAway(h);
+/** city.js homeBack() (08.11): where a closed town sends the hero — the channel's own city (the camp while it is open), or
+ *  null: no city of the channel (`hm.none` / no hm) → the site shows NO_CITY (townShut). */
+export const homeBack = (h?: HeroTownFlags | null): string | null => {
+  const hm = h?.hm;
+  if (!hm || hm.none || !hm.id) return null;
+  return hm.id === CAMP || hm.camp ? (campOpen(h) ? CAMP : null) : String(hm.id);
+};
+/** city.js NO_CITY (08.11), shown in the site's «город закрыт» panel (`.cy-shut`). */
+export const NO_CITY = 'У канала пока нет своего города - он появится, когда канал займёт округ с городом (после «Жребия края» - город края).';
+/** The site's «город закрыт» panel (city.js townShut, 08.11): the City is shut down, `#tab-city` holds only this. */
+export const CITY_SHUT = '.cy-shut';
+
+/**
+ * city.js TOWN.acc → foreignK() / homeHere() for a district town entry of GET /api/city/towns
+ * (`acc = { own: !!t.own, k: +t.k || 2, home? }`; foreignK = (!own || home) ? max(1, k) : 1). The camp and the fairs: 1.
+ */
+export function townPriceOf(t: { own?: unknown; k?: unknown; home?: unknown } | null | undefined): { foreignK: number; home: boolean } {
+  if (!t || typeof t !== 'object') return { foreignK: 1, home: false };
+  const own = !!t.own, home = !!t.home, k = +(t.k as number) || 2;
+  return { foreignK: !own || home ? Math.max(1, k || (home ? 1 : 2)) : 1, home };
+}
 
 const clean = (v: unknown): string | null => (typeof v === 'string' && /^[\w-]{1,40}$/.test(v) ? v : null);
 
@@ -76,7 +100,7 @@ function detectTown0(s: TownSignals): { id: string; via: TownSource } {
   const p = clean(s.picker); if (p) return { id: p, via: 'picker' };
   const h = s.hero || null;
   // city.js open(): a home district (homePick, not camp) replaces fair/camp; homePick 'camp' opens the camp unless a town was chosen
-  if (fairGone(h)) return { id: String(h!.hm!.id), via: 'hero' };
+  if (homeAway(h)) return { id: String(h!.hm!.id), via: 'hero' };
   const ss = clean(s.session);
   if (ss && ss !== FAIR && (ss === CAMP ? campOpen(h) : !h || !!h.tw)) return { id: ss, via: 'session' };
   if (homePick(h) === CAMP && campOpen(h)) return { id: CAMP, via: 'hero' };
@@ -165,7 +189,9 @@ export function pageCampName(win: any): CampName {
 /** city.js BIO_ICO / BIO_RU / sizeRu / WHY_RU (the town picker's rows). */
 export const BIO_ICO: Record<string, string> = { meadow: '🌾', forest: '🌳', taiga: '🌲', ice: '❄️', mount: '⛰️', swamp: '🪷', ash: '🌋', desert: '🏜️', coast: '🌊', blight: '☠️', ruin: '🏚️' };
 export const BIO_RU: Record<string, string> = { meadow: 'луга', forest: 'лес', taiga: 'тайга', ice: 'льды', mount: 'горы', swamp: 'болота', ash: 'пепел', desert: 'пустыня', coast: 'побережье', blight: 'порча', ruin: 'руины' };
-export const WHY_RU: Record<string, string> = { owned: 'округ канала', party: 'отряд в округе', tester: 'тестерам' };
+export const WHY_RU: Record<string, string> = { owned: 'округ канала', home: 'город канала', party: 'отряд в округе', tester: 'тестерам', left: 'здесь ты покинул отряд' };
+/** 08.11: the old fair is the district town «Рябинень» of the «Ярмарочный Край» (city.js town button / picker). */
+export const FAIR_NAME = 'Рябинень';
 export const sizeRu = (t: { kind?: unknown; danger?: unknown }): string => (t.kind === 'capital' ? 'столица' : +(t.danger as number) >= 2 ? 'посёлок' : 'деревня');
 
 export interface TownRow {
@@ -212,10 +238,13 @@ export function townsView(inp: TownsInput): TownsView {
   if (!T || !T.ok) return { rows: [], note: '', error: 'Список городов не загрузился — попробуй ещё раз.' };
   const list: any[] = Array.isArray(T.list) ? T.list : [];
   const rows: TownRow[] = [];
-  const quest = !!T.quest, gone = !!T.gone || fairGone(h);
-  const fairOk = !gone && (!quest || !!T.fair);
-  const fair: TownRow = { id: FAIR, kind: 'fair', name: 'Ярмарка', icon: '🎪', sub: quest ? 'отряд здесь' : 'всегда открыта', current: inp.current === FAIR, disabled: !fairOk };
-  if (!fairOk) { fair.sub = 'закрыта'; fair.reason = gone ? 'Ярмарка позади: канал выбрал свой округ' : 'В походе: только город, где стоит отряд'; }
+  const quest = !!T.quest, gone = !!T.gone || homeAway(h);
+  // 08.11 (city.js townPick fairOk = !!T.fair): the server says whether «Рябинень» (the old fair) is open for this hero, why
+  // in `T.fw`. An answer without the key (servers before 08.11, offline fakes) keeps the old rule: open unless gone / quest.
+  const fairOk = 'fair' in T ? !!T.fair : !gone && !quest;
+  const fw = String(T.fw ?? '');
+  const fair: TownRow = { id: FAIR, kind: 'fair', name: FAIR_NAME, icon: '🎪', sub: '★ · «Ярмарочный Край»' + (WHY_RU[fw] ? ' · ' + WHY_RU[fw] : ''), current: inp.current === FAIR, disabled: !fairOk };
+  if (!fairOk) { fair.sub = 'закрыт'; fair.reason = gone ? 'Рябинень позади: канал выбрал свой округ' : quest ? 'В походе: только город, где стоит отряд' : 'Рябинень сейчас закрыт'; }
   rows.push(fair);
   if (campOpen(h) || inp.current === CAMP) {
     const c = campName(inp.style, inp.names);
@@ -227,17 +256,20 @@ export function townsView(inp: TownsInput): TownsView {
   for (const t of list) {
     if (!t || !idOk(t.id)) continue;
     const danger = Math.max(0, Math.min(5, +t.danger || 0)), biome = safeStr(t.biome, 16);
+    // city.js bRow: a town still being built is listed but cannot be entered
+    if (t.build) {
+      const nm = safeStr(t.town || t.id);
+      rows.push({ id: t.id, kind: 'district', name: nm, icon: '🏗', sub: `${'★'.repeat(danger)} · ещё строится · ${t.home ? 'город канала' : 'отряд в округе'}`, current: false, disabled: true, reason: `Город «${nm}» ещё строится - зайти пока нельзя`, danger, biome });
+      continue;
+    }
     const parts = [`${'★'.repeat(danger)}${danger ? ' ' : ''}${sizeRu(t)}`, BIO_RU[biome] || ''];
     if (!(t.own || (t.home && +t.k <= 1))) parts.push(`цены ×${String(+t.k || 2).replace('.', ',')}`);
-    if (t.home) parts.push('край отряда');
     if (WHY_RU[String(t.why)]) parts.push(WHY_RU[String(t.why)]);
     const sub = parts.filter(Boolean).join(' · ');
     rows.push({ id: t.id, kind: 'district', name: safeStr(t.town || t.id), icon: BIO_ICO[biome] || '🏘', sub, current: t.id === inp.current, disabled: false, danger, biome });
   }
-  const hasTowns = !!(h && (h.tw || h.cp)) || rows.some((r) => r.kind !== 'fair');
-  const note = list.length ? 'Город округа открывается, когда канал захватит округ; на стриме — пока отряд стоит в округе (участникам отряда).'
-    : hasTowns ? 'Других городов пока нет. Город округа открывается, когда канал захватит округ.'
-      : 'Города округов откроются, когда канал захватит округ; на стриме — пока отряд стоит в округе (участникам отряда).';
+  // city.js townPick 08.11: one note — «Здесь только города вашего канала…»
+  const note = (list.length ? '' : 'Других городов пока нет. ') + 'Здесь только города вашего канала: город округа открывается, когда канал захватит округ; на стриме — пока отряд стоит в округе (участникам отряда).';
   return { rows, note };
 }
 

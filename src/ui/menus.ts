@@ -43,7 +43,7 @@ export const jClaimable = (e: { cl?: { done?: unknown; [k: string]: unknown } | 
 const CLASSIC: Record<string, { spec: string; title: string; text: string; icon: string; alt?: [string, string] }> = {
   skills: { spec: 'hero:skills', title: 'Навыки', icon: 'mag', text: 'Деревья навыков твоего класса: изучение, очки и сброс — в оригинальном окне сайта. Тот же тренер ждёт тебя в городе.' },
   ach: { spec: 'hero:ach', title: 'Достижения', icon: 'crit', text: 'Медали и награды героя — в оригинальном окне сайта.' },
-  look: { spec: 'hero:look', title: 'Облик', icon: 'resist', text: 'Форма, цвет, глаза, шапки, аксессуары и ауры. Новое покупается в Шатре на Ярмарке; надевать можно в любой момент, кроме боя.' },
+  look: { spec: 'hero:look', title: 'Облик', icon: 'resist', text: 'Форма, цвет, глаза, шапки, аксессуары и ауры. Новое покупается в Шатре города за монеты; надевать можно в любой момент, кроме боя.' },
   legion: { spec: 'legion', title: 'Рейтинг Легиона', icon: 'people', text: 'Состав Легиона по классам, самые опытные герои и твоё место.', alt: ['legion:soc', 'Соц. рейтинг'] },
   news: { spec: 'news', title: 'Новости', icon: 'luck', text: 'Новости игры и обновления — те же листки, что на Доске объявлений в городе.' },
 };
