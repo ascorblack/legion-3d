@@ -9,7 +9,7 @@
 import type { Store, Actions, QuestView } from '../contracts';
 import { onPageKeys } from '../engine/input';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
-import { bossName, deadIn, deadText, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
+import { bossName, deadIn, deadText, questWarnings, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
 import { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, type SiteControls, type SiteBtn } from './siteui';
 import { setHtml } from '../core/html';
 export { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, findSite, qaSig, siteScope } from './siteui';
@@ -30,6 +30,8 @@ export interface Card {
   squad?: Squad | null;
   /** the gather ended with nobody (site 28.10 `v.nb`): no «Поход идёт» wording */
   empty?: boolean;
+  /** the site's warning lines under the title (quest.js q-top: danger `dg`, worn items `lw`, 08.11 squad weakened `wk`) */
+  warn?: string[];
 }
 
 /* ------------------------------------------------------------------ join / leave the squad (site «Поход» tab, quest.js qaSquad ~l.881, layTop ~l.1390) */
@@ -80,6 +82,9 @@ export function pressSiteSquad(doc: ParentNode, k: 'join' | 'leave', openPanel: 
  *  quest.js bn() takes NEW first, then the delayed CUR). */
 export function cardOf(v: QuestView | null, me: { login: string; role: string }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
   const c = cardOf0(v, me, baseCmd, fresh), D = c && v && v.on ? deadIn(v) : null;
+  // site 08.11 (quest.js wkHtml + dg / lwHtml): the warnings the site shows under the title of every view
+  const W = c && !c.empty ? questWarnings(v) : [];
+  if (c && W.length) c.warn = W;
   // site 31.10: my hero fell in this fight — «💀 Пал в бою» instead of what to type (the site shows no buttons either)
   if (c && D) return { ...c, urge: { kind: 'info', text: '💀 Пал в бою · ' + deadText(D) } };
   return c;
@@ -442,6 +447,7 @@ export const mountQuestHud: MountQuestHud = (root, host): QuestHud => {
     let h = '';
     if ((v3dOn || v3d) && !v3dFixed) h += `<button type="button" class="v3d${v3d ? ' on' : ''}" data-v3d>${v3d ? 'Выйти из 3D-похода' : c.empty ? '🎥 Сбор окончен — смотреть в 3D' : '🎥 Поход идёт — смотреть в 3D'} <kbd>Q</kbd></button>`;
     if (c.where) h += `<div class="chip ${c.inParty ? 'in' : ''}">${esc(c.where)}</div>`;
+    if (c.warn) h += c.warn.map((t) => `<p class="sst bad" role="note">${esc(t)}</p>`).join('');
     if (c.hp != null && c.hp >= 0) h += `<div class="hp"><i style="width:${Math.max(2, Math.round(c.hp * 100))}%"></i></div>`;
     // typed commands: with the site's flag — the line below (the site's own «Команда в поход»); without it — the stream chat
     const S = site, btns = qa && (S.groups.length > 0 || !!(c.opts?.length && c.inParty));   // the path vote: its options are buttons

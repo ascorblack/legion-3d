@@ -96,9 +96,11 @@ export function readTownSignals(win: any, doc: Document, hero: HeroTownFlags | n
   const dom = cy ? (cy.dataset.town || '') : undefined;
   const picker = doc.querySelector<HTMLElement>('#tab-city .cy-tp [data-town][aria-current="true"]')?.dataset.town ?? null;
   let session: string | null = null;
-  try { session = win.sessionStorage?.getItem('lgCityTown') ?? null; } catch { /* blocked */ }
+  // site 08.11: the tab's own choice moved to sessionStorage `lgCityTown@<channel>` (was `lgCityTown`); read both
+  const lsKey = townLsKey(win.location?.pathname || '');
+  try { session = win.sessionStorage?.getItem(lsKey) ?? win.sessionStorage?.getItem('lgCityTown') ?? null; } catch { /* blocked */ }
   // site 07.11: the last chosen town also survives a new tab — localStorage `lgCityTown@<channel>` (city.js townLs)
-  if (session == null) try { session = win.localStorage?.getItem(townLsKey(win.location?.pathname || '')) ?? null; } catch { /* blocked */ }
+  if (session == null) try { session = win.localStorage?.getItem(lsKey) ?? null; } catch { /* blocked */ }
   let fcOk = false; try { fcOk = fc && !!win.LGFairCatsCity; } catch { /* none */ }
   return { where, dom, picker, session, hero, fc: fcOk };
 }

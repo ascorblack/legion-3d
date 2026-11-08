@@ -223,6 +223,8 @@ export interface QuestPayload {
   dg?: string;
   /** my worn items at ≤ 30% durability: [name, percent] */
   lw?: [string, number][];
+  /** site 08.11 (quest.js wkHtml): the squad is weakened after a failed rest — [locations left, damage −%] */
+  wk?: [number, number];
   /** district town at the stop (★1–2) */
   town?: { id: string; name: string };
   b?: QuestBattle;
@@ -611,7 +613,7 @@ export function meIn(b: QuestBattle, fallbackRole = 'recruit'): BattleSnapshot['
 
 /** Normalise a raw battle into a scene-friendly snapshot (sides resolved, foes typed, defaults filled). */
 export function normBattle(b: QuestBattle, myRole = 'recruit'): BattleSnapshot {
-  const fronts: Side[] = b.cr?.fr?.length ? b.cr.fr.slice() : b.two ? ['L', 'R'] : ['R'];
+  const fronts: Side[] = battleFronts(b);
   const multi = fronts.length > 1;
   const me = meIn(b, myRole);
   const heroes: HeroSlot[] = b.form.map((p, i) => ({
@@ -621,7 +623,7 @@ export function normBattle(b: QuestBattle, myRole = 'recruit'): BattleSnapshot {
   let alive = 0, sum = 0;
   const foes: FoeSlot[] = b.foes.map((f, i) => {
     const hp = Math.max(0, Math.min(1, +f[3] || 0)); if (hp > 0) alive++; sum += hp;
-    return { i, side: (SIDES.has(f[0]) ? f[0] : 'R') as Side, type: String(f[1] || 'unknown'), lead: !!f[2], hp, dead: hp <= 0, name: String(f[4] ?? '') };
+    return { i, side: foeSideOf(b, f[0], i, fronts), type: String(f[1] || 'unknown'), lead: !!f[2], hp, dead: hp <= 0, name: String(f[4] ?? '') };
   });
   return {
     id: String(b.id), round: b.round, maxR: b.maxR || 0, stage: STAGES.has(b.st) ? (b.st as BattleStage) : 'unknown', until: b.until || 0,
@@ -752,3 +754,66 @@ export function deadIn(v: any): { rev: boolean } | null {
   return null;
 }
 export const deadText = (d: { rev: boolean }) => d.rev ? 'жди конца боя или воскрешения' : 'жди конца боя';
+
+/* ------------------------------------------------------------------ site 08.11 (quest.js) */
+
+/**
+ * The warning lines the site puts under the title of every quest view (quest.js q-top / layTop / the quest banner):
+ * `dg` danger, `lw` worn items (lwHtml) and, since 08.11, `wk` — the squad weakened after a failed rest (wkHtml). Same words.
+ */
+export function questWarnings(v: any): string[] {
+  if (!v || typeof v !== 'object') return [];
+  const out: string[] = [];
+  if (v.dg) out.push(`⚠ ${String(v.dg)}`);
+  if (Array.isArray(v.lw) && v.lw.length) out.push(`⚠ ${v.lw.map((x: any) => `${String(Array.isArray(x) ? x[0] : '')} — прочность ${+(Array.isArray(x) ? x[1] : 0)}%`).join(', ')}: если дойдёт до 0, вещь исчезнет навсегда. Почини у кузнеца`);
+  if (Array.isArray(v.wk) && +v.wk[0] > 0) out.push(`😫 Отряд ослаб после неудачного привала: урон −${+v.wk[1]}% · ещё ${+v.wk[0]} ${+v.wk[0] === 1 ? 'локация' : 'локации'}`);
+  return out;
+}
+
+/** quest.js PB_ATK (08.11): the class attack lines among the place buttons (`x.k === 'cls'`). */
+export const PB_ATK: ReadonlySet<string> = new Set(['удар', 'выстрел', 'магия', 'лечить']);
+/** quest.js pbHtml GROUPS: '' (plain), 'tg' «Помочь своим», 'act', 'esc' «Уйти из боя» — the order the site draws them in. */
+export const PB_GROUPS: readonly [string, string][] = [['', ''], ['tg', 'Помочь своим'], ['act', ''], ['esc', 'Уйти из боя']];
+
+/**
+ * The place buttons the site shows this hero (quest.js pbHtml, 08.11): buttons for another class (`x.role`, a comma list) are
+ * dropped — the hero's role `legion` counts as `legionary`, no role = `recruit`; out of the fight (not on / in reserve) the
+ * «Помочь своим» and «Уйти из боя» groups go; when no class attack is left for this role, all the class attacks come back
+ * (whatever the role); after my move in the lair (`lair.acted`) the `act` group goes. Ordered by the site's groups.
+ * Nothing when the hero has fallen (deadIn).
+ */
+export function placeButtons(v: any, heroRole: unknown): PlaceButton[] {
+  const all: PlaceButton[] = v && v.pb && Array.isArray(v.pb.b) ? v.pb.b.filter((x: unknown) => isObj(x) && typeof (x as PlaceButton).t === 'string') : [];
+  if (!all.length || deadIn(v)) return [];
+  const r0 = String(heroRole || 'recruit'), role = r0 === 'legion' ? 'legionary' : r0;
+  const b = isObj(v.b) ? v.b : null;
+  const st = !b ? 'on' : b.hp == null ? 'out' : b.hp === 0 ? 'dead' : b.hp < 0 ? 'fled' : (+b.me >= 0 || Array.isArray(b.mf)) ? 'on' : 'reserve';
+  const inB = !b || st === 'on' || st === 'reserve';
+  const roleOk = (x: PlaceButton) => !(x.x && x.x.role && !String(x.x.role).split(',').includes(role));
+  const grpOk = (x: PlaceButton) => inB || !['esc', 'tg'].includes(x.g || '');
+  const atk = (x: PlaceButton) => !!(x.x && x.x.k === 'cls' && PB_ATK.has(x.t));
+  let list = all.filter((x) => roleOk(x) && grpOk(x));
+  if (!list.some(atk)) list = all.filter((x) => (roleOk(x) || atk(x)) && grpOk(x));
+  if (v.lair && v.lair.acted) list = list.filter((x) => (x.g || '') !== 'act');
+  return PB_GROUPS.flatMap(([g]) => list.filter((x) => (x.g || '') === g));
+}
+
+/** battle.js FOE_TWO (08.11 adds `side`): the six ambush slots of a two-front battle, by foe index; later foes stand in the
+ *  single-front slots (right). */
+export const FOE_TWO_SIDE: readonly Side[] = ['R', 'L', 'R', 'L', 'R', 'L'];
+/**
+ * The fronts of a battle as the stream draws them: `cr.fr` when it has more than one, else L + R for the ambush (`two`:
+ * battle.js layout forces both sides), else `cr.fr` / R.
+ */
+export function battleFronts(b: any): Side[] {
+  const fr: Side[] = (b && b.cr && Array.isArray(b.cr.fr) ? b.cr.fr : []).filter((x: unknown) => SIDES.has(x as string));
+  return fr.length > 1 ? fr.slice() : b && b.two ? ['L', 'R'] : fr.length ? fr.slice() : ['R'];
+}
+/** A foe's side: the server's `f[0]` when it is one of the fronts; else where the stream puts foe `i` (two: FOE_TWO, else
+ *  battlecrowd.js foeRing — R, L, F in turn over the fronts there are). */
+export function foeSideOf(b: any, f0: unknown, i: number, fronts: readonly Side[]): Side {
+  if (SIDES.has(f0 as string) && fronts.includes(f0 as Side)) return f0 as Side;
+  if (b && b.two && fronts.includes('L') && fronts.includes('R')) return i < FOE_TWO_SIDE.length ? FOE_TWO_SIDE[i] : 'R';
+  const order = (['R', 'L', 'F'] as Side[]).filter((w) => fronts.includes(w));
+  return order.length ? order[i % order.length] : 'R';
+}

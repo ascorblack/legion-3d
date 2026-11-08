@@ -939,6 +939,55 @@
       "re": "hall\\.w",
       "severity": "degrade",
       "why": "src/rooms/hybrid/scenes.ts districtHall: «Казна города» (no hall store) in a district town"
+    },
+    {
+      "id": "city.js town per channel in sessionStorage",
+      "file": "city.js",
+      "re": "sessionStorage\\.getItem\\(townLs\\(\\)\\)",
+      "severity": "degrade",
+      "why": "site 08.11 stores the tab's chosen town in sessionStorage lgCityTown@<channel> (no more plain lgCityTown); src/net/town.ts readTownSignals reads that key first"
+    },
+    {
+      "id": "quest.js squad weakened line (v.wk)",
+      "file": "quest.js",
+      "re": "const wkHtml = \\(v, cls\\) => \\(v && v\\.wk && \\+v\\.wk\\[0\\] > 0",
+      "severity": "degrade",
+      "why": "src/quest/model.ts questWarnings → src/quest/index.ts card .warn: «😫 Отряд ослаб после неудачного привала: урон −N% · ещё K локации»"
+    },
+    {
+      "id": "quest.js place button groups (GROUPS)",
+      "file": "quest.js",
+      "re": "const GROUPS = \\[\\['', ''\\], \\['tg', 'Помочь своим'\\], \\['act', ''\\], \\['esc', 'Уйти из боя'\\]\\]",
+      "severity": "degrade",
+      "why": "src/quest/model.ts PB_GROUPS / placeButtons order; src/quest/siteui.ts titleOf reads the q-pbg titles"
+    },
+    {
+      "id": "quest.js place buttons by role / fight / lair move (pbHtml)",
+      "file": "quest.js",
+      "re": "const PB_ATK = new Set\\(\\['удар', 'выстрел', 'магия', 'лечить'\\]\\)[\\s\\S]{0,1500}r0 === 'legion' \\? 'legionary' : r0[\\s\\S]{0,1500}x\\.x\\.role[\\s\\S]{0,800}v\\.lair && v\\.lair\\.acted",
+      "severity": "degrade",
+      "why": "src/quest/model.ts placeButtons (role filter, inB, PB_ATK fallback, lair.acted) → src/expedition/adapter.ts placeCmds (typed lines in the 3D strip)"
+    },
+    {
+      "id": "battle.js two-front ambush slots (FOE_TWO side)",
+      "file": "battle.js",
+      "re": "const FOE_TWO = \\[[^\\n]*side: 'R'[^\\n]*side: 'L'",
+      "severity": "degrade",
+      "why": "src/quest/model.ts FOE_TWO_SIDE / foeSideOf: foes of a `two` battle without a server side stand R, L, R, L… in 3D"
+    },
+    {
+      "id": "battle.js two forces both fronts",
+      "file": "battle.js",
+      "re": "TWO \\? \\['L', 'R'\\]",
+      "severity": "degrade",
+      "why": "src/quest/model.ts battleFronts: `two` → L + R even when cr.fr names one side"
+    },
+    {
+      "id": "battlecrowd.js foeRing order R, L, F",
+      "file": "battlecrowd.js",
+      "re": "order = \\['R', 'L', 'F'\\]\\.filter",
+      "severity": "degrade",
+      "why": "src/quest/model.ts foeSideOf fallback for multi-front battles"
     }
   ]
 }

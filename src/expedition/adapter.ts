@@ -9,7 +9,7 @@
  *   - `zn` polygons are normalised by their own bounding box (any coordinate space works);
  *   - after the boss: `b.res` (end) and then `loot` = the results scene.
  */
-import { bossName, emptyParty, EMPTY_PARTY, stageOf, kindOf, cmdFor, isMulti, SIDE_CMD, SKILLS, camFor, zoneOf, BASE_CMD, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, eventInstructions, PUZZLE_ST,
+import { bossName, battleFronts, foeSideOf, placeButtons, emptyParty, EMPTY_PARTY, stageOf, kindOf, cmdFor, isMulti, SIDE_CMD, SKILLS, camFor, zoneOf, BASE_CMD, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, eventInstructions, PUZZLE_ST,
   deadIn, deadText, type QuestPuzzle, type QuestPayload, type QuestBattle, type Side, type Zone, type Role } from '../quest/model';
 
 /* ------------------------------------------------------------------ scene kinds */
@@ -314,7 +314,8 @@ function adaptUnsafe(v: QuestPayload | null | undefined, c: AdaptCtx): SceneStat
   const s: SceneState = { ...EMPTY, ter, biome, n, inParty, partyState: str(q.party), myRole, title: str(q.t), cmds: [], party: [], hw: !!(q.gather?.hw || q.ev?.hw || ter === 'Изнанка') };
   s.roll = q.roll ? { by: str(q.roll.by), n: num(q.roll.n), tier: str(q.roll.tier) } : null;
   s.late = arr<[number, string, number]>(q.late);
-  s.placeActions = arr<NonNullable<QuestPayload['pb']>['b'][number]>(q.pb?.b);
+  // site 08.11 (quest.js pbHtml): only the place buttons the site shows this hero — role, in the fight, lair move made
+  s.placeActions = placeButtons(q, myRole);
   const me = { login: c.login, role: myRole, in: inParty };
   // 28.10 (empty-party): nobody joined — the site shows only that; we show the empty gather place, nothing to type
   if (emptyParty(q)) {
@@ -408,8 +409,8 @@ function travelCmds(q: any, s: SceneState) {
 
 /* ---- battle ---- */
 function battleOf(b: QuestBattle, s: SceneState, c: AdaptCtx) {
-  const fronts0 = arr<Side>(b.cr?.fr).filter((x) => SIDES.has(x));
-  const fronts: Side[] = fronts0.length ? fronts0 : b.two ? ['L', 'R'] : ['R'];
+  // site 08.11 (battle.js FOE_TWO side): the ambush (`two`) is drawn on both sides even when `cr.fr` names one
+  const fronts: Side[] = battleFronts(b);
   const multi = fronts.length > 1 || !!b.two;
   const form = arr<any[]>(b.form).filter((p) => Array.isArray(p) && typeof p[0] === 'string');
   const meI = num(b.me, -1);
@@ -439,7 +440,7 @@ function battleOf(b: QuestBattle, s: SceneState, c: AdaptCtx) {
   s.myRole = myRole;
   const foes: FoeState[] = arr<any[]>(b.foes).filter((f) => Array.isArray(f)).slice(0, 24).map((f, i) => {
     const hp01 = clamp01(f[3]);
-    return { i, art: foeArtOf(f[1], f[4], !!f[2]), type: str(f[1], 'unknown'), side: fronts.includes(f[0]) ? f[0] : side(f[0], fronts[i % fronts.length]), lead: !!f[2], hp: hp01, dead: hp01 <= 0, name: str(f[4]) };
+    return { i, art: foeArtOf(f[1], f[4], !!f[2]), type: str(f[1], 'unknown'), side: foeSideOf(b, f[0], i, fronts), lead: !!f[2], hp: hp01, dead: hp01 <= 0, name: str(f[4]) };
   });
   const tele = b.tele && typeof b.tele === 'object' && typeof b.tele.word === 'string'
     ? { word: b.tele.word, kind: str(b.tele.kind), text: str(b.tele.text), got: num(b.tele.got, 0), need: num(b.tele.need, 0), ok: !!b.tele.ok } : null;
