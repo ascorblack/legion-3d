@@ -12,7 +12,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import vm from 'node:vm';
 import { GU_WINDOWS, gameUiOn, guWindowOf, openGuWindow, pickReplayTab, replayTabOrder } from '../src/net/gameui';
 import { canalWaters, pondWater, fishWaters, fishOn, fishLabel, type FishWater } from '../src/features/fishing';
-import feature, { mailLabel, mailOn, mailUnread, dailiesOn, miniMapOn, SITE_TABS, GUILDS_ENTRY } from '../src/features/site-places';
+import feature, { mailBadge, mailOn, mailUnread, dailiesOn, miniMapOn, SITE_TABS, GUILDS_ENTRY } from '../src/features/site-places';
 import { pauseItems } from '../src/ui/settings-ext';
 import { FISH } from '../src/net/site';
 import { appearanceFrom } from '../src/avatar/appearance';
@@ -174,7 +174,8 @@ describe('site windows in the pause menu (site-places)', () => {
     g.LegionMiniMap = { open: (o: any) => calls.push('mm:' + o.tab) };
     ids = pauseItems().map((p) => p.id);
     for (const id of ['site.mail', 'site.dailies', 'site.minimap']) expect(ids).toContain(id);
-    expect(pauseItems().find((p) => p.id === 'site.mail')!.label).toBe('✉ Почта · 3 нов.');
+    expect(pauseItems().find((p) => p.id === 'site.mail')!.label).toBe('Почта');
+    expect(pauseItems().find((p) => p.id === 'site.mail')!.badge!()).toBe('3');
     for (const id of ['site.mail', 'site.dailies', 'site.minimap', 'site.guilds', 'site.tab.arena']) pauseItems().find((p) => p.id === id)!.run();
     await new Promise((r) => setTimeout(r, 5));
     expect(calls).toEqual(['mail', 'dl', 'mm:map']);
@@ -186,8 +187,9 @@ describe('site windows in the pause menu (site-places)', () => {
     expect(SITE_TABS.map((t) => t[0])).toEqual(['war', 'season', 'arena']);
   });
   it('helpers', () => {
-    expect(mailLabel(0)).toBe('✉ Почта');
-    expect(mailLabel(150)).toBe('✉ Почта · 99+ нов.');
+    expect(mailBadge(0)).toBe('');
+    expect(mailBadge(7)).toBe('7');
+    expect(mailBadge(150)).toBe('99+');
     expect(mailOn({ LGMail: { on: () => false } })).toBe(false);
     expect(mailUnread({ LGMail: { unread: () => 'x' } })).toBe(0);
     expect(dailiesOn({ dl: 1 }, {})).toBe(false);

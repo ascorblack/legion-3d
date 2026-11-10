@@ -31,7 +31,7 @@ export const present = (doc: Pick<Document, 'querySelector'>, sel: string): HTML
 export const GUILD_ENTRY = '.cy-hud .gd-entry';
 /** guilds.js entryTick(): «🛡 Гильдия / Гильдии» in the City HUD, before the district's button. */
 export const GUILDS_ENTRY = '.cy-hud .gl-entry';
-export const SITE_TABS: [id: string, label: string, order: number][] = [['war', '⚔ Бой армий', 23], ['season', '🏆 Сезоны', 24], ['arena', '🤺 Арена 5×5', 24.5]];
+export const SITE_TABS: [id: string, label: string, order: number, icon: string][] = [['war', 'Бой армий', 23, 'banner'], ['season', 'Сезоны', 24, 'trophy'], ['arena', 'Арена 5×5', 24.5, 'swords']];
 
 const W = (typeof window !== 'undefined' ? window : globalThis) as any;
 const call = (fn: () => unknown) => { try { fn(); } catch (e) { console.warn('[legion-3d] site window', e); } };
@@ -39,8 +39,8 @@ const call = (fn: () => unknown) => { try { fn(); } catch (e) { console.warn('[l
 /** The site's mail is on for this hero (app.js window.LGMail.on(): /api/mail/count did not say `off`). */
 export const mailOn = (w: any = W): boolean => { try { return !!(w.LGMail && typeof w.LGMail.on === 'function' && w.LGMail.on()); } catch { return false; } };
 export const mailUnread = (w: any = W): number => { try { return Math.max(0, Math.floor(+w.LGMail.unread() || 0)); } catch { return 0; } };
-/** Pause-menu label of the mail (the unread count like the site's badge, «99+»). */
-export const mailLabel = (n: number): string => (n > 0 ? `✉ Почта · ${n > 99 ? '99+' : n} нов.` : '✉ Почта');
+/** Pause-menu badge of the mail: the unread count like the site's badge («99+»), '' when nothing is new. */
+export const mailBadge = (n: number): string => (n > 0 ? (n > 99 ? '99+' : String(n)) : '');
 /** Daily tasks are on (app.js dlSync: hero `dl`, dailies.js loaded). */
 export const dailiesOn = (hero: any, w: any = W): boolean => !!(hero && hero.dl && w.LGDailies && typeof w.LGDailies.open === 'function');
 /** The mini-map window (app.js window.LegionMiniMap) — the site offers it only in the «Игра» HUD. */
@@ -51,18 +51,18 @@ export default coreFeature({
   order: 235,
   setup(ctx) {
     const offs = [
-      registerPauseItem({ id: 'site.guild', label: '🏰 Гильдейский район', order: 26, enabled: () => !!present(document, GUILD_ENTRY),
+      registerPauseItem({ id: 'site.guild', label: 'Гильдейский район', order: 26, group: 'city', icon: 'castle', enabled: () => !!present(document, GUILD_ENTRY),
         run: () => { setTimeout(() => present(document, GUILD_ENTRY)?.click(), 0); } }),
-      registerPauseItem({ id: 'site.guilds', label: '🛡 Гильдии', order: 25.5, enabled: () => !!present(document, GUILDS_ENTRY),
+      registerPauseItem({ id: 'site.guilds', label: 'Гильдии', order: 25.5, group: 'city', icon: 'shield', enabled: () => !!present(document, GUILDS_ENTRY),
         run: () => { setTimeout(() => present(document, GUILDS_ENTRY)?.click(), 0); } }),
-      ...SITE_TABS.map(([id, label, order]) => registerPauseItem({ id: 'site.tab.' + id, label, order,
+      ...SITE_TABS.map(([id, label, order, icon]) => registerPauseItem({ id: 'site.tab.' + id, label, order, group: 'city', icon,
         enabled: () => !!present(document, `.tabs button[data-tab="${id}"]`),
         run: () => { ctx.actions.openSitePanel(id); } })),
-      registerPauseItem({ id: 'site.mail', get label() { return mailLabel(mailUnread()); }, order: 27.5, enabled: () => mailOn(),
+      registerPauseItem({ id: 'site.mail', label: 'Почта', badge: () => mailBadge(mailUnread()), order: 21, group: 'city', icon: 'mail', enabled: () => mailOn(),
         run: () => { setTimeout(() => call(() => W.LGMail.open()), 0); } }),
-      registerPauseItem({ id: 'site.dailies', label: '📋 Задания дня', order: 21.5, enabled: () => dailiesOn(ctx.store?.hero),
+      registerPauseItem({ id: 'site.dailies', label: 'Задания дня', order: 21.5, group: 'city', icon: 'tasks', enabled: () => dailiesOn(ctx.store?.hero),
         run: () => { setTimeout(() => call(() => W.LGDailies.open()), 0); } }),
-      registerPauseItem({ id: 'site.minimap', label: '🗺 Мини-карта и рейтинг', order: 22.5, enabled: () => miniMapOn(),
+      registerPauseItem({ id: 'site.minimap', label: 'Мини-карта и рейтинг', order: 26.5, group: 'city', icon: 'mapcup', enabled: () => miniMapOn(),
         run: () => { setTimeout(() => call(() => W.LegionMiniMap.open({ tab: 'map' })), 0); } }),
     ];
     // a new letter (app.js 'lgmail' {unread, wait, off}, also from SSE `mail`): one toast while the 3D is on screen

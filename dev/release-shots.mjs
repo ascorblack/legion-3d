@@ -1,6 +1,6 @@
 // RTX release shots of expedition stages (and other dev pages) — run on the GPU box:
 //   node dev/release-shots.mjs <outDir> --gpu --w=2560 --h=1440 --profile=<persistent dir> [--q=3]
-// Shots: [page, query, name, waitMs]. HUD of the dev page stays (it is the game's own expedition HUD).
+// Shots: [page, query, name, waitMs, js|'clean'|key, keyAfter]. HUD of the dev page stays (it is the game's own expedition HUD).
 const { chromium } = await import('playwright').catch(() => import('playwright-core'));
 import { resolve, join } from 'node:path';
 import { mkdirSync } from 'node:fs';
@@ -12,7 +12,21 @@ const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
 const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
-const SHOTS = opt.set === '071' ? [
+const SHOTS = opt.set === '073' ? [
+  // 0.7.3: the 07.11 boss arena — wings (Левое крыло / Центр / Правое крыло, need / got) with hunters, and a net over a platform; the quest HUD card
+  ['expedition', 'demo=boss-wings&hud=battle', 'boss-wings', 9000],
+  ['expedition', 'demo=boss-nets&hud=battle', 'boss-nets', 9000],
+] : opt.set === '076' ? [
+  // 0.7.6: fishing at the cats fair pond (E «Рыбачить · забросов 7 из 10»), the grouped pause menu (Герой / Город и сайт / Система) with the site's new entries, guild tags «[TAG]»
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&fish=1', 'fishing-pier', 12000, 'js:const g=window.__l3dGame;g.player.teleport(640,2410);g.rig.setMode("tp",{instant:true});g.rig.yaw=2.2;g.rig.pitch=-0.25;g.rig.dist=5;'],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&gu=1', 'pause-menu', 12000, 'js:const g=window.__l3dGame;g.player.teleport(2880,2350);g.rig.setMode("tp",{instant:true});g.rig.yaw=0.25;g.rig.pitch=-0.3;g.rig.dist=14;', 'Escape'],
+  ['game', 'fc=1&magic=1&bots=7&hwc=off&tod=12:00&gt=1', 'guild-tags', 12000, `js:const g=window.__l3dGame,d=window.__demo;g.player.teleport(2880,2350);d.bots.forEach((b,i)=>{const a=(i-3)/3*1.1,[x,y]=d.store.layout.nearest(2880+Math.sin(a)*190,2350-90-Math.cos(a)*45-(i%2)*45);b.x=x;b.y=y;b.path=null;b.wait=9999;b.speed=0;b.face=Math.PI;});g.rig.setMode("tp",{instant:true});g.rig.yaw=0;g.rig.pitch=-0.1;g.rig.dist=3.2;`],
+] : opt.set === '075' ? [
+  // 0.7.5: coin shops — the 3D shop card with the quantity control (−/+), a Будуар sample «Примерить и купить … — N монет»
+  ['rooms', 'room=shop&money=5000&bq=10&aim=3&card=1&ask=1', 'shop-card-qty', 9000, `js:for(let i=0;i<2;i++)document.querySelector('.l3d-roomcard').shadowRoot.querySelector('[data-q="1"]').click()`],
+  ['rooms', 'room=tent&money=5000&aim=1', 'boudoir-prompt', 9000],
+  ['rooms', 'room=tent&money=5000&aim=1&card=1', 'boudoir-card', 9000],
+] : opt.set === '071' ? [
   ['game', 'fc=1&magic=1&bots=4&hwc=off&tod=12:00', 'roofs-hall', 14000, at(2880, 1700, 'tp', 0, -0.32, 'g.rig.dist=20;')],
   ['game', 'fc=1&magic=1&bots=4&hwc=off&tod=15:40', 'roofs-street', 14000, at(2880, 2350, 'tp', 0.25, -0.35, 'g.rig.dist=22;')],
 ] : opt.set === '070' ? [
@@ -66,10 +80,16 @@ const ctx = opt.profile ? await chromium.launchPersistentContext(opt.profile, { 
   : await chromium.launchPersistentContext('', { headless: true, executablePath: process.env.CHROMIUM || undefined, args: ['--no-sandbox', ...glArgs], viewport: { width: W, height: H } });
 const p = ctx.pages()[0] || await ctx.newPage();
 await p.addInitScript((q) => { try { localStorage.setItem('l3d.quality', JSON.stringify(q)); localStorage.setItem('l3d.whatsnew.seen', '"9.9.9"'); } catch {} }, Q === '3' ? 'q3' : 'q' + Q);
-for (const [page, q, name, ms, key] of SHOTS) {
+for (const [page, q, name, ms, key, after] of SHOTS) {
+  if (opt.only && !opt.only.split(',').includes(name)) continue;
   try {
     await p.goto('file://' + resolve(`dist-dev/${page}.html`) + `?${q}&nodbg=1&q=${Q}`);
     await p.waitForTimeout(ms);
+    await p.evaluate(() => {   // close the «Что нового» card (it sits in the body or in the game's shadow root)
+      const roots = [document, ...[...document.querySelectorAll('*')].map((e) => e.shadowRoot).filter(Boolean)];
+      for (const r of roots) for (const b of r.querySelectorAll('button[aria-label="Закрыть"]')) if (/Что нового/.test(b.parentElement?.textContent || '')) b.click();
+    });
+    await p.waitForTimeout(400);
     if (key === 'clean') {   // close one-time cards, hide the dev overlay + the «Что нового» note
       await p.keyboard.press('Escape'); await p.waitForTimeout(300); await p.keyboard.press('Escape');
       await p.evaluate(() => { const d = document.getElementById('dbg'); if (d) d.style.display = 'none'; for (const b of document.querySelectorAll('button')) if (/Понятно/.test(b.textContent || '')) b.click(); });
@@ -77,6 +97,7 @@ for (const [page, q, name, ms, key] of SHOTS) {
     } else if (key && key.startsWith('js:')) {
       await p.evaluate((c) => (0, eval)(c), key.slice(3)); await p.waitForTimeout(4500);
     } else if (key) { await p.keyboard.press(key); await p.waitForTimeout(600); }
+    if (after) { await p.keyboard.press(after); await p.waitForTimeout(1200); }   // e.g. Esc: the pause menu over the placed camera
     if (opt.hide) {   // canvas only: no HUD, badges, cards or dev overlays
       await p.evaluate(() => { const c = document.querySelector('canvas'); const keep = new Set(); for (let e = c; e; e = e.parentElement) keep.add(e); for (const x of document.querySelectorAll('body *')) if (!keep.has(x) && !x.closest('canvas')) x.style.setProperty('display', 'none', 'important'); });
       await p.waitForTimeout(500);

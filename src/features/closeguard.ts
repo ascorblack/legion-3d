@@ -95,7 +95,7 @@ export default coreFeature({
     let offPause = () => { /* */ };
     const pause = () => {
       offPause();
-      offPause = registerPauseItem({ id: 'fullscreen', label: fsOn() ? 'Выйти из полного экрана' : 'Полный экран', key: 'Alt+Enter', order: 30,
+      offPause = registerPauseItem({ id: 'fullscreen', label: fsOn() ? 'Выйти из полного экрана' : 'Полный экран', key: 'Alt+Enter', order: 30, group: 'system', icon: 'expand',
         enabled: () => fsSupported() && !ctx.state.classic, run: toggle });
     };
     pause();

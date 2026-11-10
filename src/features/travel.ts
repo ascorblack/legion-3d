@@ -156,7 +156,7 @@ export default coreFeature({
           title: 'Дорога', group: 'world', hotkey: TRAVEL_HOTKEY, order: 140,
           render(el) { reportDrift(); return mountTravel(el, deps()); },
         });
-        offPause = registerPauseItem({ id: 'travel', label: 'Путешествие', key: 'L', order: 22, run: () => ctx.ui.open('travel') });
+        offPause = registerPauseItem({ id: 'travel', label: 'Путешествие', key: 'L', order: 22, group: 'hero', icon: 'signpost', run: () => ctx.ui.open('travel') });
       } else if (!on && offTab) { offTab(); offTab = null; offPause?.(); offPause = null; }
     };
     offs.push(registerSettingRow({

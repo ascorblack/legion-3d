@@ -254,7 +254,7 @@ export function startMineStatus(ctx: CoreContext, deps: Partial<MineStatusDeps> 
     code: 'KeyU', label: 'В шахту (когда виден значок «Камень выкопан»)', when: 'gameplay',
     run: () => { refresh(); return go(); },
   }));
-  offs.push(registerPauseItem({ id: 'mine-status.go', label: 'В шахту', key: 'U', order: 25, enabled: () => lastGo, run: () => { go(); } }));
+  offs.push(registerPauseItem({ id: 'mine-status.go', label: 'В шахту', key: 'U', order: 25, group: 'city', icon: 'pick', enabled: () => lastGo, run: () => { go(); } }));
   const timer = setInterval(() => { if (model.pending) onHero(); else refresh(); }, D.tickMs);
   offs.push(() => clearInterval(timer));
 

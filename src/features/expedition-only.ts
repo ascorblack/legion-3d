@@ -120,7 +120,7 @@ export default coreFeature({
           + 'Пока ты в отряде, сайт закрывает «Город». Поход смотри здесь, в 3D.</div>');
       },
     });
-    const offPause = registerPauseItem({ id: 'return-city', label: 'Вернуться в город', order: 4, enabled: () => cityTab() === 'open', run: goCity });
+    const offPause = registerPauseItem({ id: 'return-city', label: 'Вернуться в город', order: 4, group: 'hero', icon: 'home', enabled: () => cityTab() === 'open', run: goCity });
 
     return () => {
       W.removeEventListener('l3d:expedition', onExp);

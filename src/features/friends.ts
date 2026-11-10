@@ -104,11 +104,11 @@ export function startFriends(ctx: CoreContext, deps: Partial<FriendsDeps> = {}):
   D.win.addEventListener('l3d:photo', onPhoto);
   const timer = D.win.setInterval(() => { refresh(); sync(); }, D.pollMs);
   offs.push(() => { mo?.disconnect(); D.doc.removeEventListener('fullscreenchange', observe); D.win.removeEventListener('l3d:photo', onPhoto); D.win.clearInterval(timer); });
-  offs.push(registerPauseItem({ id: 'friends.open', label: 'Друзья', order: 27, enabled: avail, run: () => { open(); } }));
+  offs.push(registerPauseItem({ id: 'friends.open', label: 'Друзья', order: 27, group: 'city', icon: 'people', enabled: avail, run: () => { open(); } }));
   // the site's «Только друзей» (city.js lgCityFr; 07.11 the eye button .cy-fro): the 3D crowd honours it (src/features/crowd.ts)
   const frFn = () => { const F = (D.win as unknown as { LGFriends?: { friends?: unknown } }).LGFriends; return !!F && typeof F.friends === 'function'; };
   offs.push(registerPauseItem({ id: 'friends.only', get label() { return pageFrStore.get(FR_KEY) === '1' ? 'Показать всех игроков' : 'Только друзья'; },
-    order: 28, enabled: frFn, run: () => { toggleFriendsOnly(pageFrStore); } }));
+    order: 28, group: 'city', icon: 'eye', enabled: frFn, run: () => { toggleFriendsOnly(pageFrStore); } }));
   refresh();
 
   return () => {

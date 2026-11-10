@@ -18,6 +18,17 @@ to `root` with an open Shadow DOM. Returns `GameUi` = contract `Ui` + `settings`
   Example: `«[E] Войти: Кузня»`, `«[ЛКМ] Купить: Коготок — 4 серебра · [ПКМ] Осмотреть»`. The first call switches the
   HUD from polling `host.focusTarget()` (legacy, still supported) to the driven prompt.
 
+## Pause menu (Esc) — src/ui/pause-menu.ts, icons src/ui/pause-icons.ts
+One board: on the left the hero plate (level medal with the channel's ears, name, class, HP / XP, coins) and «Продолжить»;
+on the right three groups — «Герой» (big tiles with a line of explanation), «Город и сайт», «Система» (quiet tiles).
+Features add entries with `registerPauseItem({ id, label, group?, icon?, key?, order?, badge?, enabled?, run })`
+(src/ui/settings-ext.ts): `group` 'hero' | 'city' | 'system' (default 'city'), `icon` a name of pause-icons.ts (unknown →
+a dot), `badge()` a small counter (mail), `label` plain text — a leading emoji is stripped, the menu draws one line-icon
+set. Arrows / WASD move spatially between the tiles (`pauseNav`), Home / End, Enter / Space run, Esc resumes; the
+selected tile has the real focus (roving tabindex, role menu / group / menuitem); the hovered tile becomes the selected one.
+Container queries size it in design px: ≤ 660 px tall → compact (no explanations), ≤ 940 px wide → hero plate on top,
+two columns, the tiles scroll; big screens zoom the board (×1.1 / ×1.4). Tests: test/pause-menu.test.ts.
+
 ## Карта (src/ui/map.ts, src/ui/mapdata.ts)
 Base picture: host extra `mapImage?(): Promise<{url,width,height,x0,z0,x1,z1}>` (metres, the world's top-down render),
 requested once per layout on first use; until it arrives or if it fails — a vector plan from `store.layout` at the true

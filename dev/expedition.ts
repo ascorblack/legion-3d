@@ -45,7 +45,7 @@ const now = () => Date.now() + clockOff;
 const view = new ExpeditionView({
   uiRoot: document.body, kit: createAvatarKit(), style: 'cats', quality: () => engine.quality, me: () => ({ login: LOGIN, role: ROLE }),
   appOf: (l) => (l === LOGIN ? meApp : null), now,
-  hint: 'мышь (зажать) — осмотреться · колесо — ближе/дальше · dev: FakeQuest',
+  hint: Q.get('nodbg') === '1' ? ' ' : 'мышь (зажать) — осмотреться · колесо — ближе/дальше · dev: FakeQuest',
 });
 view.open(scene);
 
@@ -63,6 +63,11 @@ const HUD = Q.get('hud') as FakeStage | null;
 /** ?ter=Кладбище : the terrain of a ?demo view (biome checks: demo=travel|battle&ter=…) */
 const TER = Q.get('ter');
 const DEMO = Q.get('demo') || (HUD ? FAKE_MOCK[HUD] || null : null);
+/** A 07.11 boss view (the site's `bg`, test/site-1107.test.ts): the fake boss arena 1↔2,3 · 2↔1,4 · 3↔1,4 · 4↔2,3 + overrides */
+const BZN = { a: [[1, [2, 3], [[300, 820], [560, 800], [600, 900], [320, 930]]], [2, [1, 4], [[640, 790], [900, 780], [940, 880], [660, 900]]],
+  [3, [1, 4], [[420, 940], [700, 930], [720, 1030], [400, 1040]]], [4, [2, 3], [[760, 920], [1020, 910], [1050, 1010], [780, 1030]]]], gone: [] as number[] };
+const bossView = (bg: Record<string, unknown>): QuestPayload => ({ on: true, dl: 0, at: now(), k: 'boss', t: 'Логово', ter: 'Лес', n: 8, party: 'in',
+  bg: { name: 'Гнилозуб', title: 'Повелитель трясины', danger: 2, ph: 1, phs: 2, hp: 0.6, st: 'party', in: true, my: 0.8, round: 2, limit: 8, zn: BZN, area: 1, ...bg } }) as unknown as QuestPayload;
 const demo = (k: string): QuestPayload => {
   const mock = mockById(k);
   if (mock) return mock.build({ login: LOGIN, role: ROLE, now: now() });
@@ -87,6 +92,10 @@ const demo = (k: string): QuestPayload => {
     case 'pz-cups': return { ...base, k: 'puzzle', t: 'Три кубка', pz: { id: 2, kind: 'cups', st: 'answer', name: 'Три кубка', icon: '🍷', how: 'Выбери кубок без яда', signs: ['Яд не здесь', 'Яд в первом', 'Яд не во втором'], bt: [['Кубок 1', '1'], ['Кубок 2', '2'], ['Кубок 3', '3']], until: T, an: 5, prize: 'buff' } } as QuestPayload;
     case 'pz-scales': return { ...base, k: 'puzzle', t: 'Весы', pz: { id: 3, kind: 'scales', st: 'answer', name: 'Старые весы', icon: '⚖', how: 'Встань на плиту: лево или право', sums: [3, 7, 4, 6], rt: 'тяжелее', bt: [['Левая', 'лево'], ['Правая', 'право']], until: T, an: 10, prize: 'coins', coins: 10 } } as QuestPayload;
     case 'pz-riddle': return { ...base, k: 'puzzle', t: 'Загадка сфинкса', pz: { id: 4, kind: 'riddle', st: 'answer', name: 'Загадка сфинкса', icon: '❓', how: 'Ответ одним словом в чат', q: 'Без окон, без дверей — полна горница людей', until: T, an: 2, prize: 'coins', coins: 20 } } as QuestPayload;
+    // site 07.11 boss arena (test/site-1107.test.ts fixtures): ?demo=boss-wings | boss-nets | boss-hunt — add &hud=battle for the quest HUD card
+    case 'boss-wings': return bossView({ area: 3, wings: { z: [[1, 2], [3], [4]], need: [2, 1, 1], got: [1, 1, 0] }, mech: { id: 'HPG10', name: 'Три крыла', fam: 'wings', how: 'держим', need: 4, got: 2 }, adds: [['егерь', 0, 0.55], ['ловчий', 0, 0.8]] });
+    case 'boss-nets': return bossView({ mech: { id: 'M30', name: 'Град и сети', fam: 'position', zones: [1], nets: [2], until: 0 } });
+    case 'boss-hunt': return bossView({ zn: undefined, adds: [['егерь', 0, 0.5], ['ловчий', 0, 0.9], ['волк', 3, 0.8]] });
     case 'town': return { ...base, k: 'town', t: 'Ярмарочный посад', town: { id: 't1', name: 'Ярмарочный посад' } };
     case 'dungeon': return { ...base, k: 'dungeon', ter: 'Данж', dgn: { name: 'Склеп', vote: { id: 5, title: 'Куда?', end: T, opts: [[1, 'w', 'Левый проход', '⬅', 4], [2, 'n', 'Прямо', '⬆', 7], [3, 'e', 'Лестница вниз', '⬇', 1]] } } };
     case 'lair': return { ...base, k: 'lair', lair: { hp: 0.8, is: { pick: { until: T, my: 2, cnt: [3, 4, 2, 3] }, gone: [4] } } };

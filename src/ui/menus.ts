@@ -10,7 +10,8 @@ import { slotSilhouette, statIcon } from './icons';
 import { moneyParts } from './money';
 import { coinsHtml } from './hud';
 import { saveSetting, type UiSettings } from './settings';
-import { settingRows, settingRow, readRow, writeRow, pauseItems as extPauseItems, pauseItem } from './settings-ext';
+import { settingRows, settingRow, readRow, writeRow, pauseItem } from './settings-ext';
+import { pauseEntries, pausePageHtml, pauseNav, navDir, type PauseEntry } from './pause-menu';
 import type { TabEntry } from './tabs';
 import { MapView } from './map';
 import { earnedMedals } from '../collect/medals';
@@ -61,7 +62,8 @@ export class Menus {
   private pending: string | null = null;
   private jTab = 'all'; private jList: JEntry[] | null = null; private jErr = false; private jNext: unknown = null; private jLoading = false; private jFor = '';
   private sumCache = new Map<string, { at: number; html: string }>();
-  private pauseIdx = 0;
+  /** Selected pause entry (its act): keyboard and hover move it, Enter runs it. */
+  private pauseSel = 'resume';
   private hoverUid: string | null = null; private hoverEl: HTMLElement | null = null; private shift = false;
   private px = -1; private py = -1;
   /** Item under the pointer when it was clicked: its card stays hidden until the pointer leaves it. */
@@ -87,6 +89,12 @@ export class Menus {
     this.el.addEventListener('click', (e) => this.onClick(e));
     this.el.addEventListener('dblclick', (e) => this.onDbl(e));
     this.el.addEventListener('mouseover', (e) => this.onOver(e));
+    // pause menu: the tile under the pointer becomes the selected one (keyboard continues from there)
+    this.el.addEventListener('pointerover', (e) => {
+      if (this.cur !== 'pause') return;
+      const b = (e.target as HTMLElement).closest?.<HTMLElement>('[data-act="pause"][data-p]');
+      if (b && b.dataset.p !== this.pauseSel) this.pauseSelect(b.dataset.p!);
+    });
     // item cards are hover-only: leaving the item (to anything else, the 3D canvas or out of the window) hides the card
     this.el.addEventListener('mouseout', (e) => {
       const to = e.relatedTarget as Node | null;
@@ -161,7 +169,8 @@ export class Menus {
     const tab = this.c.tabs.get(id);
     if (tab && tab.group === 'char' && !tab.def) { this.lastChar = id; try { localStorage.setItem('l3d.menuTab', id); } catch { /* */ } }
     if (id !== prev) { this.gPick = null; if (id === 'log') this.loadJournal(false); if (id === 'stats' && !this.jList) this.loadJournal(false); }
-    if (id === 'pause') this.pauseIdx = 0;
+    // a fresh pause starts on «Продолжить»; back from Настройки / Управление it keeps the entry that opened them
+    if (id === 'pause' && id !== prev && prev !== 'settings' && prev !== 'help') this.pauseSel = 'resume';
     this.render();
   }
 
@@ -204,6 +213,7 @@ export class Menus {
     if (same) { (this.body.firstElementChild as HTMLElement).style.animation = 'none'; this.body.querySelectorAll('.scroll').forEach((e, i) => { e.scrollTop = sc[i] || 0; }); }
     for (const r of this.body.querySelectorAll<HTMLInputElement>('input[type=range]')) this.paintRange(r);
     if (id === 'map') { const slot = this.body.querySelector<HTMLElement>('.mapslot'); if (slot) this.mapView.attach(slot); }
+    if (id === 'pause') this.pauseFocus();
     // the page was rebuilt: keep the hover card only if the pointer is still over the same item
     if (this.hoverUid && this.cur) {
       const u = CSS.escape(this.hoverUid);
@@ -528,20 +538,33 @@ export class Menus {
   }
 
   /* ------------------------------------------------------------ pause / settings / help */
-  private pauseItems(): [string, string, string][] {
+  private pauseList(): PauseEntry[] {
     const q = this.c.host.store.quest;
-    const items: [string, string, string][] = [['resume', 'Продолжить', 'Esc'], ['tab:' + this.lastChar, 'Персонаж', 'Tab'], ['tab:map', 'Карта', 'M']];
-    if (q && q.on) items.push(['classic:quest', 'Поход', '']);
-    for (const t of this.c.tabs.system()) items.push(['tab:' + t.id, t.name, t.key]);
-    for (const p of extPauseItems()) items.push(['ext:' + p.id, p.label, p.key || '']);
-    items.push(['go:settings', 'Настройки', ''], ['go:help', 'Управление', 'F1'], ['classic-site', 'Классический сайт', 'F8']);
-    return items;
+    return pauseEntries({ charTab: this.lastChar, quest: !!(q && q.on), systemTabs: this.c.tabs.system().map((t) => ({ id: t.id, name: t.name, key: t.key })) });
   }
   private pPause(): string {
-    const items = this.pauseItems();
-    return `<div class="page p-pause" data-page="pause"><div class="pausebox"><div class="logo"><b>ЛЕГИОН</b><span>3D · прогулка по городу</span><div class="paws"><i></i><i></i><i></i></div></div>
-      <div class="plist">${items.map(([a, t, k], i) => `<button type="button" class="pbtn${i === 0 ? ' first' : ''}${i === this.pauseIdx ? ' focus' : ''}" data-act="pause" data-p="${a}" data-i="${i}">${t}${k ? `<i class="kc sm dk">${k}</i>` : ''}</button>`).join('')}</div>
-      <div class="pver">Неофициальное расширение · игра и все правила — на сайте</div></div></div>`;
+    const items = this.pauseList();
+    if (!items.some((e) => e.act === this.pauseSel)) this.pauseSel = 'resume';
+    return pausePageHtml(items, this.c.host.store.hero, this.pauseSel);
+  }
+  /** Buttons of the pause page in DOM order. */
+  private pauseButtons(): HTMLElement[] { return Array.from(this.body.querySelectorAll<HTMLElement>('.p-pause [data-act="pause"][data-p]')); }
+  /** Move the selection (no re-render: classes, roving tabindex and the real focus follow). */
+  private pauseSelect(act: string, focus = true) {
+    this.pauseSel = act;
+    for (const b of this.pauseButtons()) { const on = b.dataset.p === act; b.classList.toggle('cur', on); b.tabIndex = on ? 0 : -1; }
+    if (focus) this.pauseFocus();
+  }
+  private pauseFocus() {
+    const b = this.pauseButtons().find((x) => x.dataset.p === this.pauseSel);
+    if (!b || !b.isConnected) return;
+    try { b.focus({ preventScroll: true }); } catch { /* */ }
+    // only the groups' own column scrolls (narrow / short windows); never the overflow:hidden UI root
+    const sc = b.closest<HTMLElement>('.pm-groups');
+    if (sc && sc.scrollHeight > sc.clientHeight + 1) {
+      const r = b.getBoundingClientRect(), s = sc.getBoundingClientRect(), k = this.c.scale || 1;
+      if (r.top < s.top) sc.scrollTop -= (s.top - r.top) / k + 8; else if (r.bottom > s.bottom) sc.scrollTop += (r.bottom - s.bottom) / k + 8;
+    }
   }
   private pSettings(): string {
     const s = this.c.settings, cam = this.c.host.getCameraMode();
@@ -731,10 +754,18 @@ export class Menus {
   key(code: string, e: KeyboardEvent): boolean {
     const id = this.cur!;
     if (id === 'pause') {
-      const items = this.pauseItems();
-      if (code === 'ArrowDown' || code === 'KeyS') { this.pauseIdx = (this.pauseIdx + 1) % items.length; this.render(); return true; }
-      if (code === 'ArrowUp' || code === 'KeyW') { this.pauseIdx = (this.pauseIdx + items.length - 1) % items.length; this.render(); return true; }
-      if (code === 'Enter' || code === 'Space') { this.pauseAct(items[this.pauseIdx][0]); return true; }
+      const dir = navDir(code);
+      if (dir) {
+        const bs = this.pauseButtons(); if (!bs.length) return true;
+        const R = bs.map((b) => { const r = b.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+        const i = Math.max(0, bs.findIndex((b) => b.dataset.p === this.pauseSel));
+        // «Продолжить» sits low in the left column: → enters the first group at its first tile, not the nearest row
+        const n = this.pauseSel === 'resume' && dir === 'right' ? bs.findIndex((b) => b.dataset.p !== 'resume') : pauseNav(R, i, dir);
+        if (n >= 0 && n !== i) this.pauseSelect(bs[n].dataset.p!);
+        return true;
+      }
+      if (code === 'Home' || code === 'End') { const bs = this.pauseButtons(); const b = code === 'Home' ? bs[0] : bs[bs.length - 1]; if (b) this.pauseSelect(b.dataset.p!); return true; }
+      if (code === 'Enter' || code === 'NumpadEnter' || code === 'Space') { this.pauseAct(this.pauseSel); return true; }
       return false;
     }
     if (id === 'bag' && /^Arrow/.test(code)) {

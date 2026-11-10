@@ -59,15 +59,20 @@ store.setMe({ login: hero.login, app: appearanceFrom(hero.login, heroRaw(hero), 
 
 /* ---- bots ---- */
 const LINES = ['привет всем!', 'кто в шахту?', 'продам кирку недорого', 'где тренер?', 'ура, новый уровень!', 'го в поход вечером', 'сколько стоит колпак?', 'всем добрый вечер', 'у кого есть лишняя килька?', 'кузнец опять сломал мне меч :(', 'красивый шатёр', 'мяу'];
-interface Bot extends Walker { path: [number, number][] | null; wait: number }
+interface Bot extends Walker { raw?: any; path: [number, number][] | null; wait: number }
 const bots: Bot[] = [];
+// ?gt=1: walkers carry a guild tag `gt` (site 10.11, city.js labOf; citygl.js shows it as «[TAG]» before the name), demo tags only; the hero gets one too
+const GT = new URLSearchParams(location.search).get('gt') === '1';
+const GTAGS = ['MEOW', 'PAWS', 'TAIL', 'ЛАПКИ', 'MEOW', 'USY'];
+if (GT) (hero as any).gt = 'PAWS';
 const raw = (session as any).enter.a as any[];
 const N = +(new URLSearchParams(location.search).get('bots') || 24);
 for (let i = 0; i < N; i++) {
   const r = raw[i % raw.length];
   const login = `bot${i + 1}`;
   const [x, y] = layout.nearest(layout.QW + 200 + Math.random() * Math.min(2600, layout.W - layout.QW - 400), 850 + Math.random() * Math.min(600, layout.area.y1 - 860));
-  const b: Bot = { login, app: appearanceFrom(login, { ...r, l: login, n: `Котик${i + 1}` }, STYLE), x, y, face: Math.random() * 6.28, speed: 0, alpha: 1, path: null, wait: Math.random() * 3 };
+  const braw = { ...r, l: login, n: `Котик${i + 1}`, ...(GT ? { gt: GTAGS[i % GTAGS.length] } : {}) };   // `raw`: the game re-derives looks from it (content/game.ts)
+  const b: Bot = { login, raw: braw, app: appearanceFrom(login, braw, STYLE), x, y, face: Math.random() * 6.28, speed: 0, alpha: 1, path: null, wait: Math.random() * 3 };
   bots.push(b); store.upsertWalker(b);
 }
 store.setOnline(N + 1);
@@ -139,6 +144,33 @@ if (new URLSearchParams(location.search).get('sitemine') === '1') {
     if (isMine(p)) { log.push('3d:POST ' + p); if (/^\/api\/mine\/enter/.test(p) && LGMine.on) other.hidden = false; }   // the site's mine now says «другая вкладка»
     return p0(p, b);
   }) as Actions['post'];
+}
+
+/* ---- ?gu=1: the site's «Игра» HUD entries (site 10.11) the pause menu mirrors — mail, arena, guilds, dailies, mini-map;
+   ?fish=1: «Рыбалка» is open for the hero (window.LGFish2On / LGOpenFish2, hero.cr.fish.f2). Stand-ins only: each press shows a toast. ---- */
+{
+  const qs = new URLSearchParams(location.search), w = window as any;
+  if (qs.get('gu') === '1') {
+    const say = (t: string) => () => toastDemo(`Здесь откроется окно сайта: ${t}`);
+    w.LGGameUi = { on: () => true, win: () => true };
+    w.LGMail = { on: () => true, unread: () => 3, open: say('Почта') };
+    w.LGDailies = { open: say('Задания дня') };
+    w.LegionMiniMap = { open: say('Мини-карта и рейтинг') };
+    (hero as any).dl = { n: 3, done: 1 };
+    const hud = document.createElement('div'); hud.className = 'cy-hud'; hud.hidden = true;
+    hud.innerHTML = '<button type="button" class="gl-entry">🛡 Гильдии</button>';
+    hud.querySelector<HTMLButtonElement>('.gl-entry')!.onclick = say('Гильдии');
+    const tabs = document.createElement('div'); tabs.className = 'tabs'; tabs.hidden = true;
+    tabs.innerHTML = '<button type="button" data-tab="arena">🤺 Арена 5×5</button>';
+    document.body.append(hud, tabs);
+    store.setHero(structuredClone(hero));
+  }
+  if (qs.get('fish') === '1') {
+    w.LGFish2On = () => true;
+    w.LGOpenFish2 = () => toastDemo('Здесь откроется рыбалка сайта');
+    (hero as any).cr = { ...((hero as any).cr || {}), fish: { f2: { on: true, casts: 7, max: 10 } } };
+    store.setHero(structuredClone(hero));
+  }
 }
 
 /* ---- «Путешествие» (L): offline stand-ins for the site's town picker and streamer search ---- */

@@ -12,8 +12,13 @@ export function mountWhatsNew(root: HTMLElement, version: string, bullets: reado
   const report = document.createElement('a'); report.href = reportUrl(); report.target = '_blank'; report.rel = 'noopener noreferrer'; report.textContent = 'Сообщить об ошибке ↗'; report.style.color = '#e6bd7b';
   report.addEventListener('click', () => { report.href = reportUrl(); });
   card.append(head, list, report); root.append(card);
-  const onPhoto = (event: Event) => { card.style.display = (event as CustomEvent<{ on: boolean }>).detail?.on ? 'none' : ''; };
+  // hidden in photo mode and while a game menu is open (it sat over the pause menu's tiles); back when they close
+  let photo = false, menu = false;
+  const sync = () => { card.style.display = photo || menu ? 'none' : ''; };
+  const onPhoto = (event: Event) => { photo = !!(event as CustomEvent<{ on: boolean }>).detail?.on; sync(); };
+  const onMenu = (event: Event) => { menu = !!(event as CustomEvent<{ open: string | null }>).detail?.open; sync(); };
   window.addEventListener('l3d:photo', onPhoto);
+  window.addEventListener('l3d:menu', onMenu);
   // in the 3D mine the right column is the mine card and the left one the floor map + «Как начать» (up to x≈540): the notice
   // moves to the top, between them
   const onMine = (event: Event) => {
@@ -22,7 +27,7 @@ export function mountWhatsNew(root: HTMLElement, version: string, bullets: reado
     card.style.left = on ? 'max(552px, calc(50% - 105px))' : ''; card.style.top = on ? '118px' : '';
   };
   window.addEventListener('l3d:mine-status', onMine);
-  const dispose = () => { window.removeEventListener('l3d:photo', onPhoto); window.removeEventListener('l3d:mine-status', onMine); card.remove(); };
+  const dispose = () => { window.removeEventListener('l3d:photo', onPhoto); window.removeEventListener('l3d:menu', onMenu); window.removeEventListener('l3d:mine-status', onMine); card.remove(); };
   close.addEventListener('click', dispose);
   return dispose;
 }

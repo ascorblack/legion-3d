@@ -51,7 +51,7 @@ const update: Feature = {
     window.addEventListener('l3d:settings', onSettings);
 
     const offPause = registerPauseItem({
-      id: 'update', order: 5, get label() { return `⬆ Обновление ${available?.latest ?? ''}`; },
+      id: 'update', order: 5, group: 'system', icon: 'update', get label() { return `Обновление ${available?.latest ?? ''}`.trim(); },
       enabled: () => !!available && on(),
       run: () => { const u = available?.url; if (u) setTimeout(() => window.open(u, '_blank', 'noopener,noreferrer'), 0); },
     });

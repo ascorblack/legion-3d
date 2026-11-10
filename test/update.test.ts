@@ -241,7 +241,7 @@ describe('feature: toast once per version, pause row, setting', () => {
     expect(a.textContent).toBe('Вышла версия 0.4.2 — скачать');
     expect(a.href).toBe(URL_OK); expect(a.target).toBe('_blank'); expect(a.rel).toContain('noopener');
     const row = settings.pauseItems().find((p) => p.id === 'update')!;
-    expect(row.label).toBe('⬆ Обновление 0.4.2');
+    expect(row.label).toBe('Обновление 0.4.2'); expect(row.group).toBe('system'); expect(row.icon).toBe('update');
     row.run(); await new Promise((r) => setTimeout(r, 5));
     expect(opened[0].slice(0, 2)).toEqual([URL_OK, '_blank']);
     x.dispatchEvent(new Event('click'));

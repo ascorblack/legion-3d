@@ -49,8 +49,24 @@ export function settingValue<T extends number | string>(key: string, fallback: T
 }
 
 /* ------------------------------------------------------------------ pause menu items */
-/** An extra pause-menu entry (photo mode, …): shown before «Настройки»; `run` is called after the menu closes. */
-export interface PauseItem { id: string; label: string; key?: string; order?: number; enabled?: () => boolean; run: () => void }
+/**
+ * Groups of the pause menu (src/ui/menus.ts pPause): 'hero' «Герой» (the hero's own screens and journeys), 'city'
+ * «Город и сайт» (places and windows of the City and the site — the default), 'system' «Система» (settings, modes, tools).
+ */
+export type PauseGroup = 'hero' | 'city' | 'system';
+export const PAUSE_GROUP_DEFAULT: PauseGroup = 'city';
+/**
+ * An extra pause-menu entry (photo mode, …); `run` is called after the menu closes. `group` picks its block
+ * (default 'city'), `order` its place inside it; `icon` names a line icon of src/ui/pause-icons.ts (unknown → a dot);
+ * `badge` is a small counter beside the label (mail: unread letters; '' / 0 / null = none); `label` is plain text —
+ * no emoji (the menu draws the icon).
+ */
+export interface PauseItem {
+  id: string; label: string; key?: string; order?: number; enabled?: () => boolean; run: () => void;
+  group?: PauseGroup; icon?: string; badge?: () => string | number | null | undefined;
+}
+export const pauseGroupOf = (p: Pick<PauseItem, 'group'>): PauseGroup =>
+  (p.group === 'hero' || p.group === 'city' || p.group === 'system' ? p.group : PAUSE_GROUP_DEFAULT);
 const PAUSE = new Map<string, PauseItem>();
 export function registerPauseItem(p: PauseItem): () => void {
   PAUSE.set(p.id, p);

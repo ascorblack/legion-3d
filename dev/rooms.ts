@@ -29,6 +29,13 @@ import { createRegistries } from '../src/core/registries';
 import { registerItemModels } from '../src/avatar/items';
 
 const q = new URLSearchParams(location.search);
+// Dev stand-in for the site's style parts (cats style): coin words, like MDDoodle.part('coins') on the site (?nostyle=1 = none)
+if (!q.has('nostyle')) (window as any).MDDoodle = {
+  part(n: string) {
+    if (n === 'coins') return { b: { forms: ['чешуйка', 'чешуйки', 'чешуек'] }, s: { forms: ['серебряная рыбка', 'серебряные рыбки', 'серебряных рыбок'] }, g: { forms: ['золотая рыбка', 'золотые рыбки', 'золотых рыбок'] } };
+    return null;
+  },
+};
 const roomId = q.get('room') || 'forge';
 const quality = +(q.get('q') ?? 2);
 const host = document.getElementById('app') as HTMLElement;
@@ -49,6 +56,7 @@ const hero = JSON.parse(JSON.stringify((me as any).hero)) as Hero;
 if (q.get('cs') === '0') delete (hero as any).cs;
 if (q.get('ms') === '0') delete (hero as any).ms;
 if (q.get('money')) hero.money = +q.get('money')!;
+if (q.get('bq')) (hero as any).bq = +q.get('bq')!;   // ?bq=10: the site's «купить несколько штук» (hero.bq)
 if (q.get('ghost') === '1') hero.ghost = true;
 const subs = new Map<string, Set<() => void>>();
 const store: Store = {

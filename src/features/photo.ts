@@ -152,7 +152,7 @@ export default coreFeature({
     window.addEventListener('keydown',keyDown,true);window.addEventListener('keyup',keyUp,true);window.addEventListener('blur',dropKeys);document.addEventListener('visibilitychange',onVisKeys);
     document.addEventListener('mousemove',mouse,true);canvas.addEventListener('wheel',wheel,{capture:true,passive:false});canvas.addEventListener('mousedown',down,true);document.addEventListener('pointerlockchange',lockChange);
     const offKey=ctx.registries.keys.register('photo.toggle',{code:'F9',label:'Фоторежим',run:()=>{start();return true;}});
-    const offPause=registerPauseItem({id:'photo',label:'Фоторежим',key:'F9',order:10,run:()=>{setTimeout(start,0);}});
+    const offPause=registerPauseItem({id:'photo',label:'Фоторежим',key:'F9',order:10,group:'system',icon:'camera',run:()=>{setTimeout(start,0);}});
     const offFrame=ctx.onFrame(dt=>{
       if(!active)return;
       hero.copy(ctx.feet);

@@ -208,8 +208,10 @@ One full-screen **Game Menu** with two tab groups in the header ribbon:
 - **Персонаж** group: `gear` Снаряжение (C), `bag` Сумка (I), `stats` Характеристики (P), `skills` Навыки (K),
   `ach` Достижения (Y, only if `hero.ac`), `log` Журнал (J), `look` Облик (O).
 - **Мир** group: `legion` Рейтинг Легиона (R), `news` Новости (N), `map` Карта (M).
-- **Pause menu** (Esc) is separate: «Продолжить», «Персонаж», «Карта», «Поход» (if on), «Настройки», «Управление (F1)»,
-  «Классический сайт (F8)», «Сменить канал» (C), «Выйти из аккаунта»? — no (site-owned; link to classic).
+- **Pause menu** (Esc) is separate: hero plate + «Продолжить» on the left; groups «Герой» (Персонаж, Карта, Путешествие,
+  «Поход» if on), «Город и сайт» (the site's places and windows: mail, daily tasks, arena, guilds, mini-map… — only while
+  the site offers them), «Система» (Настройки, Управление F1, Фоторежим, Полный экран, Отладка, Классический сайт F8).
+  Features register entries with `registerPauseItem` (group / icon); see src/ui/README.md «Pause menu».
 - **Settings** lives in the Pause menu (not a ribbon tab).
 - Menu ids for `GameEvents['menu:open']`: `gear bag stats skills ach log look legion news map settings pause help quest`.
 - Last tab is remembered in `localStorage['l3d.menuTab']`.
