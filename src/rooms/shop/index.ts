@@ -26,7 +26,7 @@ export const SHOP_SCENES: Record<string, ShopSceneBuilder> = {
   rows: (R, st, env) => buildRows(R, viewOf(st, 'shop', env) as RowsStock | null, env),
   tent: (R, st, env) => buildTent(R, viewOf(st, 'tent', env) as TentStock | null),
 };
-export const SHOP_TITLES: Record<string, string> = { forge: 'Кузня', magic: 'Лавка звездочёта', shop: 'Лавка', rows: 'Торговые ряды', tent: 'Шатёр' };
+export const SHOP_TITLES: Record<string, string> = { forge: 'Кузня', magic: 'Лавка чародея', shop: 'Лавка', rows: 'Торговые ряды', tent: 'Шатёр' };
 
 let ENCH: { at: number; v: { coins?: { star?: number; sphere?: number } } | null } | null = null;
 /** Material prices come with /api/me (.ench); fetched once per 10 min, only when the hero can buy materials. */

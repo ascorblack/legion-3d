@@ -116,7 +116,7 @@ export interface AvatarKit {
 export interface Labels {
   readonly root: THREE.Object3D;
   /** Create/refresh the plate for a walker. */
-  set(login: string, plate: { name: string; level?: number; me?: boolean; color?: string; badge?: string }): void;
+  set(login: string, plate: { name: string; level?: number; me?: boolean; color?: string; badge?: string; /** guild tag «[tag]» (site 10.11 `gt`) */ tag?: string }): void;
   /** Show a chat bubble for ms (text is truncated to ~90 chars, word-wrapped). */
   bubble(login: string, text: string, ms: number): void;
   remove(login: string): void;

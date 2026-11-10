@@ -39,7 +39,7 @@ export interface StandOpts {
 }
 
 /**
- * A stand like the site's (Кузня / Лавка звездочёта): title sign, top row of hanging goods (weapons), a shelf for the
+ * A stand like the site's (Кузня / Лавка чародея): title sign, top row of hanging goods (weapons), a shelf for the
  * middle row (shields, hats), and the «case» row on a plinth in front (armour on mannequins, charms on cushions).
  */
 export function stand(R: RoomBase, F: Frame, st: StockStand, o: StandOpts): void {

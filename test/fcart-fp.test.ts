@@ -74,7 +74,8 @@ describe('asset fingerprints (fingerprint.ts)', () => {
 });
 
 // with a local copy of the site's scripts (never in the repo): the real draw()
-const SITE = ['.local/site-1106-1607'].map((d) => resolve(__dirname, '..', d)).find((d) => existsSync(resolve(d, 'fc-art.js')));
+// the copy the pinned src/data/fcart-fp.json was made from (10.11: the fair's signpost texts changed)
+const SITE = ['.local/site-1110-0007'].map((d) => resolve(__dirname, '..', d)).find((d) => existsSync(resolve(d, 'fc-art.js')));
 describe.skipIf(!SITE)('asset fingerprints of the real fc-art.js (local site copy)', () => {
   it('the pinned table is what the copy draws; moving every decor item and house changes no fingerprint', async () => {
     const { siteModules, liveFingerprints } = (await import('../scripts/fcart-fp.mjs' as string)) as any;

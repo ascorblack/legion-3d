@@ -39,7 +39,7 @@ describe('site places in the pause menu', () => {
     g.document = fakeDoc({});
     expect(pauseItems().map((p) => p.id).filter((i) => i.startsWith('site.'))).toEqual([]);
     off();
-    expect(SITE_TABS.map((t) => t[0])).toEqual(['war', 'season']);
+    expect(SITE_TABS.map((t) => t[0])).toEqual(['war', 'season', 'arena']);   // arena: site 10.11 (test/site-1110.test.ts)
   });
   it.skipIf(!siteCopy('guildhall.js', 'gd-root'))('guildhall.js: the entry button in the City HUD and the full-screen root we watch', () => {
     const src = siteCopy('guildhall.js', 'gd-root')!;

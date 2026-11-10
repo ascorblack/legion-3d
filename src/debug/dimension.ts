@@ -655,7 +655,7 @@ const SETS: [string, Record<string, unknown>, Record<string, unknown>][] = [
 /** Shopkeepers and masters (their looks as in src/rooms/*). */
 const NPCS: (Omit<NpcDef, 'x' | 'z' | 'face'> & { where: string })[] = [
   { seed: 'кузнец', name: 'Кузнец', where: 'Кузня', look: { shape: 'box', color: '#c9884a', hat: 'cap', acc: ['mustache'] }, gear: { w: 'hammer' }, hello: ['Заходи, {n}! Металл горячий.'] },
-  { seed: 'звездочёт', name: 'Звездочёт', where: 'Лавка звездочёта', look: { hat: 'wizard', acc: ['glasses'], shape: 'ball', color: '#b9a2ff' }, hello: ['Звёзды говорят о тебе, {n}.'] },
+  { seed: 'звездочёт', name: 'Чародей', where: 'Лавка чародея', look: { hat: 'wizard', acc: ['glasses'], shape: 'ball', color: '#b9a2ff' }, hello: ['Звёзды говорят о тебе, {n}.'] },
   { seed: 'Лавочница', name: 'Лавочница', where: 'Торговые ряды', look: { hat: 'chef', shape: 'bean', color: '#ffb27a', acc: ['scarf'] }, hello: ['Свежие пирожки, {n}!'] },
   { seed: 'франт', name: 'Франт', where: 'Шатёр', look: { hat: 'tophat', shape: 'tall', color: '#ff9fb2', acc: ['bowtie', 'monocle'] }, hello: ['О, какой стиль, {n}!'] },
   { seed: 'Тренер', name: 'Тренер', where: 'Арена', look: { hat: 'bandana', shape: 'box', color: '#ff9a6a' }, gear: { w: 'gladius', s: 'round' }, hello: ['Раз-два, {n}, разминка!'] },

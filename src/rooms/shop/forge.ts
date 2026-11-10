@@ -1,5 +1,5 @@
 /**
- * «Кузня» / «Лавка звездочёта» interiors: stands per class like the site (stand title, top row = weapons, middle shelf =
+ * «Кузня» / «Лавка чародея» (until 10.11 «Лавка звездочёта») interiors: stands per class like the site (stand title, top row = weapons, middle shelf =
  * shields / hats, case = armour / charms), the keeper behind a counter with the enchant materials, hearth or star dome.
  */
 import * as THREE from 'three';
@@ -139,8 +139,8 @@ export function buildForge(R: RoomBase, st: ShopStock | null, b: 'forge' | 'magi
   else if (!magic) R.npc({ seed: 'кузнец', name: 'Кузнец', x: 0.2, z: kz, y: DAIS, scale: 1.1, face: Math.PI, look: { shape: 'box', color: '#c9884a', hat: 'cap', acc: ['mustache'] }, gear: { w: 'hammer' },
     hello: ['Заходи, не стой на пороге — железо стынет!', 'О, покупатель! Добро пожаловать в Кузню!', 'Оружие — на стойках, доспехи — на манекенах.'],
     lines: ['Звезда к удаче, сфера — от поломки.', 'Точить — у наковальни на улице.', 'Хороший клинок сам себя не продаст!'], emote: { anim: 'swing', every: 7 } });
-  else R.npc({ seed: 'звездочёт', name: 'Звездочёт', x: 0.25, z: kz, y: DAIS, scale: 1.1, face: Math.PI, look: { hat: 'wizard', acc: ['glasses'], shape: 'ball', color: '#b9a2ff' },
-    hello: ['Звёзды сказали, что ты придёшь.', 'Заходи! Только не урони хрустальный шар.', `Добро пожаловать в ${R.env.building.title || 'Лавку звездочёта'}!`],
+  else R.npc({ seed: 'звездочёт', name: 'Чародей', x: 0.25, z: kz, y: DAIS, scale: 1.1, face: Math.PI, look: { hat: 'wizard', acc: ['glasses'], shape: 'ball', color: '#b9a2ff' },
+    hello: ['Звёзды сказали, что ты придёшь.', 'Заходи! Только не урони хрустальный шар.', `Добро пожаловать в ${(R.env.building.title || 'Лавка чародея').replace(/^Лавка /, 'Лавку ')}!`],
     lines: ['Посох выбирает мага.', 'Амулет на удачу — проверено.', 'Сфера бережёт вещь. А я берегу сферы.'], emote: { anim: 'cheer', every: 11 } });
 
   // decor: free wall slots get barrels / crates / a window
@@ -176,7 +176,7 @@ export function buildForge(R: RoomBase, st: ShopStock | null, b: 'forge' | 'magi
   // the building's own sign over the counter area
   // forge: the chimney stands at the back centre (x ±0.4, up to z −D/2+0.75), so the sign hangs ON its front face,
   // not on the wall behind it (it was hidden by the stack)
-  if (magic) K.sign(R.env.building.title || 'Лавка звездочёта', 0, 3.25, -D / 2 + 0.3, 2.4, 0, { bg: '#3a2a6e', fg: '#ffe39a' });
+  if (magic) K.sign(R.env.building.title || 'Лавка чародея', 0, 3.25, -D / 2 + 0.3, 2.4, 0, { bg: '#3a2a6e', fg: '#ffe39a' });
   else if (ch) K.sign(R.env.building.title && R.env.building.title !== 'Кузня' ? R.env.building.title : Th.title!, 0, 3.15, -D / 2 + 0.52, 2.1, 0, { bg: '#3a3346', fg: '#ffe27a', rim: '#ffc83d' });
   else K.sign(R.env.building.title || 'Кузня', 0, 3.3, -D / 2 + 0.8, 1.9, 0, {});
   R.exitDoor(0, 1.4, 2.3);

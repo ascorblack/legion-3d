@@ -43,7 +43,9 @@ const FP: Record<string, string> = {
   'i:laundry': '11947039ffee46',
   'i:minesign': '0701dcb7f01c90',
   'i:picnic': '10a75bafdaedec',
-  'i:signpost': '041c2e8195e87f',
+  // 10.11: same post and boards; only the texts (ЗВЕЗДОЧЁТ → ЧАРОДЕЙ, МУРЧАРОДЕЙНЯ → ТРЕНЕР) and so the board lengths changed —
+  // signpostLocal draws both from the map's `to` (fc-map.js), nothing to port
+  'i:signpost': '068d15d7c81666',
   'i:tables': '1c7f71bdee6cbb',
   'i:telescope': '0967a966b3ba06',
   'i:wagon': '10196aa8e25831',

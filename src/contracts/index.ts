@@ -49,6 +49,8 @@ export interface Appearance {
   ghost?: boolean;      // dead hero: translucent
   role?: string;        // class id (legionary, archer, mage, priest, rogue, necromancer, paladin, recruit…)
   badges?: { icon: string; name: string }[];
+  /** Guild tag (site 10.11 `gt`, city.js labOf / citygl.js nameTex: «[tag]» before the name, at most 5 characters). */
+  guild?: string;
 }
 
 /* ------------------------------------------------------------------ hero (own character) */

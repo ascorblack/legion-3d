@@ -22,6 +22,7 @@ import { townKitScene, kitOf, kitBuildState, kitSiteBuildings } from './townkit'
 import { readSitePals } from '../world/palette';
 import { createJailHub, jailFromMe, jailList, jailSeats, jailGeoOf, type JailHub } from './jail';
 import { questFormFill } from '../quest/model';
+import { gameUiOn, openGuWindow, pickReplayTab } from './gameui';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
 const W = (typeof window !== 'undefined' ? window : globalThis) as any;   // importable in node tests (pure helpers below)
@@ -334,8 +335,9 @@ export async function replayCityEnter(cityBtn: HTMLButtonElement, B: Bus): Promi
   // a party member inside the quest's district town (app.js openTown → townEntry): another tab would end that entry
   // (tab(id ≠ 'city') → townEntry = 0) and the City would lock again — keep the City as it is
   { const q = B.last['sse:q'] as { on?: boolean; party?: string } | undefined; if (q && q.on && q.party === 'in') return; }
-  const other = document.querySelector<HTMLButtonElement>('.tabs button[data-tab="hero"]:not([hidden])')
-    || Array.from(document.querySelectorAll<HTMLButtonElement>('.tabs button[data-tab]:not([hidden])')).find((b) => b !== cityBtn && b.getAttribute('aria-disabled') !== 'true');
+  // site 10.11 «Игра» mode (src/net/gameui.ts): «Герой» / «Легион» / «Арена»… open as windows over the City — the City would
+  // neither leave nor enter; take a tab that really switches the page then
+  const other = pickReplayTab(Array.from(document.querySelectorAll<HTMLButtonElement>('.tabs button[data-tab]')), cityBtn, gameUiOn(W));
   if (!other || other.getAttribute('aria-disabled') === 'true') return;
   other.click();
   await sleep(300);
@@ -623,6 +625,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
       : anyShown('.mn-board-w') ? 'board' : anyShown('.cy-read') ? 'read'
       // site 07.11: the guild district (guildhall.js) is a full-screen place of its own over the sleeping City
       : anyShown(DISTRICT) ? 'district'
+      // site 10.11: the fishing screen (fish2.js, `.f2`, z 9000) — a full-screen mini-game of its own; the City sleeps under it
+      : anyShown(FISH) ? 'fish'
       // site 08.11 (city.js townShut): the town is closed and the channel has no city to fall back to — the City is shut down
       // and shows only its «… сейчас закрыт» panel with NO_CITY; the 3D yields to it (nothing to walk in)
       : anyShown('#tab-city ' + CITY_SHUT) ? 'shut' : anyShown(DIALOGS) ? 'dialog' : null;
@@ -673,6 +677,13 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     },
     openSitePanel: (spec) => {
       const [tab, view] = String(spec).split(':');
+      // site 10.11 «Игра» mode: hero / legion / season / war / arena are windows over the live City (src/net/gameui.ts) —
+      // open the window, stay in 3D: it is a site dialog, the 3D yields to it and comes back when it closes
+      if (!classic && openGuWindow(W, tab)) {
+        ovAt = 0;
+        if (view) setTimeout(() => document.querySelector<HTMLButtonElement>(`#tab-${tab} [data-view="${view}"], [data-view="${view}"]`)?.click(), 300);
+        return;
+      }
       setClassic(true);
       document.querySelector<HTMLButtonElement>(`.tabs button[data-tab="${tab}"]`)?.click();
       if (view) setTimeout(() => document.querySelector<HTMLButtonElement>(`[data-view="${view}"]`)?.click(), 300);
@@ -752,6 +763,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
 const DIALOGS = '.su-layer, dialog[open], [role="dialog"], [aria-modal="true"]';
 /** The site's guild district (07.11, guildhall.js open(): `.gd-root` on <body> / the fullscreen element, html.gd-full). */
 export const DISTRICT = '.gd-root';
+/** The site's fishing screen (10.11, fish2.js LGFish2.open(): `.f2` role="dialog" on <body>; app.js openFish2 puts the City to sleep). */
+export const FISH = '.f2';
 // .fr-back: the site's friends window (29.10), .cy-jw: the Jail window (30.10) — both lifted over the live 3D (features friends / jail)
 const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view, .fr-back, .cy-jw';
 /** Really on screen: connected, not [hidden], rendered, not visibility:hidden (incl. inherited — e.g. our HIDE_CSS), has a box. */

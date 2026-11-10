@@ -63,7 +63,7 @@ export function demoStock(): CityStock {
   const forge = { ok: true, place: 'forge', split: false, stands: [
     stand('legionary', 'Легионер', weapons.slice(0, 6), shields, armors.slice(0, 2)), stand('archer', 'Лучник', weapons.slice(6, 11), hats.slice(0, 4), armors.slice(2, 3)),
     stand('rogue', 'Разбойник', weapons.slice(11), hats.slice(4, 8), armors.slice(3))] };
-  const magic = { ok: true, place: 'magic', title: 'Лавка звездочёта', split: true, stands: [stand('magic', 'Маг · Жрец', weapons.filter((w) => /staff|crook|censer|grimoire|skull/.test(String(w.look?.weapon))), hats.slice(8), armors.filter((a) => a.look?.armor === 'robe'))] };
+  const magic = { ok: true, place: 'magic', title: 'Лавка чародея', split: true, stands: [stand('magic', 'Маг · Жрец', weapons.filter((w) => /staff|crook|censer|grimoire|skull/.test(String(w.look?.weapon))), hats.slice(8), armors.filter((a) => a.look?.armor === 'robe'))] };
   const amulets = ITEM_CHARMS.map((c, i) => it('demo_c_' + c, 'Амулет: ' + c, 'trinket', R[i % R.length], ['gold', 'sparks', 'halo', 'shadow', 'frost'].includes(c) ? { aura: c } : { charm: c }));
   const tent = { ok: true, place: 'tent', amulets, booths: [{ key: 'hat', title: 'Шапки', icon: '🎩', price: 3000, samples: ITEM_HATS.slice(0, 6).map((h, n) => ({ id: h, name: h, look: { hat: h }, n: n + 1, pos: 'hat:' + h })) }] };
   const potions = [it('potion_small', 'Малое молочко здоровья', 'potion', 'common', null, { effect: { heal: 10 } }), it('potion_hp', 'Большое молочко здоровья', 'potion', 'uncommon', null, { effect: { heal: 30 } })];

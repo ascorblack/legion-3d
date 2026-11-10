@@ -189,6 +189,8 @@ export function appearanceFrom(login: string, raw: any, styleId: StyleId = 'legi
   };
   if (Number.isFinite(+levelRaw) && +levelRaw > 0) app.level = +levelRaw;
   if (str(raw.role)) app.role = str(raw.role);
+  // site 10.11: the guild tag of a walker `gt` (city.js labOf) / of the own hero `hero.gt` — citygl.js shows its first 5 chars
+  if (str(raw.gt)) app.guild = String(str(raw.gt)).slice(0, 5);
   const aw = Array.isArray(raw.aw) ? raw.aw : null;
   if (aw && aw.length) app.badges = aw.slice(0, 3).filter((a: any) => a && typeof a === 'object')
     .map((a: any) => ({ icon: String(a.i || '✦'), name: String(a.n || a.t || a.id || '') }));

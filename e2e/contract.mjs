@@ -67,7 +67,13 @@ if (logged) {
       let ss = null; try { ss = sessionStorage.getItem('lgCityTown'); } catch {}
       return { cy: !!cy, dataTown: cy ? (cy.dataset.town || '') : null, picker: document.querySelector('#tab-city .cy-tp [aria-current="true"]')?.dataset.town ?? null,
         session: ss, townBtn: document.querySelector('#tab-city .cy-town b')?.textContent ?? null, cam: document.querySelector('#tab-city .cy-cam')?.style.width ?? null,
-        campMap: typeof window.LGCampMap, townGen: typeof window.LGTownGen, debugMe: (window.LGCity.debug() || {}).me || null };
+        campMap: typeof window.LGCampMap, townGen: typeof window.LGTownGen, debugMe: (window.LGCity.debug() || {}).me || null,
+        // site 10.11 (read only): the «Игра» mode, mail, fishing, the HUD entries our pause menu mirrors
+        gameUi: (() => { try { return !!window.LGGameUi?.on?.(); } catch { return null; } })(),
+        mail: (() => { try { return !!window.LGMail?.on?.(); } catch { return null; } })(),
+        fish: (() => { try { return !!window.LGFish2On?.(); } catch { return null; } })(),
+        arenaTab: !!document.querySelector('.tabs button[data-tab="arena"]:not([hidden])'),
+        guildsEntry: !!document.querySelector('.cy-hud .gl-entry'), miniMap: typeof window.LegionMiniMap?.open };
     });
   } else console.log(ts(), 'City tab not available');
 }

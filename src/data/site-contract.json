@@ -1065,6 +1065,183 @@
       "re": "q2On = \\(\\) => !!\\(X && X\\.hero && X\\.hero\\(\\) && X\\.hero\\(\\)\\.q2\\)[\\s\\S]*const corner = q2On\\(\\) \\? list\\.filter\\(\\(x\\) => x\\.t === 'отступаем'\\) : \\[\\];[\\s\\S]*q-pbc",
       "severity": "degrade",
       "why": "08.11: hero.q2 moves «отступаем» to the corner block (src/quest/model.ts placeButtons q2, src/quest/siteui.ts .q-pbc group)"
+    },
+    {
+      "id": "LGGameUi (the «Игра» mode)",
+      "kind": "keys",
+      "obj": "LGGameUi",
+      "file": "app.js",
+      "keys": [
+        "on",
+        "win",
+        "close",
+        "open"
+      ],
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "10.11: hero `gu` — hero / legion / season / war / arena open as windows over the City (src/net/gameui.ts openGuWindow, replayCityEnter skips them)"
+    },
+    {
+      "id": "app.js GU_WIN + guTab (tabs as windows)",
+      "file": "app.js",
+      "re": "const GU_WIN = \\{ hero: '[^']+', legion: '[^']+', season: '[^']+', war: '[^']+', arena: '[^']+' \\};[\\s\\S]{0,1200}function guTab\\(id\\)",
+      "severity": "degrade",
+      "why": "10.11: the list src/net/gameui.ts GU_WINDOWS mirrors; tab(id) of these never leaves the City"
+    },
+    {
+      "id": "app.js tab() → guTab",
+      "file": "app.js",
+      "re": "if \\(inJail\\(\\) && id !== 'city'\\) id = 'city';[\\s\\S]{0,200}guTab\\(id\\)",
+      "severity": "degrade",
+      "why": "10.11: a tab click in the «Игра» mode opens a window, not a page switch (src/net/site.ts replayCityEnter / openSitePanel)"
+    },
+    {
+      "id": "LGMail (mail)",
+      "kind": "keys",
+      "obj": "LGMail",
+      "file": "app.js",
+      "keys": [
+        "open",
+        "close",
+        "unread",
+        "on"
+      ],
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "10.11: «Почта» in the pause menu, unread count (src/features/site-places.ts)"
+    },
+    {
+      "id": "app.js 'lgmail' event",
+      "file": "app.js",
+      "re": "new CustomEvent\\('lgmail', \\{ detail: \\{ unread: nn, wait: ww, off: oo \\} \\}\\)",
+      "severity": "degrade",
+      "why": "10.11: a new letter → our toast (src/features/site-places.ts)"
+    },
+    {
+      "id": "mail.js window .ml-win (dialog)",
+      "file": "mail.js",
+      "re": "el\\.className = 'ml-win';[^\\n]*\\n\\s*el\\.setAttribute\\('role', 'dialog'\\); el\\.setAttribute\\('aria-modal', 'true'\\)",
+      "severity": "degrade",
+      "why": "10.11: the mail window is a site dialog — the 3D yields (src/net/site.ts DIALOGS)"
+    },
+    {
+      "id": "LGFish2On / LGOpenFish2 (fishing)",
+      "file": "app.js",
+      "re": "window\\.LGOpenFish2 = openFish2;\\s*window\\.LGFish2On = fish2On;",
+      "severity": "degrade",
+      "why": "10.11: E at the water opens the site's fishing screen (src/features/fishing.ts)"
+    },
+    {
+      "id": "app.js openFish2 sleeps the City",
+      "file": "app.js",
+      "re": "async function openFish2\\(\\)[\\s\\S]{0,600}C\\.sleep\\(\\)[\\s\\S]{0,800}C\\.wake\\(\\)",
+      "severity": "degrade",
+      "why": "10.11: the City sleeps under the fishing screen and wakes on its close (overlay 'fish')"
+    },
+    {
+      "id": "city.js fishWater (pond / canal)",
+      "file": "city.js",
+      "re": "function fishSeg\\(L, W, x, y\\)[\\s\\S]{0,300}x >= a - 20 && x <= b \\+ 20[\\s\\S]{0,300}y0: c0 - 10, y1: c1 \\+ 10[\\s\\S]{0,200}function fishPond\\(x, y\\)[\\s\\S]{0,200}F\\.POND[\\s\\S]{0,800}function fishWater\\(x, y\\)[\\s\\S]{0,200}if \\(S\\.cats\\) return S\\.kit \\? null : fishPond\\(x, y\\);\\s*if \\(inTown\\(\\)\\) return null;",
+      "severity": "degrade",
+      "why": "10.11: where the site lets the hero fish (src/features/fishing.ts fishWaters mirrors it)"
+    },
+    {
+      "id": "fish2.js screen .f2 (dialog)",
+      "file": "fish2.js",
+      "re": "R\\.className = 'f2'; R\\.setAttribute\\('role', 'dialog'\\)",
+      "severity": "degrade",
+      "why": "10.11: the fishing screen — overlay 'fish' (src/net/site.ts FISH)"
+    },
+    {
+      "id": "LGFish2 (fishing screen)",
+      "kind": "keys",
+      "obj": "LGFish2",
+      "file": "fish2.js",
+      "keys": [
+        "open",
+        "close",
+        "on"
+      ],
+      "type": "any",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "10.11: `LGFish2.on` = the screen is open (src/features/fishing.ts: no second open)"
+    },
+    {
+      "id": "guilds.js entry .cy-hud .gl-entry",
+      "file": "guilds.js",
+      "re": "const hud = document\\.querySelector\\('\\.cy-hud'\\);[\\s\\S]{0,400}b\\.className = 'gl-entry';",
+      "severity": "degrade",
+      "why": "10.11: «Гильдии» in the pause menu presses the site's HUD button (src/features/site-places.ts GUILDS_ENTRY)"
+    },
+    {
+      "id": "LGDailies (daily tasks)",
+      "kind": "keys",
+      "obj": "LGDailies",
+      "file": "dailies.js",
+      "keys": [
+        "open",
+        "sync"
+      ],
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "10.11: «Задания дня» in the pause menu (src/features/site-places.ts dailiesOn: hero `dl`)"
+    },
+    {
+      "id": "app.js dlSync (hero dl)",
+      "file": "app.js",
+      "re": "if \\(!\\(ME && ME\\.user && ME\\.hero && ME\\.hero\\.dl\\)\\)",
+      "severity": "degrade",
+      "why": "10.11: daily tasks only with hero `dl` (src/features/site-places.ts)"
+    },
+    {
+      "id": "LegionMiniMap (mini-map)",
+      "kind": "keys",
+      "obj": "LegionMiniMap",
+      "file": "app.js",
+      "keys": [
+        "open",
+        "close",
+        "widget"
+      ],
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "10.11: «Мини-карта и рейтинг» in the pause menu (src/features/site-places.ts miniMapOn)"
+    },
+    {
+      "id": "minimap.js window .lmm (dialog)",
+      "file": "minimap.js",
+      "re": "el\\.className = 'lmm';\\s*el\\.innerHTML = `<section class=\"lmm-win\" role=\"dialog\" aria-modal=\"true\"",
+      "severity": "degrade",
+      "why": "10.11: the mini-map is a site dialog — the 3D yields"
+    },
+    {
+      "id": "app.js arena tab (ME.ar)",
+      "file": "app.js",
+      "re": "const arenaOk = \\(\\) => !!\\(ME && ME\\.ar && ME\\.user\\) && !inJail\\(\\);[\\s\\S]{0,300}\\.tabs button\\[data-tab=\"arena\"\\]",
+      "severity": "degrade",
+      "why": "10.11: «Арена 5×5» in the pause menu while the site shows the tab (src/features/site-places.ts SITE_TABS)"
+    },
+    {
+      "id": "city.js labOf gt (guild tag)",
+      "file": "city.js",
+      "re": "const labOf = \\(l, v, mine\\) => \\(\\{[^\\n]*\\.\\.\\.\\(v\\.gt \\? \\{ gt: String\\(v\\.gt\\) \\} : \\{\\}\\)",
+      "severity": "degrade",
+      "why": "10.11: walkers carry their guild tag `gt` (src/avatar/appearance.ts guild → nameplates)"
+    },
+    {
+      "id": "citygl.js nameTex [gt] (5 chars)",
+      "file": "citygl.js",
+      "re": "const gt = o\\.gt \\? `\\[\\$\\{String\\(o\\.gt\\)\\.slice\\(0, 5\\)\\}\\]` : '';",
+      "severity": "degrade",
+      "why": "10.11: how the site draws the tag (src/avatar/labels.ts tag)"
+    },
+    {
+      "id": "app.js maintenance .lg-maint (alertdialog)",
+      "file": "app.js",
+      "re": "mtEl\\.className = 'lg-maint'; mtEl\\.setAttribute\\('role', 'alertdialog'\\); mtEl\\.setAttribute\\('aria-modal', 'true'\\);",
+      "severity": "degrade",
+      "why": "10.11: «Технические работы» over everything — aria-modal, the 3D yields (src/net/site.ts DIALOGS)"
     }
   ]
 }

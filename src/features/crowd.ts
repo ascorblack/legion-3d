@@ -27,7 +27,7 @@ export default coreFeature({
     const crowd = new CrowdLod(64);
     const fo = ctx.dev.friendsOnly = new FriendsOnly(pageFriendsDeps());
     let meKey = JSON.stringify(me.app), meApp: unknown = me.app, meTool = false;
-    labels.set(me.login, { name: me.app.name, level: me.app.level, me: true });
+    labels.set(me.login, { name: me.app.name, level: me.app.level, me: true, tag: me.app.guild });
 
     const sync = () => {
       for (const [l, a] of avs) if (!store.walkers.has(l)) {
@@ -39,11 +39,11 @@ export default coreFeature({
           a = { av: kit.create(w.app), key: JSON.stringify(w.app), app: w.app, lod: -1, slot: -1 }; avs.set(w.login, a); engine.scene.add(a.av.root);
           a.av.root.visible = !ctx.state.inRoom;
           anchors.set(w.login, new THREE.Vector3(0, -999, 0));
-          labels.set(w.login, { name: w.app.name, level: w.app.level });
+          labels.set(w.login, { name: w.app.name, level: w.app.level, tag: w.app.guild });
         } else if (a.app !== w.app) {
           a.app = w.app;
           const key = JSON.stringify(w.app);
-          if (a.key !== key) { a.av.setAppearance(w.app); a.key = key; labels.set(w.login, { name: w.app.name, level: w.app.level }); }
+          if (a.key !== key) { a.av.setAppearance(w.app); a.key = key; labels.set(w.login, { name: w.app.name, level: w.app.level, tag: w.app.guild }); }
         }
       }
       const tool = !!ctx.state.toolInHand;
@@ -57,7 +57,7 @@ export default coreFeature({
           if (tool) { delete g.w; delete g.wr; delete g.s; delete g.sr; }
           meAv.setAppearance(tool ? { ...store.me.app, gear: g } as typeof store.me.app : store.me.app);
           meKey = k;
-        } else if (k !== meKey) { meKey = k; meAv.setAppearance(store.me.app); vm.setAppearance(store.me.app); meAv.play('equip'); labels.set(me.login, { name: store.me.app.name, level: store.me.app.level, me: true }); }
+        } else if (k !== meKey) { meKey = k; meAv.setAppearance(store.me.app); vm.setAppearance(store.me.app); meAv.play('equip'); labels.set(me.login, { name: store.me.app.name, level: store.me.app.level, me: true, tag: store.me.app.guild }); }
       }
     };
     const offW = store.on('walkers', sync); sync();

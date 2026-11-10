@@ -167,9 +167,9 @@ class LabelsImpl implements Labels {
     return e;
   }
 
-  set(login: string, p: { name: string; level?: number; me?: boolean; color?: string; badge?: string }): void {
+  set(login: string, p: { name: string; level?: number; me?: boolean; color?: string; badge?: string; tag?: string }): void {
     const e = this.entry(login);
-    const key = `${p.name}|${p.level ?? ''}|${p.me ? 1 : 0}|${p.color ?? ''}|${p.badge ?? ''}`;
+    const key = `${p.name}|${p.level ?? ''}|${p.me ? 1 : 0}|${p.color ?? ''}|${p.badge ?? ''}|${p.tag ?? ''}`;
     if (key === e.plateKey) return;
     e.plateKey = key;
     e.me = !!p.me;
@@ -179,7 +179,10 @@ class LabelsImpl implements Labels {
     g.font = fN; const nw = g.measureText(name).width;
     g.font = fL; const lw = lv ? g.measureText(lv).width + 24 : 0;
     g.font = fB; const bw = p.badge ? g.measureText(p.badge).width + 8 : 0;
-    const W = Math.min(1024, Math.ceil(nw + lw + bw + 40 + (lv ? 10 : 0))), H = 64;
+    // guild tag (site 10.11 citygl.js nameTex: «[tag]» before the name, smaller, 70 % opacity)
+    const tag = p.tag ? `[${String(p.tag).slice(0, 5)}]` : '';
+    g.font = fL; const tw = tag ? g.measureText(tag).width + 10 : 0;
+    const W = Math.min(1024, Math.ceil(nw + lw + bw + tw + 40 + (lv ? 10 : 0))), H = 64;
     if (c.width < W) c.width = Math.min(1024, Math.max(W, c.width * 2));   // grows only
     g.clearRect(0, 0, c.width, c.height);
     const x0 = Math.round((c.width - W) / 2), y0 = 14;
@@ -196,6 +199,7 @@ class LabelsImpl implements Labels {
     g.lineWidth = 2; g.strokeStyle = 'rgba(255,255,255,.16)'; g.beginPath(); g.moveTo(x0 + 22, y0 + 4); g.lineTo(x0 + W - 22, y0 + 4); g.stroke();
     let x = x0 + 20;
     if (p.badge) { g.font = fB; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText(p.badge, x, y0 + H / 2 + 1); x += bw; }
+    if (tag) { g.font = fL; g.textBaseline = 'middle'; g.globalAlpha = 0.7; g.fillStyle = p.me ? '#ffe9b0' : '#d8ccff'; g.fillText(tag, x, y0 + H / 2 + 1); g.globalAlpha = 1; x += tw; }
     g.font = fN; g.textBaseline = 'middle';
     g.lineWidth = 6; g.strokeStyle = 'rgba(10,8,24,.9)'; g.lineJoin = 'round'; g.strokeText(name, x, y0 + H / 2 + 1);
     g.fillStyle = p.color || (p.me ? '#ffd76a' : '#ffffff'); g.fillText(name, x, y0 + H / 2 + 1);

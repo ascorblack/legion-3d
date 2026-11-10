@@ -90,6 +90,29 @@ so the extension must treat every internal API as unstable and degrade gracefull
   quest.js `hero.q2`: «отступаем» in a corner block `.q-pbc`, say history ↑/↓ (localStorage `lgQSayH:<ch>`), the say box under `.ql-r1`,
   «ты примерно тут» for a hero in reserve. worldmap.js: squads of all channels (`d.sq`), the travel route (`d.route`). Our follow-ups:
   .local/drift1108b/FINDINGS.md.
+- **09–10.11.** app.js «Игра» mode (hero `gu` && `cy`, not jailed; `window.LGGameUi {on, win, close, open}`): the City tab is the game
+  screen (button «Игра»), app.js draws its HUD `#gu-hud` (fixed, z 5 — under our canvas) with «Герой / Гильдия / Арена / Почта / Поход»,
+  a mini-map, «Рейтинг», «Задания дня»; the tabs `hero legion season war arena` (GU_WIN) open via `guTab` as WINDOWS over the live City
+  (`#tab-<id>.on.gu-win`, role="dialog", aria-modal, z 28, bar `#gu-wbar`). 3D: actions.openSitePanel opens those through
+  LGGameUi.win without the classic switch (src/net/gameui.ts); replayCityEnter never clicks one of them (no City leave/enter would follow).
+  New lazy modules (every window is a site dialog — the 3D yields): mail.js (`window.LGMail` in app.js: `on()` from GET /api/mail/count,
+  `unread()`, event `lgmail`, SSE `mail`; window `.ml-win`), dailies.js (hero `dl`, a `<dialog>` via showModal, a `.dl-bar` in `#tab-hero`;
+  403 «пока недоступны» for us), arena.js (ME `ar`, tab `arena`, `/api/arena*`), minimap.js (`window.LegionMiniMap` in app.js, `.lmm` z 900:
+  map / season / rating), guilds.js (`LGGuilds`, a `.cy-hud .gl-entry` button once GET /api/guilds is ok; 409 «недоступны в этом сезоне» for
+  us) with guildraid.js / guildrun.js (dialogs `.grd` / `.gr`) and emblems.js (art), craft.js (`LGCraft.hub`, hero `cr`), fish2.js «Рыбалка»:
+  hero `cr.fish.f2.on` (`window.LGFish2On / LGOpenFish2`), a 2D canvas mini-game `.f2` (role dialog, z 9000) over the sleeping City
+  (`LGCity.sleep` / `wake`), reached in city.js by a click on the water (`fishWater`: the cats fair's POND off the PIER, the old fair's canal
+  between the bridges ± 20 px; never camp / district / Town Kit / jail) and from the mine's «Ремёсла». POST `/api/craftF2 {k: 'fish', a: view |
+  cast {force} | fight {castId, inputs, hookT} | cat | sell | fry | gift | chest | upgrade}`; the fight is simulated by the client (`LGFish2Sim`,
+  UMD, deterministic) and its inputs are sent. 3D: E at that water (src/features/fishing.ts), overlay 'fish'. `.lg-maint` (alertdialog,
+  aria-modal) «Технические работы». city.js: the position is also kept on the server (GET `/api/city/pos`, `[x, y, at]` in lgCityPos) — on wake /
+  tab return it may move the hero or switch to the newer town (`srvGo`); a new Esc handler (`escPlan`: blur a field → close a site window →
+  close the building panel) — our key shield / preventDefault keeps it off our keys; `LGCity.here / show / showSet`. Walkers carry a guild tag
+  `gt` (labOf; citygl.js nameTex «[tag]», 5 chars) — ours: Appearance.guild on the nameplate. site-chat.js: guild chat tab `gl` (hero `gch`,
+  `/api/guilds/chat|say`, no bubbles), mute appeals (`/api/appeal`); app.js jail appeal button in `.jail-bar`. «Лавка звездочёта» → «Лавка
+  чародея», fair signposts «ЧАРОДЕЙ» / «ТРЕНЕР» (same drawing). b-hall.js «Взнос монетами» (hero `hc`). auction.js: no minimum price, «после
+  первого похода» (hero `aq`). The tab scripts are served only with a session cookie now: `L3D_COOKIES=… npm run drift`.
+  Our follow-ups: .local/drift1110/FINDINGS.md.
 
 ## Auth / user
 - Cookie `lsid` (httpOnly). `GET /api/me` → `{ ok, user:{login,name}, hero, roles, classes, ench, ql, now, … }`.
