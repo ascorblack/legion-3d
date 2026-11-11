@@ -211,6 +211,7 @@ export class MineClient {
     if (r.here != null) this.emit({ type: 'here' });
     if (M.presence(r, now, snap)) this.emit({ type: 'presence' });
     const res = M.take(r.st, r.me, r.lk, now, r.me ? null : this.heroMe());
+    this.newsHero();
     if (res.needFull && !this.full) {
       // new floor without the layout: ask for the whole view
       this.full = true; void this.poll(true).finally(() => { this.full = false; });
@@ -251,7 +252,17 @@ export class MineClient {
   /** POST /api/mine/chat/say?c=<CB> {text} (site chat module, room 'mine'). */
   async say(text: string): Promise<any> { const t = String(text || '').trim(); if (!t) return null; return this.o.api('/api/mine/chat/say' + this.chatQ, { text: t }); }
   /** Results of mine actions come with the hero snapshot (results[].x.op = mine…). */
+  /**
+   * Site 11.11 newsHero: the mine record has no «Пока тебя не было» yet, the hero snapshot (hero.mn[c].news) has one — take
+   * it (the HUD's NewsGate decides whether it is shown). true = me changed.
+   */
+  newsHero(): boolean {
+    const M = this.model; if (!M.me || M.me.news) return false;
+    const m = this.heroMe(); if (!m || !m.news) return false;
+    M.me = { ...M.me, news: m.news }; return true;
+  }
   private onMe(d: any): void {
+    if (this.newsHero()) this.emit({ type: 'busy' });
     const list = (d && d.results) || []; if (!Array.isArray(list)) return;
     for (const x of list) { if (!x || !x.id || this.seenRes.has(x.id)) continue; if (x.x && /^mine/.test(x.x.op || '')) { this.seenRes.add(x.id); this.result(x); } }
   }
@@ -572,9 +583,10 @@ export class MineClient {
   /** Looks of diggers we know nothing about (asked with the next poll). */
   lookOf(l: string): LookRec | null { return this.model.lookOf(l); }
 
-  /** Leave the mine: POST /api/mine/leave?c= {} and stop timers/subscriptions. `leave` = false: the site's own mine client
-   *  holds this presence now and sends the leave itself (src/features/mine-hold.ts) — stop without a request. */
-  close(leave = true): void {
+  /** Leave the mine: POST /api/mine/leave?c= {} ({out: 1, sid} with `out` = back to the city, site 11.11 exit()) and stop
+   *  timers/subscriptions. `leave` = false: the site's own mine client holds this presence now and sends the leave itself
+   *  (src/features/mine-hold.ts) — stop without a request. */
+  close(leave = true, out = false): void {
     if (this.closed) return;
     if (this.goT) { this.T.clearTimeout(this.goT); this.goT = 0; }
     this.closed = true;
@@ -582,6 +594,7 @@ export class MineClient {
     this.rideStop();
     for (const u of this.unsubs) { try { u(); } catch { /* */ } }
     this.unsubs = []; this.subs.clear();
-    if (this.entered && leave) { try { void this.o.api('/api/mine/leave' + this.q(), {}); } catch { /* */ } }
+    // site 11.11 exit(): leaving the mine for the city says so — {out: 1, sid}; a floor switch / failed entry stays {}
+    if (this.entered && leave) { try { void this.o.api('/api/mine/leave' + this.q(), out ? { out: 1, sid: this.sid || undefined } : {}); } catch { /* */ } }
   }
 }

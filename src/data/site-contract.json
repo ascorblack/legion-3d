@@ -175,6 +175,84 @@
       "why": "the big floor is marked by st.fl.v3 (src/rooms/mine/geo3.ts geomOf); without it the 3D mine falls back to the classic 7 × 12 floor"
     },
     {
+      "id": "LGMineShares (mine.js)",
+      "kind": "global",
+      "name": "LGMineShares",
+      "file": "mine.js",
+      "keys": [
+        "splitShards",
+        "project",
+        "projectAll"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "11.11: the ore share split of a stone (UMD head of mine.js, the game splits with the same code) — ported 1:1 to src/rooms/mine/shares.ts (parity: test/site-1111.test.ts runs the site's module in node:vm); feeds «Получишь: …» over the aimed stone"
+    },
+    {
+      "id": "mine me.ex (expected loot of the own stone)",
+      "file": "mine.js",
+      "re": "me\\.ex && me\\.ex\\[1\\] === i && \\(!\\(st\\.fl && st\\.fl\\.v3\\) \\|\\| me\\.ex\\[0\\] === st\\.n\\)",
+      "severity": "degrade",
+      "why": "11.11 expectOf: me.ex = [floor, cell, resource → shards] of the stone being dug wins over the projection (src/rooms/mine/loot.ts expectOf)"
+    },
+    {
+      "id": "mine st.bl [left, total, rate, n, U, P, pd]",
+      "file": "mine.js",
+      "re": "const \\[left, , rate, n, U = 0, P = 0, pd = 0\\] = b",
+      "severity": "degrade",
+      "why": "11.11: a stone's work record grew U (work of those who left), P (power of the current diggers), pd (shards paid out) — src/rooms/mine/state.ts Bl, loot.ts expectOf"
+    },
+    {
+      "id": "mine me.lg (own log, loot toasts)",
+      "file": "mine.js",
+      "re": "Array\\.isArray\\(S\\.me\\.lg\\)",
+      "severity": "degrade",
+      "why": "11.11: «Твой журнал в шахте» and the loot toasts read the hero's own log me.lg (k dug/part/rare/prize/sell/buy/lift/drill/claim) — src/rooms/mine/loot.ts logLine / myLog / toastFromLog; the journal falls back to st.log when it is gone"
+    },
+    {
+      "id": "mine dugToast / toastFromLog",
+      "file": "mine.js",
+      "re": "function toastFromLog\\(\\)[\\s\\S]{0,400}x\\.k === 'dug' && x\\.i === w\\.i && x\\.n === w\\.n",
+      "severity": "degrade",
+      "why": "11.11: own finished stone → «Выкопан: …» toast with «+N руды» rows, or waiting for its me.lg line (src/rooms/mine/loot.ts dugToast / toastFromLog, MineHud.stoneDone)"
+    },
+    {
+      "id": "mine chest loot st.fl.ch",
+      "file": "mine.js",
+      "re": "S\\.st\\.fl && S\\.st\\.fl\\.ch",
+      "severity": "degrade",
+      "why": "11.11 lootOfCell: chests carry their loot in st.fl.ch[cell] (src/rooms/mine/loot.ts lootOfCell)"
+    },
+    {
+      "id": "mine dl d[6] (got ore count)",
+      "file": "mine.js",
+      "re": "any: d\\[6\\] != null \\? \\+d\\[6\\] \\|\\| 0 : Object\\.keys\\(m\\)\\.length",
+      "severity": "degrade",
+      "why": "11.11 gotOf: dl[6] = how many diggers got ore («досталась другим копавшим») — src/rooms/mine/state.ts"
+    },
+    {
+      "id": "mine newsCheck acted / newsHero",
+      "file": "mine.js",
+      "re": "if \\(newsFresh\\(\\)\\) \\{ if \\(!S\\.acted\\) news\\(S\\.me\\.news\\); \\}[\\s\\S]{0,600}h\\.mn && h\\.mn\\[C\\]",
+      "severity": "degrade",
+      "why": "11.11: «Пока тебя не было» is not shown over a player who already acted, and me.news may come from hero.mn[c] — src/rooms/mine/state.ts NewsGate.act, net.ts newsHero"
+    },
+    {
+      "id": "mine pickNeed pin",
+      "file": "mine.js",
+      "re": "function pickNeed\\(\\)[\\s\\S]{0,800}pickPay\\(N\\[4\\] \\|\\| \\{\\}, opt, hv, use\\)",
+      "severity": "degrade",
+      "why": "11.11: «Новая кирка: что нужно» pinned on screen — src/rooms/mine/hud.ts pickNeed / pinHtml (pin in the supplier's «Кирка» tab)"
+    },
+    {
+      "id": "mine leave {out: 1, sid} on exit",
+      "file": "mine.js",
+      "re": "out === true \\? \\{ out: 1, sid: S\\.sid \\|\\| undefined \\} : \\{\\}",
+      "severity": "degrade",
+      "why": "11.11 exit(): leaving the mine for the city sends /api/mine/leave {out: 1, sid}; a floor switch keeps {} — src/rooms/mine/net.ts close(leave, out)"
+    },
+    {
       "id": "LGCampMap",
       "kind": "global",
       "name": "LGCampMap",

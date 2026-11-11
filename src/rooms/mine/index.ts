@@ -30,7 +30,8 @@ import {
   myStone, reachK, REACH_LIMIT, REACH_WARN, EDGE_TEXT, GUARD_TEXT, MINE_STATUS_EVENT, ECO_FRAME_MS, type TabEnv,
 } from './afk';
 import { pickaxeGeo } from './art';
-import { estimateStone, promptEcon } from './econ';
+import { estimateStone, promptEcon, withExpect } from './econ';
+import { expectOf, exText } from './loot';
 import { mineSwitch, PREF_ECON } from './prefs';
 import { layerBanner } from './layers';
 import { walkPlan, AutoWalk, LeaveGuard, ConfirmTwice, type WalkCtl } from './walk';
@@ -228,6 +229,8 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
         const p = cellXY(b.i), cell = M.F && M.F.cells[b.i], g = b.got;
         const text = burstText(b);
         hud.popup(text, mx(p.cx), scene.stoneHeight(b.i) + 0.4, mz(p.cy));
+        // site 11.11 dugToast: «Выкопан: …» with the «+N руды» rows (or the wait for the game's me.lg line of this stone)
+        if (cell && M.st) hud.stoneDone(b, cell, M.st.n);
         if (cell && cell.r && g && !(g.q > 0) && g.any) hud.tip(`${TX.done}. ${cell.r ? 'Руда' : ''} досталась другим копавшим (по вкладу) — тебе монеты за работу.`);
         else hud.tip(TX.done);
       }
@@ -277,6 +280,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   const isField = (t: EventTarget | null) => { const el = t as HTMLElement | null; return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable); };
   const onGuardKey = (e: KeyboardEvent) => {
     if (held) return;   // the classic site's keys are not ours
+    if (e.type === 'keydown' && !isField(e.target)) hud.acted();   // site S.acted: no «Пока тебя не было» over a busy player
     const now = performance.now();
     throttle.wake();
     if (e.type === 'keyup') { guard.keyUp(e.code, now); return; }
@@ -290,7 +294,10 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   };
   document.addEventListener('keydown', onGuardKey, true);
   document.addEventListener('keyup', onGuardKey, true);
-  const onActivity = () => { guard.activity(performance.now()); throttle.wake(); };
+  const onActivity = (e: Event) => {
+    guard.activity(performance.now()); throttle.wake();
+    if (e.type === 'pointerdown' && !((e.target as HTMLElement | null)?.closest?.('.l3m-news'))) hud.acted();
+  };
   const ACT = ['pointerdown', 'mousemove', 'wheel', 'focus'] as const;
   for (const a of ACT) window.addEventListener(a, onActivity, { passive: true, capture: true });
   // fewer frames while the window is visible but without focus (second monitor AFK); focus / input → full rate
@@ -327,7 +334,9 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     const now = Date.now(), raw = client.rawQueue();   // the queue array is replaced on every change: identity is enough
     if (lab.i === i && lab.snap === M.st.at && lab.my === M.myI && lab.raw === raw && now - lab.at < 2000) return lab.text;
     const on = mineSwitch(PREF_ECON), qList = client.queue(), place = qList.indexOf(i);
-    const est = on ? promptEcon(estimateStone(M.st, cell, now, M.myI)) : '';
+    // «получишь: …» is the game's own projection (site 11.11 expectOf): shown with the estimates off too
+    const x = expectOf(M, i, now);
+    const est = on ? promptEcon(withExpect(estimateStone(M.st, cell, now, M.myI), x, M.st.bp)) : x ? `получишь: ${exText(x)}` : '';
     const head = M.myI === i ? `${TX.doing}: ${blockTitle(cell)}` : place >= 0 ? `В очереди №${place + 1}: ${blockTitle(cell)}` : `Копать: ${blockTitle(cell)}`;
     const hint = client.queueOn && M.myI >= 0 && M.myI !== i && place < 0 ? ' · Shift+E — в очередь' : '';
     lab.i = i; lab.at = now; lab.snap = M.st.at; lab.my = M.myI; lab.raw = raw;
@@ -664,7 +673,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
       if (released) client.close(false);
       else if (!o.client && siteMineOpen()) { client.close(heldSiteKey() !== client.c); exitSiteMine(); }
       else {
-        client.close();
+        client.close(true, true);   // back to the city: the site's exit() leave {out: 1, sid}
         holdSiteMine(false);
         // the City still sleeps (it slept under the site's mine and nobody woke it): wake it as the site's «В город» does
         if (!o.client && !cityLive() && document.querySelector('#tab-city.on')) { try { if (typeof W.LGCity?.wake === 'function') W.LGCity.wake(); } catch { /* */ } }

@@ -47,12 +47,14 @@ Functions: `walkable(dug,i)`, `cellOfPt`, `nbrs` (4-neighbours; row 11 ↔ virtu
   craft:'mine', biome, danger(★1-5), gem, id, name, dist, n (floor), seed, entryX, gen, week, reset (ms), rec (record floor),
   dug: '0010…' (84 chars, '1' = cleared; voids and the entry start cleared),
   front: [i…],                // stones that can be dug now («с жёлтым кругом») = not dug, not wall/void/entry, a walkable neighbour
-  bl: { i: [left, w, rate/min, diggers] },   // stones being dug: work left / total, speed, how many dig it
+  bl: { i: [left, w, rate/min, diggers, U?, P?, pd?] },   // stones being dug: work left / total, speed, how many dig it;
+                              // 11.11: U = work of those who left, P = power of the current diggers, pd = shards already paid out
   dg: { i: [login ×≤4] },     // first 4 diggers per stone (others = "+N")
-  dl: [[i, n, res, {login: pieces}, {login: shards}?, {login: {res: shards}}?]…],   // loot of recently dug stones (16)
-  log: [{t, at}], top: [[login, units]], gv: [[login, n]], hist: [], working (diggers now),
+  dl: [[i, n, res, {login: pieces}, {login: shards}?, {login: {res: shards}}?, gotOre?]…],   // loot of recently dug stones (16); 11.11 gotOre = how many got ore
+  log: [{t, at}] (no longer read by mine.js since 11.11 — the journal is me.lg), top: [[login, units]], gv: [[login, n]], hist: [], working (diggers now),
   lampFrom, darkFrom (floor from which it is dark without a helmet, 5), lampPrice, bp: {res: coins per piece},
-  fl?: { exit (column of the way down), entry (cell), special ('vein'|'flood'|'den'|null), c: [[t, lv, r, a] ×84] } }
+  fl?: { exit (column of the way down), entry (cell), special ('vein'|'flood'|'den'|null), c: [[t, lv, r, a] ×84],
+         ch?: {cell: {res: shards}} (11.11: loot of the chests) } }
 ```
 `fl.c` cell tuple: `t` ∈ `rock | hard | ore | rare | wall | void | entry` (+ `chest` in the texts), `lv` = stone level
 (bigger = larger, longer to dig; size ×(1 + 0.1·(lv − n))), `r` = rock kind for `rock`/`hard` (`limestone`, `basalt`,
@@ -65,7 +67,9 @@ and the nature gems `topaz emerald ruby sapphire …`), `a` = amount class. **`f
 fractions), r: {res: pieces}, p: {res: shards}} (ore waiting in the mine when bags are full), mx: {lv, xp, need}
 (mastery «Горное дело»), wk (week contribution), pw, pk (pickaxe), lamp, q: {d: [Quest], w: [Quest]}, nm, dist, bi, dg, gem,
 fx: {m2 (mine 2.0), b (buyer window), pk (supplier), sh (shard art), q (queue)}, pkx: {lv, ob, obP, obL, obC, t: [[name,
-power, mastery, price, {res: shards}, {res: [replaces, ratio]}]]}, qq: [queued stones], news? }`.
+power, mastery, price, {res: shards}, {res: [replaces, ratio]}]]}, qq: [queued stones], news?,
+ex?: [floor, cell, {res: shards}] (11.11: the game's expectation for the own stone), lg?: [{at, k, n?, i?, t?, lv?, s?, r?, p?, c?}]
+(11.11: the hero's own mine log, k ∈ dug / part / rare / prize / sell / buy / lift / drill / claim) }`.
 Quest: `{id, t, p, g, c (reward), done, cl (claimed), h? (where)}`.
 
 ### Presence (as in the city)
@@ -94,7 +98,7 @@ minutes / digging now). `lk: {login: {n, lv, lk, g, gh}}` looks of diggers asked
 | supplier: ore bag | `POST /api/mineOreBag` | `{c}` | `{ok, id}` + result `x: {op:'mineOreBag'}` |
 | news read | `POST /api/mineSeen` | `{c}` | `{ok}` |
 | chat | `POST /api/mine/chat/say?c=` | `{text}` | `{ok}` |
-| close | `POST /api/mine/leave?c=` | `{}` | `{ok}` |
+| close | `POST /api/mine/leave?c=` | `{}`; 11.11: `{out: 1, sid}` when the player leaves the mine for the city (`exit()`), `{}` on a floor switch | `{ok}` |
 
 SSE (`/api/live`, named event `mine`; teed by `src/bridge` as bus `sse:mine`): `{c, st}` new view (no `fl`), `{m, n, c}` /
 `{a, g, …}` presence, `{c, here, hw, hm}` counters, `{chatRoom:'mine', chat, c}` chat. Action results come with the hero
@@ -222,3 +226,19 @@ only offline (`src/rooms/mine/fake.ts`, dev page, unit tests).
 `npm run build` → `dist-dev/mine.html` (fake game from the captured floor): `?f=fresh` (new floor), `?cam=fp`, `?dark=1`,
 `?dig=<seconds per stone>`, `?bots=0`, `?q=0..3`, `?at=X,Z`, `?yaw=`, `?pitch=`. `window.__mine`: `step(n)`, `tp(x, z)`,
 `look(yaw, pitch)`, `mode('fp'|'tp')`, `use()`, `target()`, `card('buyer'|'quests')`, `cam(x,y,z, tx,ty,tz)` (free camera).
+
+## 10. Site 11.11: loot preview, own log, toasts, pinned pickaxe
+
+mine.js got the `LGMineShares` UMD module (`splitShards` / `project` / `projectAll`, the share split the game uses) and shows
+over a stone «Получишь: …» (`expectOf`: `me.ex` for the own stone, otherwise the projection of the stone's loot — `fl.c` a·100 or
+`fl.ch[i]` for a chest — over the work done `bl[i]` = U / P / pd and the work left). The 3D room mirrors it:
+`src/rooms/mine/shares.ts` (1:1 port), `loot.ts expectOf / exText` → the aimed-stone sign (its second line «получишь: …», coins
+at the buyer's price), the «[E] Копать: …» prompt (also with the estimates switched off) and «Сейчас» in the HUD card.
+`me.lg` replaces the shared `st.log`: «Твой журнал в шахте» (`loot.ts logLine / lgAll / myLog`, falls back to `st.log` on a game
+without `me.lg`) and the loot toast of an own finished stone (`dugToast` / `toastFromLog`, `MineHud.lootToast`: «Выкопан: …»
+with «+N руды» rows, 4.5 s, top centre). «Новая кирка: что нужно» can be pinned from the supplier's «Кирка» tab (`MineHud
+pickNeed / pinHtml`, under the HUD card; «Всё есть — к Снабженцу» walks there). «Пока тебя не было» is not shown over a player
+who already pressed a key or clicked (`NewsGate.act`), and `me.news` may come from the hero snapshot (`net.ts newsHero`).
+2D-only and not mirrored: draggable remembered windows (`winMem` / `winDrag`), bag folding (`bagFold`), `camM`, the outer
+rock band of mine3.js (`outerSvg`, OUT = 8 cells of pattern around the big floor: our cave3 already closes the floor with
+rock walls). Parity: `test/site-1111.test.ts` runs the site's own code in node:vm against ours.

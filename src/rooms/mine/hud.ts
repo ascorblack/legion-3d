@@ -13,12 +13,14 @@
 import { moneyCompact } from '../../ui/money';
 import type { MineClient } from './net';
 import {
-  TX, BIO_RU, stars, mmss, leftTxt, resName, qty, resList, blockTitle, stoneProgress, canClaimOf, markQcClaimed, qcStatus, qcReady, dayLimit, weekResetTxt, spanTxt, NewsGate,
+  TX, BIO_RU, stars, mmss, leftTxt, resName, qty, resList, blockTitle, gotText, stoneProgress, canClaimOf, markQcClaimed, qcStatus, qcReady, dayLimit, weekResetTxt, spanTxt, NewsGate,
   type Quest, type QuestC, type MineNews, type ChatLine, type MineView,
 } from './state';
 import { layerOf, layerSpan } from './layers';
 import { liftInfo, drillsOf, drillFundable, drillLeft, drillLine, fundButtons, hmTxt, tmrTxt, objective, OreAsk, type DrillInfo, type Objective } from './fund';
 import { setHtml } from '../../core/html';
+import { myLog, LOG_EMPTY, expectOf, exText, toastRows, dugToast, toastFromLog, TOAST_MS, type LgEntry, type LootToast, type ToastWant } from './loot';
+import type { Burst, Cell, PickStep } from './state';
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const COIN: Record<string, string> = { g: '#f2c14e', s: '#c8ccd8', b: '#c07a44' };
@@ -97,6 +99,21 @@ const CSS = `
 .l3m-in input:focus{box-shadow:0 0 0 1.5px var(--gold)}
 .l3m-tip{z-index:4;position:absolute;left:50%;bottom:150px;transform:translateX(-50%);max-width:min(560px,90%);background:var(--bg2);box-shadow:0 0 0 1.5px var(--line),0 6px 18px #0006;border-radius:999px;padding:8px 18px;font-weight:700;text-align:center;transition:opacity .25s}
 .l3m-tip.bad{box-shadow:0 0 0 1.5px var(--dn),0 6px 18px #0006;color:#ffd6d6}
+.l3m-toast{z-index:4;position:absolute;left:50%;top:66px;transform:translate(-50%,-6px);min-width:220px;max-width:min(380px,90%);background:var(--bg2);box-shadow:0 0 0 1.5px var(--line),0 10px 26px #0008;border-radius:16px;padding:10px 16px 9px;opacity:0;transition:opacity .25s,transform .25s;text-align:center}
+.l3m-toast.on{opacity:1;transform:translate(-50%,0)}
+.l3m-toast b.h{display:block;font:700 14px/1.2 var(--hd);color:var(--gold);margin-bottom:5px}
+.l3m-toast ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;align-items:center}
+.l3m-toast li{display:flex;align-items:center;gap:7px;font:800 15px/1.2 var(--tx);color:#ffe27a}
+.l3m-toast li i{width:11px;height:11px;border-radius:50%;flex:none;box-shadow:inset 0 -2px 0 #0004,0 0 0 1.5px #2a2236}
+.l3m-toast small{display:block;margin-top:5px;font-size:11.5px;color:var(--mute)}
+.l3m-ex{margin:3px 0 0;font-size:12px;font-weight:700;color:#ffe27a}.l3m-ex i{font-style:normal;color:var(--mute);font-weight:600}
+.l3m-pkpin{position:absolute;right:16px;width:284px;pointer-events:auto;padding:8px 12px 10px}
+.l3m-pkpin .h{display:flex;align-items:center;gap:6px}.l3m-pkpin .h b{font:700 13px/1.15 var(--hd);color:var(--gold);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.l3m-pkpin .h small{color:var(--mute);font-weight:800}
+.l3m-pkpin ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:3px;font-size:12px}
+.l3m-pkpin li{display:flex;gap:6px;align-items:center}.l3m-pkpin li span{flex:1;min-width:0}.l3m-pkpin li i{font-style:normal;width:14px;text-align:center;font-weight:800}
+.l3m-pkpin li.ok i{color:var(--up)}.l3m-pkpin li.no i{color:var(--dn)}.l3m-pkpin li.no b{color:#ffc4c4}
+.l3m-pkpin .l3m-btn.go{margin-top:7px;width:100%}
+.l3m-pinb.on{background:#ffcf6a33!important;box-shadow:0 0 0 1px var(--gold)!important}
 .l3m-pop{position:absolute;transform:translate(-50%,-100%);font:800 17px/1 var(--tx);color:#ffe27a;text-shadow:0 2px 0 #2a1d18,0 0 8px rgba(0,0,0,.6);white-space:nowrap;transition:opacity .3s}
 .l3m-other,.l3m-dark{position:absolute;left:50%;top:72px;transform:translateX(-50%);border-radius:999px;padding:7px 8px 7px 16px;display:flex;gap:10px;align-items:center;font-weight:700}
 .l3m-other{pointer-events:auto;background:rgba(110,28,40,.92);box-shadow:0 0 0 1.5px var(--dn)}
@@ -406,6 +423,36 @@ export function objHtml(o: Objective): string {
   return `<div class="l3m-obj" data-k="${o.k}" role="status"><span class="ic" aria-hidden="true">➜</span><span class="tx">${esc(o.t)}</span>${btn ? `<button type="button" class="l3m-btn sm" data-a="obj" data-act="${o.act}">${btn}</button>` : ''}</div>`;
 }
 
+/** «Новая кирка: что нужно» (site 11.11 pickNeed): the next pickaxe and its rows [name, have, need, ok]; null = no supplier data. */
+export interface PickNeed { name: string; max: boolean; rows: [string, string, string, boolean, [number, number]?][]; ok: boolean }
+export function pickNeed(pkx: { lv: number; t: PickStep[] } | null | undefined, mxLv: number, money: number, hv: Record<string, number>, noUse: ReadonlySet<string>): PickNeed | null {
+  if (!pkx) return null;
+  const T = pkx.t || [], lv = pkx.lv || 0, nx = lv + 1 < T.length ? lv + 1 : -1;
+  if (nx < 0) return { name: '', max: true, rows: [], ok: true };
+  const N = T[nx], ml = mxLv || 1, rows: PickNeed['rows'] = [['Горное дело', `ур. ${ml}`, `ур. ${N[2]}`, ml >= N[2]]];
+  if (N[3] > 0) rows.push(['Монеты', String(money), String(N[3]), money >= N[3], [money, N[3]]]);
+  const opt = N[5] || {}, can = Object.keys(opt).filter((r) => (hv[r] || 0) > 0), use = can.filter((r) => !noUse.has(r)), pay = pickPay(N[4] || {}, opt, hv, use);
+  for (const [r, need] of Object.entries(pay.s)) { const got = hv[r] || 0; rows.push([resName(r).replace(/^./, (c) => c.toUpperCase()), pcs(Math.min(got, 1e9)), pcs(need), got >= need]); }
+  return { name: N[0], max: false, rows, ok: rows.every((q) => q[3]) };
+}
+const PIN_T = (on: boolean) => on ? 'Открепить окно с ресурсами для кирки' : 'Закрепить на экране: что нужно для новой кирки';
+const pinBtn = (on: boolean) => `<button type="button" class="l3m-btn ghost sm l3m-pinb${on ? ' on' : ''}" data-a="pin" aria-pressed="${on}" title="${PIN_T(on)}" aria-label="${PIN_T(on)}">📌 ${on ? 'Закреплено' : 'Закрепить'}</button>`;
+/** The pinned card (site pinDraw). */
+export function pinHtml(P: PickNeed): string {
+  if (P.max) return `<div class="h"><b>Кирка — лучшая</b>${pinBtn(true)}</div>`;
+  const done = P.rows.filter((q) => q[3]).length;
+  return `<div class="h"><b title="${esc(P.name)}">${esc(P.name)} кирка</b><small>${done} / ${P.rows.length}</small>${pinBtn(true)}</div>`
+    + `<ul>${P.rows.map(([n, hv, nd, ok, m]) => `<li class="${ok ? 'ok' : 'no'}"><i role="img" aria-label="${ok ? 'хватает' : 'не хватает'}">${ok ? '✓' : '✗'}</i><span>${esc(n)}</span><b>${m ? `${coinsHtml(m[0])} / ${coinsHtml(m[1])}` : `${esc(hv)} / ${esc(nd)}`}</b></li>`).join('')}</ul>`
+    + (P.ok ? '<button type="button" class="l3m-btn sm go" data-a="tosup">Всё есть — к Снабженцу</button>' : '');
+}
+/** Loot toast markup (site lootToast). */
+export function toastHtml(t: LootToast): string {
+  const rows = toastRows(t.s);
+  return `<b class="h">${esc(t.head)}</b>${rows.length ? `<ul>${rows.map(([k, v]) => `<li><i style="background:${resColor(k)}"></i><span>${esc(gotText(v, k))}</span></li>`).join('')}</ul>` : ''}${t.sub ? `<small>${esc(t.sub)}</small>` : ''}`;
+}
+/** Pinned pickaxe card on (site winMem 'pickPin'; ours, the site's key read once as the default). */
+export const LS_PIN = 'l3d.minePickPin';
+
 export class MineHud {
   readonly el: HTMLElement;
   private parts: Record<string, string> = {};
@@ -435,6 +482,13 @@ export class MineHud {
   /** First-entry coach: shown until «Понятно»; its steps tick off as they happen. */
   coach = lsGet(LS_COACH) !== '1';
   private coachSteps = { dig: false, sell: false, lift: false };
+  /** Own log lines written at a finished stone until the game's me.lg lists it (site S.lgLocal). */
+  private lgLocal: LgEntry[] = [];
+  /** Own stone finished without loot in the view: the toast waits for the game's me.lg line (site S.toastWant). */
+  private toastWant: ToastWant | null = null;
+  private toastT = 0;
+  /** «Новая кирка: что нужно» pinned on screen (site pinSet). */
+  pin = false;
   constructor(host: HTMLElement, private client: MineClient, private h: MineHudHandlers) {
     this.el = document.createElement('div'); this.el.className = 'l3m'; this.el.setAttribute('aria-live', 'polite');
     setHtml(this.el, `<style>${CSS}</style>`
@@ -445,8 +499,11 @@ export class MineHud {
       + `<section class="l3m-box l3m-coach" data-p="coach" hidden aria-label="Как начать"></section>`
       + `<div class="l3m-mm" data-p="mm" hidden aria-label="Карта этажа"></div>`
       + `<div class="l3m-ride" data-p="ride" hidden role="status"><div class="b"><i aria-hidden="true"></i><b></b></div></div>`
+      + `<section class="l3m-box l3m-pkpin" data-p="pin" hidden aria-label="Новая кирка: что нужно"></section>`
+      + `<div class="l3m-toast" data-p="toast" hidden role="status" aria-live="polite"></div>`
       + `<div class="l3m-tip" data-p="tip" hidden></div><div class="l3m-pops" data-p="pops"></div><div data-p="modal"></div>`);
     host.appendChild(this.el);
+    { const v = lsGet(LS_PIN); this.pin = v != null ? v === '1' : /"on":\s*1/.test(lsGet(`lgMineWin:${client.login}:pickPin`) || ''); }
     this.el.addEventListener('click', (e) => this.onClick(e));
     this.el.addEventListener('change', (e) => { const t = e.target as HTMLInputElement; if (t && t.dataset.use) { if (t.checked) this.noUse.delete(t.dataset.use); else this.noUse.add(t.dataset.use); this.render(); } });
     // the wheel over our panels scrolls them, not the camera
@@ -473,6 +530,29 @@ export class MineHud {
     const el = document.createElement('div'); el.className = 'l3m-pop'; el.textContent = text;
     this.q('pops').appendChild(el); this.pops.push({ el, x, y, z, t: 0 });
   }
+  /** A loot toast (site lootToast): 4.5 s at the top centre, restarts on the next one. */
+  lootToast(t: LootToast): void {
+    const el = this.q('toast'); setHtml(el, toastHtml(t)); el.hidden = false;
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+    clearTimeout(this.toastT); this.toastT = window.setTimeout(() => { el.classList.remove('on'); el.hidden = true; }, TOAST_MS);
+  }
+  /** Own stone finished (site burst → dugToast): a toast now, or wait for the game's log line of this stone. */
+  stoneDone(b: Burst, cell: Cell, floor: number): void {
+    const now = Date.now(), r = dugToast(b, cell, floor, now);
+    if (r.local) { this.lgLocal.unshift(r.local); if (this.lgLocal.length > 12) this.lgLocal.length = 12; }
+    if (r.toast) this.lootToast(r.toast);
+    if (r.want) { this.toastWant = r.want; this.fromLog(now); }
+    this.render();
+  }
+  /** The awaited stone is in me.lg (site toastFromLog, on every view). */
+  private fromLog(now: number): void {
+    if (!this.toastWant) return;
+    const M = this.client.model, r = toastFromLog(this.toastWant, M.me ? M.me.lg : undefined, now);
+    if (r.done) this.toastWant = null;
+    if (r.toast) this.lootToast(r.toast);
+  }
+  /** The player did something in the mine (site S.acted): «Пока тебя не было» does not pop up over him any more. */
+  acted(): void { this.gate.act(); }
   /** Project popups: project(x,y,z) → [sx, sy] in CSS px or null (behind the camera). */
   update(dt: number, project: (x: number, y: number, z: number) => [number, number] | null): void {
     for (let k = this.pops.length - 1; k >= 0; k--) {
@@ -530,9 +610,11 @@ export class MineHud {
     const barCol = rem > 0.5 ? '#8fe39a' : rem > 0.2 ? '#ffcf6a' : '#ff8f6a';
     this.set('mbar', dig ? `<i style="width:${(rem * 100).toFixed(1)}%;background:${barCol}"></i>` : '');
     let nowH: string;
+    const exNow = dig ? exText(expectOf(M, M.myI, now)) : '';   // site 11.11 nowEx
     if (dig) {
       nowH = `<div><div class="l3m-k">Сейчас<small>${pr && pr.n > 1 ? `копают: ${pr.n}` : ''}</small></div><p class="l3m-t">${TX.doing}: <b>${esc(blockTitle(dig))}</b></p>`
         + `<div class="l3m-bar"><i style="width:${(rem * 100).toFixed(1)}%;background:${barCol}"></i></div>`
+        + (exNow ? `<p class="l3m-ex"><i>Получишь:</i> ${esc(exNow)}</p>` : '')
         + `<div class="l3m-row"><span class="l3m-mut">${esc(leftTxt((pr ? pr.eta : 0) * 1000))}</span><button type="button" class="l3m-btn ghost sm" data-a="stop">Стоп</button></div>${queueHtml(c.queueOn, c.queue(), M.F ? M.F.cells : [])}</div>`;
     } else nowH = '';
     if (dig) { this.dug = true; this.coachTick('dig'); }
@@ -578,7 +660,7 @@ export class MineHud {
         + `<div><dt>Сегодня</dt><dd>${mmss(me.day)}${me.cap > 0 ? ` <small class="l3m-mut">из ${mmss(me.cap)}</small>` : ''}</dd></div>`
         + (st.gem ? `<div style="grid-column:1/3"><dt>Самоцвет этих мест</dt><dd>${esc(resName(st.gem))}</dd></div>` : '')
         + (ore.length ? `<div style="grid-column:1/3"><dt>Руда в сумке</dt><dd>${ore.map((it) => `${esc(resName(it.res))} ${esc(qty(Math.floor(it.q / 100), it.q % 100))}`).join(', ')}</dd></div>` : '')
-        + `</dl><p class="l3m-mut">💬 Чат шахты — внизу слева</p><div class="l3m-k">Журнал шахты</div><ul class="l3m-log">${(st.log || []).slice(0, 12).map((e) => `<li>${esc(e.t)}</li>`).join('') || '<li>Пока тихо</li>'}</ul>`);
+        + `</dl><p class="l3m-mut">💬 Чат шахты — внизу слева</p><div class="l3m-k">Твой журнал в шахте</div><ul class="l3m-log">${myLog(M.me, this.lgLocal, st).slice(0, 12).map((e) => `<li>${esc(e.t)}</li>`).join('') || `<li class="l3m-mut">${esc(LOG_EMPTY)}</li>`}</ul>`);
     }
     this.q('other').hidden = !c.other;
     // site hatLine: the helmet is needed on this floor and not on — what to do about it, with its button
@@ -589,6 +671,8 @@ export class MineHud {
       this.set('dark', hat); this.q('dark').hidden = !hat;
     }
     this.coachRender(!!(M.F && M.F.v3));
+    this.pinRender();
+    this.fromLog(now);
     // «Пока тебя не было»: the site's rules (first 15 s only; later silently marked read) live in NewsGate
     const nw = this.gate.tick(M.me, c.c, now, () => c.seen());
     if (nw) { this.newsNw = nw; this.open('news'); return; }
@@ -628,6 +712,17 @@ export class MineHud {
     if (me >= 0) dot(me, '#ff5f8a', k * 1.1);
   }
   private mmKey = '';
+  /** The pinned «Новая кирка» card under the HUD card (site pinDraw): only with the supplier on. */
+  private pinRender(): void {
+    const el = this.q('pin'), M = this.client.model;
+    const P = this.pin && M.pickOn && !this.jr ? pickNeed(M.me && M.me.pkx, ((M.me && M.me.mx) || { lv: 1 }).lv, this.client.heroMoney(), this.oreHave(), this.noUse) : null;
+    if (!P) { if (!el.hidden) el.hidden = true; return; }
+    this.set('pin', pinHtml(P));
+    const hud = this.q0('hud'); el.style.top = `${hud.offsetTop + hud.offsetHeight + 8}px`;
+    el.hidden = false;
+  }
+  /** Pin / unpin the pickaxe card (site pinSet). */
+  setPin(on: boolean): void { this.pin = on; lsSet(LS_PIN, on ? '1' : '0'); this.h.sfx?.('ui.tick'); this.render(); }
 
   /* ---------------------------------------------------------------- cards */
   private renderModal(): void {
@@ -710,7 +805,7 @@ export class MineHud {
           body += `<div class="l3m-k">Следующая: ${esc(N[0])} <small>+${Math.round((N[1] - 1) * 100)}% к силе удара</small></div><ul class="l3m-list">${reqs.join('')}</ul>`
             + (can.length ? `<div class="l3m-k">Можно дешевле</div>${can.map((r) => `<label class="l3m-row" style="justify-content:flex-start"><input type="checkbox" data-use="${esc(r)}"${use.includes(r) ? ' checked' : ''}${wait ? ' disabled' : ''}> ${esc(resName(r))}: 1 шт. вместо ${val(+opt[r][1])} шт. ${esc(resName(opt[r][0]))}</label>`).join('')}` : '')
             + `<p class="l3m-mut">Руда — из сумки героя (и рудной сумки), 100 осколков = 1 шт.</p>`
-            + `<div class="l3m-btns"><button type="button" class="l3m-btn" data-a="pick" data-to="${nx}" data-use2="${esc(use.join(','))}"${!ok || wait ? ' disabled' : ''}>${wait ? 'Снабженец работает…' : 'Улучшить'}</button></div>`;
+            + `<div class="l3m-btns"><button type="button" class="l3m-btn" data-a="pick" data-to="${nx}" data-use2="${esc(use.join(','))}"${!ok || wait ? ' disabled' : ''}>${wait ? 'Снабженец работает…' : 'Улучшить'}</button>${pinBtn(this.pin)}</div>`;
         }
       }
     } else if (tab === 'bag') {
@@ -800,6 +895,7 @@ export class MineHud {
         this.render(); break;
       }
       case 'obj': { const act = t.dataset.act; if (act === 'buyer') this.h.toBuyer(); else if (act === 'quests') this.open('quests'); else if (act === 'lift') this.h.toLift?.(); else if (act === 'wear') { const hv = c.model.lampHave(); if (hv) void c.wear(hv.uid).then(() => this.render()); } break; }
+      case 'pin': this.setPin(!this.pin); break;
       case 'coach-x': this.coach = false; lsSet(LS_COACH, '1'); this.render(); break;
     }
   }
@@ -809,7 +905,7 @@ export class MineHud {
     if (nw) this.gate.ack(nw, this.client.c, () => this.client.seen());
     this.close();
   }
-  dispose(): void { clearTimeout(this.tipT); if (this.card) this.h.modal(false); if (this.jr) this.h.journal?.(false); this.el.remove(); }
+  dispose(): void { clearTimeout(this.tipT); clearTimeout(this.toastT); if (this.card) this.h.modal(false); if (this.jr) this.h.journal?.(false); this.el.remove(); }
 }
 
 /** Price with discounts — as minecore.pickPay (the game computes the same). */

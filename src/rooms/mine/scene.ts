@@ -45,7 +45,8 @@ import { chipGeo, sack, layerPiece, lantern3d, rubble, outcrop, stalagmite, tool
 import { buildAtmos, type Atmos } from '../common/atmos';
 import { AoField } from '../common/ao';
 import { minePal, rockGeo, crystalGeo, nuggetGeo, mushroomGeos, pickaxeGeo, badgeTexture, badgePriceTexture, badgeQueueTexture, drawEstimateSign, SIGN_W, SIGN_H, oreCol, ROCK, CRYSTAL, type MinePal, type RockGeo } from './art';
-import { estimateStone, valueCoins, signText } from './econ';
+import { estimateStone, valueCoins, signText, withExpect } from './econ';
+import { expectOf } from './loot';
 import { mineSwitch, PREF_ECON, PREF_LAYERS } from './prefs';
 
 const CELL = CW * K;               // 2.4 m
@@ -1445,9 +1446,10 @@ uniform vec3 uMwSky;`).replace('#include <emissivemap_fragment>', `#include <emi
     if (aimI !== this.signI || M.st.at !== this.signSnap || M.myI !== this.signMy || now - this.signAt > 2000 || this.signQ !== this.dugKey) {
       this.signQ = this.dugKey;
       this.signI = aimI; this.signSnap = M.st.at; this.signMy = M.myI; this.signAt = now;
-      const e = estimateStone(M.st, cell, now, M.myI);
+      // site 11.11 «Получишь: …» (expectOf over LGMineShares) replaces the share line when the stone's loot is known
+      const e = withExpect(estimateStone(M.st, cell, now, M.myI), expectOf(M, aimI, now), M.st.bp);
       const price = M.st.bp?.[cell.r || ''] ?? null;
-      this.signOk = !(e.minutes == null && e.share == null && price == null);
+      this.signOk = !(e.minutes == null && e.share == null && price == null && !e.get);
       if (this.signOk) {
         const tx = signText(e, M.myI === aimI);
         const qk = this.queueOf.indexOf(aimI); if (qk >= 0) tx.main = `в очереди №${qk + 1} · ${tx.main}`;

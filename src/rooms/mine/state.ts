@@ -5,6 +5,7 @@
  */
 import { GH, N_CELLS, SPEED, type Pt } from './geo';
 import { GEO1, OPEN3, geomOf, type MineGeom } from './geo3';
+import type { LgEntry } from './loot';
 
 /* ============================================================ payload types (see docs/MINE.md) */
 
@@ -21,15 +22,20 @@ export interface FloorLayout {
   /** 29.10 «Шахта 3.0»: a big non-linear floor of w × h cells (site mine3.js / LGWorldLib.mine3). */
   v3?: number; w?: number; h?: number; sx?: number; sy?: number; lift?: number; hallBox?: number[]; fog?: number; shaft?: number;
   veins?: Vein3[]; halls?: Hall3[];
+  /** 11.11: loot of the chests on the floor, cell → resource → shards (site lootOfCell). */
+  ch?: Record<string, Record<string, number>>;
 }
 /** Lift of a big floor (st.lift): stage dig (find the lift shaft) → fund (collect coins) → up (upgrade timer). */
 export interface Lift3 { st?: string; n?: number; c?: number; need?: number; at?: number; ms?: number; left?: number; by?: unknown[] }
 /** Drill rig of a big floor (st.drills): [key, ?, cell, stage 'site' | 'build' | 'work' | 'dry', level, …, resource (11)]. */
 export type Drill3 = [string, unknown, number, string, number, ...unknown[]];
-/** [left work, total work, rate per minute, diggers] of a stone being dug. */
-export type Bl = [number, number, number, number];
-/** Loot of a dug stone: [cell, floor, resource, pieces by login, shards by login, loot by login]. */
-export type Dl = [number, number, string, Record<string, number>, Record<string, number>?, Record<string, Record<string, number>>?];
+/**
+ * [left work, total work, rate per minute, diggers] of a stone being dug; site 11.11 adds [U (work of those who left),
+ * P (power of the current diggers), pd (shards already paid out)] — the share projection (loot.ts expectOf).
+ */
+export type Bl = [number, number, number, number, number?, number?, number?];
+/** Loot of a dug stone: [cell, floor, resource, pieces by login, shards by login, loot by login, how many got ore]. */
+export type Dl = [number, number, string, Record<string, number>, Record<string, number>?, Record<string, Record<string, number>>?, number?];
 export interface MineView {
   v: number; at: number; craft?: string; biome?: string; danger?: number; gem?: string | null; id?: string; name?: string; dist?: string;
   n: number; seed: number; entryX?: number; gen?: number; week?: number; reset?: number; rec?: number;
@@ -57,6 +63,10 @@ export interface MineMe {
   news?: MineNews | null;
   /** «Шахта 3.0»: the floor the hero is on (at) / digs on (f). */
   at?: number; f?: number;
+  /** 11.11: the game's expectation for the own stone [floor, cell, resource → shards] (site expectOf). */
+  ex?: [number, number, Record<string, number>];
+  /** 11.11: the hero's own mine log, newest first (site «Твой журнал в шахте», loot toasts). */
+  lg?: LgEntry[];
 }
 export interface LookRec { n?: string; lv?: number; lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number; pk?: number }
 export interface PresenceA { l: string; n?: string; lv?: number; lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number; x: number; y: number; tx: number; ty: number; dt?: number }
@@ -194,14 +204,17 @@ export const NEWS_WINDOW = 15000;
  */
 export class NewsGate {
   private at0 = 0; private shown = false; private acked = new Set<string>();
+  /** Site 11.11 S.acted: the player already did something in the mine — no window over him; after the 15 s it is marked read silently. */
+  private acted = false;
+  act(): void { this.acted = true; }
   constructor(private seenMap: Map<string, string> = NEWS_SEEN) {}
   /** Call on every render with the current me. Returns the summary to show now, or null. */
   tick(me: MineMe | null | undefined, c: string, now: number, seen: () => void): MineNews | null {
     if (!me) return null;
     if (!this.at0) this.at0 = now;
     const nw = me.news; if (!nw || this.shown || this.seenMap.get(c) === newsKey(nw)) return null;
+    if (now - this.at0 < NEWS_WINDOW) { if (this.acted) return null; this.shown = true; return nw; }
     this.shown = true;
-    if (now - this.at0 < NEWS_WINDOW) return nw;
     this.seenMap.set(c, newsKey(nw)); this.acked.add(c + '|' + newsKey(nw)); seen();
     return null;
   }
@@ -323,7 +336,7 @@ export class MineModel {
     const gotOf = (i: number): Burst['got'] => {
       const d = (st!.dl || []).find((x) => x[0] === i && x[1] === st!.n); if (!d) return null;
       const m = d[4] || d[3] || {}, v = m[me_] || 0;
-      return { r: d[2], q: d[4] ? v : Math.round(v * 100), any: Object.keys(m).length, loot: (d[5] || {})[me_] || null };
+      return { r: d[2], q: d[4] ? v : Math.round(v * 100), any: d[6] != null ? +d[6] || 0 : Object.keys(m).length, loot: (d[5] || {})[me_] || null };
     };
     if (!newFloor && prevDug.length) {
       res.bursts = this.dug.map((d, i) => (d && !prevDug[i] ? i : -1)).filter((i) => i >= 0)

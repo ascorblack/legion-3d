@@ -12,7 +12,11 @@ const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
 const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
-const SHOTS = opt.set === '073' ? [
+const SHOTS = opt.set === '078' ? [
+  // 0.7.8 (site 11.11): an own stone dug → the loot toast «Выкопан: … +N руды» (me.lg / dug view), then the next stone's sign
+  // «получишь: …» (LGMineShares projection) and the «Сейчас» line; run with --w=960 --h=540 for the review shot
+  ['mine', 'dig=2&bots=0&econ=1', 'mine-loot-toast', 9000, 'js:const m=window.__mine,F=m.fake;F.st.bl={};F.st.dg={};m.client.model.st.bl={};m.client.model.st.dg={};for(const b of document.querySelectorAll("[data-a=\\"coach-x\\"]"))b.click();const d=document.getElementById("dbg");if(d)d.style.display="none";const off=m.client.on((e)=>{if(e.type==="burst"&&e.bursts.some((b)=>b.mine)){off();m.goNear(2,1.2);m.look(m.rig.yaw,0.02);}});m.digNear(0);'],
+] : opt.set === '073' ? [
   // 0.7.3: the 07.11 boss arena — wings (Левое крыло / Центр / Правое крыло, need / got) with hunters, and a net over a platform; the quest HUD card
   ['expedition', 'demo=boss-wings&hud=battle', 'boss-wings', 9000],
   ['expedition', 'demo=boss-nets&hud=battle', 'boss-nets', 9000],

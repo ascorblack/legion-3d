@@ -1,5 +1,6 @@
 import type { Cell, Dl, MineView } from './state';
 import { cellLevel } from './state';
+import { exText, exCoins, type Expect } from './loot';
 
 /** All values here are estimates from the current view, never a promise of loot or wages. */
 export interface StoneEstimate {
@@ -11,6 +12,8 @@ export interface StoneEstimate {
   coins: number | null;
   coinsPerHour: number | null;
   samples: number;
+  /** Site 11.11 «Получишь: …» (loot.ts expectOf over LGMineShares): the own loot text, '' when unknown. */
+  get?: string;
 }
 const positive = (v: unknown): number | null => typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
 
@@ -72,6 +75,20 @@ export function estimateStone(st: MineView, cell: Cell, now: number, ownIndex = 
     samples: yieldSample.samples };
 }
 
+/**
+ * The estimate with the site's own projection of my loot (site 11.11 expectOf / LGMineShares, loot.ts): «Получишь» text;
+ * pieces and coins from the projected shards at the buyer's prices (instead of the yield sample × share); per hour again
+ * over the ETA. null expectation = the estimate as it was.
+ */
+export function withExpect(e: StoneEstimate, x: Expect | null, bp: Record<string, number> | undefined): StoneEstimate {
+  if (!x) return e;
+  const get = exText(x);
+  if (x.none) return { ...e, get, pieces: 0, coins: null, coinsPerHour: null };
+  const shards = Object.values(x.s).reduce((a, v) => a + (v > 0 ? v : 0), 0), coins = exCoins(x, bp);
+  return { ...e, get, pieces: shards / 100, coins: coins ?? e.coins,
+    coinsPerHour: coins != null && e.minutes != null && e.minutes > 0 ? coins * 60 / e.minutes : e.coinsPerHour };
+}
+
 /** Relative buyer price bands, never a forecast of guaranteed earnings. */
 export function valueCoins(price: number | undefined, prices: Record<string, number> | undefined): 0 | 1 | 2 | 3 {
   const validPrice = positive(price);
@@ -111,7 +128,7 @@ export function signText(e: StoneEstimate, mine: boolean): SignText {
   const who = mine && e.diggers <= 1 ? 'копаешь один' : e.diggers > 0 ? `${e.diggers} ${e.diggers === 1 ? 'копает' : 'копают'}` : 'никто не копает';
   const main = `${eta ?? 'темп ещё не измерен'} · ${who}`;
   const sh = shareText(e.share);
-  const share = sh ? `твоя доля ${sh}` : 'твоя доля — мало данных';
+  const share = e.get ? `получишь: ${e.get}` : sh ? `твоя доля ${sh}` : 'твоя доля — мало данных';
   const perHour = e.coinsPerHour != null ? `≈ ${ruNum(e.coinsPerHour)}` : null;
   return { main, share, perHour };
 }
@@ -122,7 +139,8 @@ export function signText(e: StoneEstimate, mine: boolean): SignText {
 export function promptEcon(e: StoneEstimate): string {
   const out: string[] = [];
   const eta = etaText(e.minutes); if (eta) out.push(eta);
-  const sh = shareText(e.share); if (sh) out.push(`доля ${sh}`);
+  if (e.get) out.push(`получишь: ${e.get}`);
+  else { const sh = shareText(e.share); if (sh) out.push(`доля ${sh}`); }
   if (e.coinsPerHour != null && Number.isFinite(e.coinsPerHour)) out.push(`≈ ${ruNum(e.coinsPerHour)} ⦿/ч`);
   return out.join(' · ');
 }

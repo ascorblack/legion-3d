@@ -142,6 +142,7 @@ export class FakeMine {
     this.me = JSON.parse(JSON.stringify(o.enter.me));
     this.me.fx = { m2: 1, b: 1, pk: 1, sh: 1, ...(this.me.fx || {}) };
     this.me.day = 0;   // a fresh day: the captured account had used its daily cap
+    if (!(+(this.me.pw as number) > 0)) this.me.pw = 1;   // pickaxe power (site 11.11 expectOf)
     const demo = o.demo ?? (typeof location !== 'undefined' ? demoFromQuery(location.search) : {});
     applyDemo(this.me, demo);
     o.hero.mn = { ...(o.hero.mn || {}), [o.enter.c || 'home']: this.me };
@@ -158,7 +159,13 @@ export class FakeMine {
   }
   dispose(): void { for (const t of this.timers) { clearInterval(t); clearTimeout(t); } }
   private dugA(): number[] { return this.st.dug.split('').map((c) => (c === '1' ? 1 : 0)); }
-  private view(withFl = false): MineView { const v = { ...this.st }; if (!withFl) delete v.fl; return JSON.parse(JSON.stringify(v)); }
+  private view(withFl = false): MineView {
+    const v = { ...this.st }; if (!withFl) delete v.fl;
+    const o: MineView = JSON.parse(JSON.stringify(v));
+    // site 11.11 bl tail [U, P, pd] (work of those who left, power of the current diggers, shards paid out): power 1 each here
+    for (const b of Object.values(o.bl || {})) if (b.length < 7) { b[4] = 0; b[5] = Math.max(0, b[3]); b[6] = 0; }
+    return o;
+  }
   private rebase(): void { const now = Date.now(); for (const x of Object.values(this.st.bl || {})) x[0] = Math.max(0, x[0] - x[2] * (now - this.st.at) / 60000); this.st.at = now; }
   /** Big floor: the layout grows when the fog lifts — a view carries it then (the client keeps the last one otherwise). */
   private flN = -1;
@@ -326,6 +333,8 @@ export class FakeMine {
         if (it) it.q += q; else this.o.hero.items.push({ uid: 'ore_' + r, id: 'ore_' + r, name: r, slot: 'material', mat: 'ore', qty: true, q, res: r });
         const qc = this.me.q?.c; if (qc && !qc.done) { qc.p++; qc.me++; qc.ok = qc.me >= qc.min ? 1 : 0; if (qc.p >= qc.g) qc.done = 1; }
         this.me.i = -1; this.me.bag = { ...(this.me.bag || { c: 0, r: {} }), cx: +((this.me.bag?.cx || 0) + 0.4).toFixed(2) };
+        // site 11.11: the hero's own log me.lg (loot toasts, «Твой журнал в шахте»)
+        this.me.lg = [{ at: now, k: 'dug', n: this.st.n, i, t: cell[0], lv: cell[1], s: { [r]: q } }, ...(this.me.lg || [])].slice(0, 12);
         this.nextQueued = true;
         this.heroSnap();
       }
