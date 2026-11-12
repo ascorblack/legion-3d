@@ -136,7 +136,7 @@ describe('cats fair: «Здание гильдий» instead of the blue house h
     const gb = (FC as any).BUILDINGS.find((b: any) => b.id === 'guild');
     expect(gb).toMatchObject({ title: 'Здание гильдий', sign: 'ГИЛЬДИИ', roof: 'plum', vis: [3290, 2220, 3840, 2540], foot: [3300, 2380, 3830, 2540], door: { x: 3565, y: 2562 } });
     expect((FC as any).HOUSES.map((h: any) => h.id)).toEqual(['tavern', 'h1', 'h2', 'h4', 'h5']);
-    expect(fcModel('guild')?.fp).toBe('1409348aa9362c');
+    expect(fcModel('guild')?.fp).toBe('0f963d0e3380fd');   // redrawn 12.11 afternoon (site-1112-1439)
   });
   it('builds the asset model: one door mark on the facade, the door volume from civicDoorXf, the sign', () => {
     const { k, rec, L } = staticFairCats(true);

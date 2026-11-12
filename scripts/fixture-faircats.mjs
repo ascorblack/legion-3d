@@ -34,7 +34,7 @@ const out = {
   W: F.W, H: F.H, FACE: F.FACE, MFACE: F.MFACE, PAD: F.PAD, SPEED: F.SPEED, SCALE: F.SCALE, RAIL: F.RAIL,
   RIM: F.RIM, MRIM: F.MRIM, TOWN: F.TOWN, PLATEAU: F.PLATEAU, SIDE_W: F.SIDE_W, MOUNT: F.MOUNT,
   STAIRS: F.STAIRS, STREETS: F.STREETS, PATHS: F.PATHS, RAILS: F.RAILS, POND: F.POND, PIER: F.PIER,
-  BUILDINGS: F.BUILDINGS, HOUSES: F.HOUSES, ITEMS: F.ITEMS, WALL: F.WALL, JAIL: F.JAIL,
+  BUILDINGS: F.BUILDINGS, HOUSES: F.HOUSES, ITEMS: F.ITEMS, WALL: F.WALL, JAIL: F.JAIL, ...(F.GLADE ? { GLADE: F.GLADE } : {}),
   OBST: plain(m0.OB.map(({ box, ...o }) => o)),
   grid: { C: m0.C, cols: m0.cols, rows: m0.rows, G: Array.from(m0.G).join(''), jailPatch: patch },
   home: m0.home, spawn: m0.spawn,

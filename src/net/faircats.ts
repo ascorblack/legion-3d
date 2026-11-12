@@ -36,6 +36,30 @@ export interface FairCatsScene {
   buildings: FcBuilding[]; houses: FcHouse[]; items: FcItem[];
   wall: { y0: number; y1: number; x0: number; x1: number; gate: [number, number] };
   jail: FcJail;
+  /** Site 12.11 afternoon (fc-map.js GLADE): the forest glade outside the wall below the gate — NOT walkable (the walk grid
+   *  ends at the town polygon / the gate passage), drawn as a clearing with a signpost and front trees; `spots` = the
+   *  monster spots of citymon.js (t 0 at the gate, 1 south, 2 north forest, 'e' the edges), each with its own clearing. */
+  glade?: FcGlade;
+}
+export interface FcGladeSpot { x: number; y: number; t: number | 'e'; gate?: boolean; rx?: number; ry?: number; poly?: P2[] }
+export interface FcGlade { x0: number; x1: number; y0: number; cx: number; sign: P2; poly: P2[]; front: [string, number, number, number][]; spots: FcGladeSpot[] }
+
+/** fc-map.js GLADE (or the fixture's copy) → plain glade, or undefined (an older site / a Town Kit town has none). */
+export function fairCatsGlade(G: any): FcGlade | undefined {
+  if (!G || !Array.isArray(G.poly) || !Array.isArray(G.sign)) return undefined;
+  const poly = pts(G.poly), sign = pts([G.sign])[0];
+  if (poly.length < 3 || !sign) return undefined;
+  const spots: FcGladeSpot[] = (Array.isArray(G.spots) ? G.spots : []).filter((p: any) => p && Number.isFinite(+p.x) && Number.isFinite(+p.y)).map((p: any) => ({
+    x: +p.x, y: +p.y, t: p.t === 'e' ? 'e' : +p.t || 0, ...(p.gate ? { gate: true } : {}), ...(Number.isFinite(+p.rx) && p.rx ? { rx: +p.rx } : {}), ...(Number.isFinite(+p.ry) && p.ry ? { ry: +p.ry } : {}),
+    ...(Array.isArray(p.poly) ? { poly: pts(p.poly) } : {}),
+  }));
+  const front = (Array.isArray(G.front) ? G.front : []).filter((f: any) => Array.isArray(f) && typeof f[0] === 'string' && Number.isFinite(+f[1]) && Number.isFinite(+f[2]))
+    .map((f: any) => [String(f[0]), +f[1], +f[2], Number.isFinite(+f[3]) ? +f[3] : 1] as [string, number, number, number]);
+  return { x0: num(G.x0), x1: num(G.x1), y0: num(G.y0), cx: Number.isFinite(+G.cx) ? +G.cx : (Math.min(...poly.map((p) => p[0])) + Math.max(...poly.map((p) => p[0]))) / 2, sign, poly, front, spots };
+}
+/** fc-art.js inGlade: inside the glade or one of the spots' own clearings (no forest tree stands there). */
+export function inGlade(g: FcGlade | undefined, x: number, y: number): boolean {
+  return !!g && (inPoly(g.poly, x, y) || g.spots.some((p) => !!p.poly && p.poly.length > 2 && inPoly(p.poly, x, y)));
 }
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
@@ -69,6 +93,8 @@ export function fairCatsScene(F: any): FairCatsScene | null {
       wall: { y0: num(F.WALL?.y0), y1: num(F.WALL?.y1), x0: num(F.WALL?.x0), x1: num(F.WALL?.x1), gate: [num(F.WALL?.gate?.[0]), num(F.WALL?.gate?.[1])] },
       jail: { c0: num(J.c0), c1: num(J.c1), ct: num(J.ct), back: num(J.back), fy: num(J.fy), seats: pts(J.seats), walk: q4(J.walk) },
     };
+    const glade = fairCatsGlade(F.GLADE);
+    if (glade) sc.glade = glade;
     if (sc.rim.length < 2 || sc.town.length < 3 || !sc.buildings.length) return null;
     return sc;
   } catch { return null; }

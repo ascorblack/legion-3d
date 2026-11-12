@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import type { Building, CityLayout } from '../contracts';
 import type { FairCatsScene, FairCatsLayout, FcItem, FcStair } from '../net/faircats';
-import { fairCatsOf, inPoly, rimY } from '../net/faircats';
+import { fairCatsOf, inPoly, rimY, inGlade, type FcGlade } from '../net/faircats';
 import { kitOf } from '../net/townkit';
 import { toX, toZ, SX, SZ, fromX, fromZ } from './coords';
 import { GEO, M } from './batch';
@@ -157,6 +157,8 @@ export function buildFairCatsTerrain(k: Ctx, L: CityLayout, sc: FairCatsScene, g
   // the meadow is the town polygon (fc-art.js terrain(): P.grass); outside it the dark forest floor (P.forest)
   { const g = polyGeo(sc.town, 0, [sc.pond]); k.b.add('lowPaving', g, M(0, 0, 0), MEADOW, 2.4); g.dispose();
     const f = polyGeo([[-FAR, NORTH], [W + FAR, NORTH], [W + FAR, sc.H + 2200], [-FAR, sc.H + 2200]], 0, [sc.town]); k.b.add('lowPaving', f, M(0, 0, 0), FCP.forestFloor, 2.4); f.dispose(); }
+  // ---- the forest glade below the gate and the monster spots' clearings (site 12.11 afternoon, fc-art.js gladeGround)
+  if (sc.glade) { k.b.tag = 'terrain:glade'; fcGlade(k, sc.glade); }
   // ---- plateau top (FC_H)
   k.b.tag = 'terrain:plateau';
   { const yT = Math.min(...sc.plateau.map((p) => p[1])), xE = Math.max(...sc.plateau.map((p) => p[0])), rE = rimY(sc.rim, xE);
@@ -666,7 +668,7 @@ export function placeFairCatsProps(k: Ctx, L: FairCatsLayout, groundAt: (x: numb
   // site's obstacle, so they are not moved)
   const TREEK = new Set(['tree', 'pine', 'blossom', 'bush']);
   const nearFlight = (x: number, y: number) => sc.stairs.some((s) => x > s.x0 - 150 && x < s.x1 + 150 && y > s.y0 - 90 && y < s.y1 + 90);
-  for (const it1 of sc.items) {
+  for (const it1 of [...sc.items, ...gladeItems(sc.glade)]) {
     const it0 = it1.k === 'lamp' ? lampClear(k, it1, G, lampHead) : it1;
     if (!it0 || decorInBuilding(k, it0, G)) continue;   // no room for the lantern beside the roof over it / the model drew it
     const it = TREEK.has(it0.k) && nearFlight(it0.x, it0.y) ? { ...it0, s: (typeof it0.s === 'number' ? it0.s : 1) * 0.7 } : it0;
@@ -690,6 +692,66 @@ export function placeFairCatsProps(k: Ctx, L: FairCatsLayout, groundAt: (x: numb
   const garlands: THREE.Vector3[][] = [];
   for (let j = 0; j + 5 < k.wires.length; j += 6) garlands.push([new THREE.Vector3(k.wires[j], k.wires[j + 1], k.wires[j + 2]), new THREE.Vector3(k.wires[j + 3], k.wires[j + 4], k.wires[j + 5])]);
   return { garlands, lampHeads };
+}
+
+/* ------------------------------------------------------------------ the glade below the gate (site 12.11 afternoon) */
+/** fc-map.js GLADE colours (tk-art.js P): grass, grassD, the forest's dark rim (forestD at .55 over the forest floor), path. */
+const GLC = { grass: MEADOW, grassD: new THREE.Color(1.0, 1.12, 0.86), rim: '#3c6440', path: '#d9b383' };
+/** Chaikin corner cutting (the site's smooth() of a wobbled outline, without the random wobble). */
+function chaikin(p: readonly P2[], n = 2): P2[] {
+  let a = p.slice() as P2[];
+  for (let r = 0; r < n; r++) {
+    const o: P2[] = [];
+    for (let i = 0; i < a.length; i++) { const u = a[i], v = a[(i + 1) % a.length]; o.push([u[0] * 0.75 + v[0] * 0.25, u[1] * 0.75 + v[1] * 0.25], [u[0] * 0.25 + v[0] * 0.75, u[1] * 0.25 + v[1] * 0.75]); }
+    a = o;
+  }
+  return a;
+}
+/** The outline pushed out by `d` px along the averaged vertex normals (the stroke's outer half). */
+function grow(p: readonly P2[], d: number): P2[] {
+  let area = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; area += a[0] * b[1] - b[0] * a[1]; }
+  const sg = area > 0 ? 1 : -1;
+  return p.map((c, i) => {
+    const a = p[(i + p.length - 1) % p.length], b = p[(i + 1) % p.length], tx = b[0] - a[0], ty = b[1] - a[1], l = Math.hypot(tx, ty) || 1;
+    return [c[0] + sg * ty / l * d, c[1] - sg * tx / l * d] as P2;
+  });
+}
+const ellipse = (cx: number, cy: number, rx: number, ry: number, n = 20): P2[] => Array.from({ length: n }, (_, i) => [cx + Math.cos(i / n * Math.PI * 2) * rx, cy + Math.sin(i / n * Math.PI * 2) * ry] as P2);
+/**
+ * fc-art.js gladeGround: the glade outside the wall (dark forest rim 70 px, grassD, the inner grass scaled 0.94 / 0.9 from
+ * (cx, 3010), a path-coloured patch in front of the gate) and each forest spot's own clearing (rim 56 px, grassD, grass ×0.86 /
+ * 0.84, a patch where the pack stands). Flat on the forest floor (0 m), each layer 4 mm over the last. Not walkable.
+ */
+export function fcGlade(k: Ctx, g: FcGlade): void {
+  const flat = (poly: P2[], y: number, mat: Parameters<Ctx['b']['add']>[0], col: THREE.ColorRepresentation, uv: number) => { const geo = polyGeo(poly, y); k.b.add(mat, geo, M(0, 0, 0), col, uv); geo.dispose(); };
+  const patch = (cx: number, cy: number, rx: number, ry: number, y: number, a: number) => flat(chaikin(ellipse(cx, cy, rx * 0.92, ry * 0.92, 14), 1), y, 'flat', mixHexW(GLC.path, '#83ad5c', 1 - a), 1);
+  // layers 5 mm apart from 12 mm (over the lanes' 6 mm top); neighbouring clearings overlap, so every other spot (by x) and
+  // the patches inside the glade sit one band (26 mm) higher — no two overlapping surfaces closer than the z-fight tolerance
+  const yOf = (i: number, band = 0) => 0.012 + 0.005 * i + 0.026 * band;
+  const edge = chaikin(g.poly, 2);
+  flat(grow(edge, 35), yOf(0), 'lowPaving', GLC.rim, 2.4);
+  flat(edge, yOf(1), 'lowPaving', GLC.grassD, 2.4);
+  flat(chaikin(g.poly.map(([x, y]) => [g.cx + (x - g.cx) * 0.94, 3010 + (y - 3010) * 0.9] as P2), 2), yOf(2), 'lowPaving', GLC.grass, 2.4);
+  patch(2880, 3046, 250, 46, yOf(3), 0.7);
+  const order = g.spots.map((p, i) => [p.x, i] as const).sort((a, b) => a[0] - b[0]), band = new Map(order.map(([, i], j) => [i, 1 + (j % 2)]));
+  g.spots.forEach((p, i) => {
+    const bd = p.poly && p.poly.length > 2 ? band.get(i)! : 2;
+    if (p.poly && p.poly.length > 2) {
+      const e = chaikin(p.poly, 2), mid = p.poly.map(([x, y]) => [p.x + (x - p.x) * 0.86, p.y + 10 + (y - p.y - 10) * 0.84] as P2);
+      flat(grow(e, 28), yOf(0, bd), 'lowPaving', GLC.rim, 2.4);
+      flat(e, yOf(1, bd), 'lowPaving', GLC.grassD, 2.4);
+      flat(chaikin(mid, 2), yOf(2, bd), 'lowPaving', GLC.grass, 2.4);
+    }
+    patch(p.x, p.y - 18, p.t === 'e' ? 120 : 150, 46, yOf(3, bd), 0.5);
+    patch(p.x + 6, p.y - 14, 80, 22, yOf(4, bd), 0.32);
+  });
+}
+/** Hex mix (a · (1 − t) + b · t). */
+function mixHexW(a: string, b: string, t: number): string { return '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString(); }
+/** The glade's signpost «В ПОХОД» (fc-art.js south list) and its front trees (GLADE.front) as decor items. */
+export function gladeItems(g: FcGlade | undefined): FcItem[] {
+  if (!g) return [];
+  return [{ k: 'signpost', x: g.sign[0], y: g.sign[1], to: [['В ПОХОД', 'S']] }, ...g.front.map(([kd, x, y, s]) => ({ k: kd, x, y, s }))];
 }
 
 /* ------------------------------------------------------------------ the forest round the clearing */
@@ -728,6 +790,7 @@ export function fcForest(k: Ctx, L: FairCatsLayout, groundAt: (x: number, y: num
   for (let y = y0, row = 0; y < y1; y += 100, row++) for (let x = x0 + (row % 2) * 100; x < x1; x += 200) {
     const px = x + (rnd() - 0.5) * 120, py = y + (rnd() - 0.5) * 60, r1 = rnd(), r2 = rnd(), r3 = rnd();
     if (inPoly(town, px, py) || rocks.some((r) => inPoly(r, px, py)) || water.some((w) => w.length > 2 && inPoly(w, px, py))) continue;
+    if (inGlade(sc.glade, px, py)) continue;   // fc-art.js forest(): no tree in the glade / a monster spot's clearing (12.11)
     const X = toX(px), Z = toZ(py), d = distTown(X, Z);
     if (d > 26 || r1 > (d < 5 ? 1 : d < 11 ? 0.5 : d < 18 ? 0.28 : 0.16)) continue;
     if (wallOk && py > W.y0 - 80 && py < W.y1 + 150 && px > W.x0 - 80 && px < W.x1 + 80) continue;   // the wall's band

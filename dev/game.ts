@@ -24,6 +24,8 @@ import { MineClient } from '../src/rooms/mine/net';
 import { createMineRoom } from '../src/rooms/mine';
 import type { DemoData } from '../src/debug/places';
 import { QUEST_MOCKS } from '../src/debug/questMocks';
+import cmFixture from '../test/fixtures/citymon-view.json';
+import fcMap from '../test/fixtures/faircats-map.json';
 
 // ?town=camp: the start camp «Перепутье» (test/fixtures/camp-map.json); ?town=village: a hand-made village ★1
 // (test/fixtures/village-map.json); otherwise the fair
@@ -210,6 +212,42 @@ if (new URLSearchParams(location.search).get('sitemine') === '1') {
   };
 }
 
+/* ---- ?cm=1: «Монстры у стен» (site 12.11, citymon.js) — stand-ins for LGCity.wall() (the gate + the glade with its 13 spots),
+   LGCityMon.view() (test/fixtures/citymon-view.json) and the site's `.cm-wall` layer with one `.cmw` button per monster: a press
+   opens a stand-in `.cm-dlg` (role dialog) like attackDlg / eliteDlg. `__demo.cmBeat(pid)` drops a pack from the view. ---- */
+{
+  const qs = new URLSearchParams(location.search), w = window as any;
+  if (qs.get('cm') === '1') {
+    const view = structuredClone(cmFixture.view) as any, gate = (fcMap as any).BUILDINGS.find((b: any) => b.id === 'gate');
+    (hero as any).cm = { n: view.daily.n, of: view.daily.max, nx: 0 };
+    store.setHero(structuredClone(hero));
+    w.__cmLog = [] as string[];
+    const dlg = (t: string) => {
+      document.querySelector('.cm-dlg')?.remove();
+      const d = document.createElement('div'); d.className = 'cm-dlg'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true');
+      d.style.cssText = 'position:fixed;inset:0;z-index:9000;display:grid;place-items:center;background:rgba(0,0,0,.45)';
+      d.innerHTML = `<div style="padding:18px 22px;border-radius:16px;background:#1d1a2c;color:#f1ecff;font:600 15px Nunito,sans-serif"><h3>${t}</h3><button type="button" data-x>Не сейчас</button></div>`;
+      d.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-x]')) d.remove(); });
+      document.body.appendChild(d);
+    };
+    w.LGCityMon = { view: () => view, attackDlg: (pid: string) => { w.__cmLog.push('attackDlg:' + pid); dlg('Напасть на монстров у стен?'); },
+      eliteDlg: (eid: string) => { w.__cmLog.push('eliteDlg:' + eid); dlg('Элитный монстр'); }, tick() { /* */ }, close() { document.querySelector('.cm-dlg')?.remove(); } };
+    const wallF = () => ({ x: gate.door.x, y: gate.door.y, town: 'fair', own: true, top: true, glade: (fcMap as any).GLADE, X: { hero: () => hero } });
+    const lay = () => {
+      document.querySelector('.cm-wall')?.remove();
+      const L = document.createElement('div'); L.className = 'cm-wall'; L.hidden = true;
+      L.innerHTML = view.packs.map((P: any) => P.pack.map(() => `<button type="button" class="cmw" data-cm="pack" data-pid="${P.pid}"></button>`).join('')).join('')
+        + view.elites.map((E: any) => `<button type="button" class="cmw el" data-cm="elite" data-eid="${E.epid || E.eid}"></button>`).join('');
+      L.addEventListener('click', (ev) => { const b = (ev.target as HTMLElement).closest<HTMLElement>('[data-cm]'); if (!b) return; w.__cmLog.push('button:' + (b.dataset.pid || b.dataset.eid)); if (b.dataset.cm === 'pack') w.LGCityMon.attackDlg(b.dataset.pid); else w.LGCityMon.eliteDlg(b.dataset.eid); });
+      document.body.appendChild(L);
+    };
+    lay();
+    const c0 = w.LGCity || {};
+    w.LGCity = { ...c0, wall: wallF };
+    w.__cmBeat = (pid: string) => { view.packs = view.packs.filter((P: any) => P.pid !== pid); view.daily.n++; view.daily.left--; lay(); };
+  }
+}
+
 /* ---- expedition (dev toggle): ?quest=1 feeds the offline FakeQuest into store.quest (?quest=2 = double speed); Q opens it in 3D ---- */
 const QS = new URLSearchParams(location.search).get('quest'); if (QS) new FakeQuest({ login: String(hero.login).toLowerCase(), role: ((hero as any).role || 'archer'), speed: +QS || 1 }).run({ emit: (_t: string, d: unknown) => store.setQuest(d as any) });
 
@@ -279,5 +317,5 @@ startGame(site, (s) => console.log('[demo]', s)).then((g) => {
   const ui = (window as any).__l3dGame?.ui;
   if (ui) toastDemo = (t) => ui.toast(t);
   (window as any).__demo = { g, store, bots, hero, jail: jailHub, hwc: (v: string) => { (hero as any).hwc = hwcOf(v); store.setHero(structuredClone(hero)); },
-    hwlv: (n: number) => { (hero as any).hw = { ...(hero as any).hw, p: n }; store.setHero(structuredClone(hero)); } };
+    cmBeat: (pid: string) => (window as any).__cmBeat?.(pid), hwlv: (n: number) => { (hero as any).hw = { ...(hero as any).hw, p: n }; store.setHero(structuredClone(hero)); } };
 }).catch((e) => { console.error('demo failed', e); document.body.insertAdjacentHTML('beforeend', `<pre style="color:#f88;position:fixed;top:0;left:0;z-index:999">${String(e?.stack || e)}</pre>`); });

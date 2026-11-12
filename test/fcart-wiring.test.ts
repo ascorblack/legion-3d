@@ -49,6 +49,8 @@ describe('new cats fair — q2 budget in view (whole world, buildCity)', () => {
       ['pond', 900, 2300, 2000, 2000], ['wall', 2880, 2700, 1200, 2950], ['forest-west', 600, 1500, -400, 1500], ['mine', 4600, 1000, 4925, 800],
       // site 12.11: «Здание гильдий» where the blue house h3 stood
       ['guild', 3470, 2700, 3565, 2400],
+      // site 12.11 afternoon: the glade below the gate (from the gate passage) and the north forest from the town edge
+      ['glade', 2880, 2960, 2880, 3300], ['north', 1240, 960, 1240, 600],
     ];
     const out: string[] = [];
     for (const [name, x, y, tx, ty] of views) {

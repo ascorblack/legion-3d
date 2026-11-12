@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import type { JailGeo } from '../../contracts';
 import { toX, toZ, SX } from '../coords';
 import { GEO, M, type BatchKey } from '../batch';
-import { type Ctx, box, signZ, shade, markDoor } from '../kit';
+import { type Ctx, box, cyl, signZ, shade, markDoor } from '../kit';
 import { registerFcModel, type FcPlace } from './registry';
 import { siteRoof, tileHipRoof, hipRidgeAt, roofPiece, roofBox, roofCol, mixHex } from './roof';
 
@@ -117,6 +117,7 @@ const CRESCENT = new THREE.TorusGeometry(0.5, 0.17, 6, 16, Math.PI * 1.3);
 const HALF_TORUS = new THREE.TorusGeometry(0.5, 0.09, 6, 16, Math.PI);
 const RING = new THREE.TorusGeometry(0.5, 0.03, 4, 32);
 const ICO = new THREE.IcosahedronGeometry(0.5, 1);
+const ICO0 = new THREE.IcosahedronGeometry(0.5, 0);
 
 /** A glowing window (arched or square) on a +z wall at z: frame, glow pane, sill. `mat` of the frame. */
 function window3(k: Ctx, fmat: BatchKey, fcol: string, cx: number, y0: number, w: number, h: number, z: number, arch: boolean, glow = P.glass): void {
@@ -656,77 +657,139 @@ function buildMine(k: Ctx, p: FcPlace): void {
 }
 
 /* ================================================================== Здание гильдий (tk-art.js guildHall, lv 3 on the fair) */
-/** fc-art.js guildB → tk-art.js guildHall(b, { lv: 3 }) (site 12.11): a long low stone-level hall — cream walls on a rock
- *  plinth, four arched windows (rock frames, no shutters), two rock pilasters with capitals beside the arched purple double
- *  door (rock-light frame, gold knobs, a red mat with a gold paw) on three rock steps, a plum fascia and the plum tiled
- *  hip roof (roofV), the dark-red «ГИЛЬДИИ» board with cat ears on the eave, two red swallow-tail pennants with a gold
- *  diamond on poles near the roof ends. Asset px: x 0.01 m, heights HY (0.015 m); depth = the foot band. */
+/** fc-art.js guildB → tk-art.js guildHall(b, { lv: 3 }) (redrawn 12.11 afternoon): a stone guild hall — cream walls with rock
+ *  quoins on a rock plinth, the plum tiled hip roof (roofV sw 30 / sh 18, the ridge 120 px over the wall top) with a lilac band
+ *  of red diamonds, a gold crest on the ridge and a pennant on a pole at each ridge end; a square cream tower in the middle of
+ *  the roof (arched window, rock cap) under a plum pyramid spire with a gold band, a pole, a gold knob and the big pennant; two
+ *  arched stained-glass windows (five coloured panes, dark-red shutters) at cx ± 193 px; in front a portico: a rock platform
+ *  (± 140 px) with two steps, two light-rock columns with bases and volute capitals at cx ± 106 px, the entablature with
+ *  dentils and the «ГИЛЬДИИ» board, the pediment (± 150 px, 72 px tall) with the crossed swords on the banner shield, the
+ *  laurel and a gold boss; the arched plum double door with a glass fanlight, two lanterns at cx ± 56 px.
+ *  Asset px: x 0.01 m, heights HY (0.015 m); depth = the foot band, the portico in front of it up to the door point. */
 function buildGuild(k: Ctx, p: FcPlace): void {
-  const [vx0, vy0, vx1, B] = p.vis, f = frame(p, vx0, vx1, B), { zf, base } = f, d = doorBox('guild', p);
+  const [vx0, , vx1, B] = p.vis, f = frame(p, vx0, vx1, B), { zf, base } = f, d = doorBox('guild', p);
   const ROOFP = [P.plum, P.plumD, P.plumL] as const, banner = '#c0504a';
-  const ROCK_L35 = mixHex(P.rock, '#fff6e6', 0.35), ROCK_D15 = mixHex(P.rock, INK, 0.15), ROCK_L15 = mixHex(P.rock, '#fff6e6', 0.15), BOARD = mixHex(banner, INK, 0.15);
-  // the site's numbers (lv 3): dx 46, w = vis width − dx − 30, centred on the door; wall 170 px, ridge max(vy0 + 110, wt − 120)
+  const ROCK_L35 = mixHex(P.rock, '#fff6e6', 0.35), ROCK_L30 = mixHex(P.rock, '#fff6e6', 0.3), ROCK_L40 = mixHex(P.rock, '#fff6e6', 0.4), ROCK_L25 = mixHex(P.rock, '#fff6e6', 0.25);
+  const ROCK_L15 = mixHex(P.rock, '#fff6e6', 0.15), ROCK_L10 = mixHex(P.rock, '#fff6e6', 0.1), BOARD = mixHex(banner, INK, 0.15), SHUT = mixHex(banner, INK, 0.1);
+  // the site's numbers (lv 3): dx 46, w = vis width − dx − 30, centred on the door; wall 170 px, ridge wt − 120
   const cxp = p.door?.x ?? (vx0 + vx1) / 2, wpx = vx1 - vx0 - 46 - 30, x0p = Math.round(cxp - wpx / 2), x1p = x0p + wpx;
-  const wallH = 170, wtp = B - wallH, rYp = Math.max(vy0 + 110, wtp - 120);
+  const wallH = 170, wtp = B - wallH, rYp = wtp - 120, pw = 124;
   const L = f.X(x0p), R = f.X(x1p), cx = f.dx, wt = f.Y(wtp);
   const D = Math.max(2.4, zf - f.zb - 0.05), zb = zf - D;
-  // --- plinth (20 px rock), walls (cream) from just inside it, the side walls are the same box
+  // --- plinth (20 px rock), walls (cream), the rock quoins up both front corners (18 / 26 px blocks every 22 px)
   box(k, 'stone', P.rock, L - 0.05, R + 0.05, base - 0.05, base + f.h(20), zb - 0.05, zf + 0.05, 0.8);
-  box(k, 'stone', shade(P.rock, 0.2), L - 0.02, R + 0.02, base + f.h(20) - 0.02, base + f.h(20) + 0.02, zf + 0.05, zf + 0.06, 0.6);   // the plinth's light top line
   box(k, 'plaster', P.cream, L, R, base + f.h(14), wt, zb, zf, 1.2);
-  // --- windows: 2 + lv = 5 slots across, the one at the door skipped (|x − cx| < 70 px); arched, rock frames
-  const nw = 5, step = wpx / (nw + 1);
-  for (let i = 1; i <= nw; i++) {
-    const xp = x0p + step * i; if (Math.abs(xp - cxp) < 70) continue;
-    window3(k, 'wood', ROCK_D15, f.X(xp), f.Y(wtp + 76), f.w(40), f.h(46), zf, true);
-  }
-  // --- pilasters cx ± 66 px: shaft 22 px (wt + 24 … B − 14), capital 32 × 12 px — in front of the inner windows' edges
+  // (one flat zigzag outline a corner, 2 cm proud of the wall — cheaper than a box a block)
   for (const s of [-1, 1]) {
-    const x = f.X(cxp + s * 66);
-    box(k, 'stone', ROCK_L35, x - f.w(11), x + f.w(11), base + f.h(14) + 0.04, f.Y(wtp + 24), zf - 0.01, zf + 0.12, 0.6);
-    box(k, 'stone', P.rock, x - f.w(16), x + f.w(16), f.Y(wtp + 28), f.Y(wtp + 16), zf - 0.01, zf + 0.16, 0.6);
-    box(k, 'stone', P.rock, x - f.w(15), x + f.w(15), base + f.h(14) - 0.03, base + f.h(14) + 0.08, zf - 0.01, zf + 0.15, 0.6);
+    const xe = s < 0 ? L - 0.02 : R + 0.02, pts: V2[] = [[xe, f.Y(wtp + 6)]];
+    for (let yp = wtp + 6, i = 0; yp < B - 30; yp += 22, i++) { const bw = f.w(i % 2 ? 26 : 18); pts.push([xe - s * bw, f.Y(yp)], [xe - s * bw, f.Y(yp + 18)]); }
+    pts.push([xe, pts[pts.length - 1][1]]);
+    const sh = new THREE.Shape((s < 0 ? pts : pts.slice().reverse()).map(([x, y]) => new THREE.Vector2(x, y))), qg = new THREE.ShapeGeometry(sh);
+    qg.translate(0, 0, zf + 0.02); k.b.add('stone', qg, M(0, 0, 0), mixHex(P.rock, '#fff6e6', 0.45), 0.6); qg.dispose();
   }
-  // --- the double door (tk-art.js door(cx, B − 14, 64, 84, plumD, { double, mat: banner })), sized to the door box
-  const dsill = base + f.h(14), dw = Math.min(0.4, d.hw - 0.28), dh = Math.min(1.5, d.h - 0.18), fw = 0.1;
+  // --- the two stained-glass windows (guildWin 44 × 76 px at wt + 30): rock frame, 5 coloured panes in the arch, dark-red shutters
+  const wx = Math.round((pw + 24 + wpx / 2) / 2);
+  for (const s of [-1, 1]) {
+    const xc = f.X(cxp + s * wx), ww = f.w(44), wh = f.h(76), y0 = f.Y(wtp + 30 + 76);
+    const ay = y0 + wh - ww / 2;
+    prism(k, 'wood', ROCK_L25, archPts(xc - ww / 2 - 0.06, xc + ww / 2 + 0.06, y0 - 0.06, ay, ww / 2 + 0.06, 6), zf, zf + 0.05, 1, [archPts(xc - ww / 2, xc + ww / 2, y0, ay, ww / 2, 6).reverse()]);
+    prism(k, 'emit', P.glass, archPts(xc - ww / 2, xc + ww / 2, y0, ay, ww / 2, 6), zf, zf + 0.015);
+    box(k, 'wood', P.woodD, xc - 0.02, xc + 0.02, y0, ay, zf + 0.015, zf + 0.04);
+    box(k, 'wood', shade(ROCK_L25, -0.15), xc - ww / 2 - 0.1, xc + ww / 2 + 0.1, y0 - 0.1, y0 - 0.03, zf, zf + 0.14);
+    const panes = ['#4a6fb0', banner, '#3f8f8a', banner, '#4a6fb0'];
+    for (let i = 0; i < 5; i++) {
+      const a0 = i / 5 * Math.PI, a1 = (i + 1) / 5 * Math.PI, r = ww / 2 - 0.02;
+      prism(k, 'emit', panes[4 - i], [[xc, ay], [xc + Math.cos(a0) * r, ay + Math.sin(a0) * r], [xc + Math.cos((a0 + a1) / 2) * r, ay + Math.sin((a0 + a1) / 2) * r], [xc + Math.cos(a1) * r, ay + Math.sin(a1) * r]], zf + 0.02, zf + 0.03);
+    }
+    for (const t of [-1, 1]) prism(k, 'wood', SHUT, archPts(xc + t * (ww / 2 + f.w(3)) + (t < 0 ? -f.w(16) : 0), xc + t * (ww / 2 + f.w(3)) + (t < 0 ? 0 : f.w(16)), y0, ay - 0.02, f.h(10), 4), zf + 0.005, zf + 0.035);
+  }
+  // --- the arched plum double door (door(cx, B − 14, 64, 88, plumD, { double, mat: banner })) with the glass fanlight
+  const dsill = base + f.h(18), dw = Math.min(0.4, d.hw - 0.28), dh = Math.min(1.5, d.h - 0.18), fw = 0.1;
   prism(k, 'wood', P.rockL, archPts(cx - dw - fw, cx + dw + fw, dsill, dsill + dh - dw, dw + fw), zf - 0.01, zf + 0.07);
   prism(k, 'wood', P.plumD, archPts(cx - dw, cx + dw, dsill, dsill + dh - dw, dw), zf + 0.07, zf + 0.1);
-  box(k, 'wood', INK, cx - 0.012, cx + 0.012, dsill + 0.02, dsill + dh - 0.03, zf + 0.1, zf + 0.11);
-  for (const s of [-1, 1]) box(k, 'wood', shade(P.plumD, -0.25), cx + s * dw / 2 - 0.008, cx + s * dw / 2 + 0.008, dsill + 0.05, dsill + dh - dw * 0.55, zf + 0.1, zf + 0.106);   // plank lines
-  for (const s of [-1, 1]) k.b.add('wood', ICO, M(cx + s * 0.07, dsill + dh * 0.42, zf + 0.12, 0.07, 0.07, 0.05), P.gold, 1);
+  prism(k, 'emit', P.glass, archPts(cx - dw + 0.04, cx + dw - 0.04, dsill + dh - dw, dsill + dh - dw, dw - 0.04, 8), zf + 0.1, zf + 0.105);
+  [0.5, 0.25, 0.75].forEach((a, i) => { const t = a * Math.PI; k.b.add('wood', GEO.box, MY(cx + Math.cos(t) * (dw - 0.04) / 2, dsill + dh - dw + Math.sin(t) * (dw - 0.04) / 2, zf + 0.114 + i * 0.006, 0.02, dw - 0.04, 0.005, 0, 0, t - Math.PI / 2), P.woodD, 1); });
+  box(k, 'wood', INK, cx - 0.012, cx + 0.012, dsill + 0.02, dsill + dh - dw, zf + 0.1, zf + 0.11);
+  for (const s of [-1, 1]) k.b.add('wood', ICO0, M(cx + s * 0.07, dsill + dh * 0.42, zf + 0.12, 0.07, 0.07, 0.05), P.gold, 1);
   markDoor(k, 'door', cx - dw - fw, cx + dw + fw, dsill, dsill + dh + fw, zf - 0.01, zf + 0.125);
-  // --- three rock steps (stepsV 96 / 112 / 128 px wide) down to the street, the red mat with a gold paw on the top one
-  for (let i = 0; i < 3; i++) {
-    const hw = f.w(48 + i * 8), top = dsill - i * (dsill - base) / 3;
-    box(k, 'stone', i % 2 ? ROCK_L15 : shade(ROCK_L15, 0.08), cx - hw, cx + hw, base - 0.04, top, zf - 0.02, zf + 0.2 + i * 0.2, 0.6);
+  // --- the portico: platform (± 140 px, 16 px + its top), two steps (112 px) down to the street, the mat on the top
+  const zp = zf + Math.max(0.5, Math.min(0.75, toZ(p.door?.y ?? p.foot[3]) - zf + 0.25)), px = f.w(pw + 16);
+  box(k, 'stone', ROCK_L30, cx - px, cx + px, base - 0.04, dsill, zf - 0.02, zp, 0.6);
+  box(k, 'stone', ROCK_L10, cx - px - 0.02, cx + px + 0.02, base - 0.04, dsill - 0.07, zp - 0.02, zp + 0.02, 0.6);
+  for (let i = 0; i < 2; i++) { const hw = f.w(56 + i * 8), top = dsill - (i + 1) * (dsill - base) / 3; box(k, 'stone', i % 2 ? ROCK_L15 : shade(ROCK_L15, 0.08), cx - hw, cx + hw, base - 0.04, top, zp, zp + 0.2 + i * 0.2, 0.6); }
+  box(k, 'plaster', banner, cx - f.w(38), cx + f.w(38), dsill - 0.005, dsill + 0.025, zf + 0.12, zf + 0.42, 0.8);
+  // columns at cx ± 106 px on the platform: base 38 × 12, shaft 24 px light rock, capital 32 × 10 with volutes
+  const colTop = f.Y(wtp + 26), zc = zp - 0.22;
+  for (const s of [-1, 1]) {
+    const x = cx + s * f.w(pw - 18);
+    box(k, 'stone', P.rock, x - f.w(19), x + f.w(19), dsill, dsill + f.h(12), zc - 0.17, zc + 0.17, 0.6);
+    cyl(k, 'stone', ROCK_L40, x, dsill + f.h(12), zc, f.w(12), colTop - f.h(10) - dsill - f.h(12), 8, 0.6);
+    box(k, 'stone', P.rock, x - f.w(16), x + f.w(16), colTop - f.h(10), colTop, zc - 0.15, zc + 0.15, 0.6);
+    for (const t of [-1, 1]) box(k, 'stone', mixHex(P.rock, INK, 0.3), x + t * f.w(17) - 0.035, x + t * f.w(17) + 0.035, colTop - f.h(8), colTop - f.h(1), zc - 0.13, zc + 0.155, 0.6);   // the volutes
   }
-  box(k, 'plaster', banner, cx - f.w(38), cx + f.w(38), dsill - 0.005, dsill + 0.03, zf + 0.03, zf + 0.19, 0.8);
-  for (const [ox, oz, r] of [[0, 0.12, 0.05], [-0.06, 0.07, 0.022], [-0.02, 0.055, 0.022], [0.02, 0.055, 0.022], [0.06, 0.07, 0.022]] as const)
-    box(k, 'plaster', P.gold, cx + ox - r, cx + ox + r, dsill + 0.025, dsill + 0.04, zf + oz - r * 0.8, zf + oz + r * 0.8, 0.5);
-  // --- fascia (12 px plumD band at wt + 2) and the roof: the site's roofV(x0 − 18, x1 + 18, wt + 4, rY, dx 46, dy 32, plum, sw 34, sh 20)
-  const sr = siteRoof({ L: x0p - 18, R: x1p + 18, eY: wtp + 4, rY: rYp, dx: 46, dy: 32, sw: 34, sh: 20 }), rg = sr.ridge;
-  const ovx = f.w(18), ovz = 0.26, drop = f.h(rg.drop), ry = wt + 0.02 - drop, rh = Math.max(0.85, Math.min(1.15, f.h(rg.h) * 1.25));
+  // entablature (wt − 4 … colTop + 2: 32 px) with dentils, the board «ГИЛЬДИИ» on it
+  const eT = f.Y(wtp - 4), ez0 = zf - 0.02, ez1 = zp - 0.02;
+  box(k, 'stone', ROCK_L30, cx - px - f.w(2), cx + px + f.w(2), colTop, eT, ez0, ez1, 0.6);
+  for (let xp = -pw - 10; xp < pw + 10; xp += 24) box(k, 'stone', P.rock, cx + f.w(xp), cx + f.w(xp + 12), eT - f.h(8), eT - f.h(2), ez1, ez1 + 0.03, 0.4);
+  signZ(k, signText(p, 'ГИЛЬДИИ'), cx, colTop + (eT - colTop) * 0.12, ez1 + 0.035, f.w(2 * pw - 6) * 0.8, { bg: BOARD, fg: P.gold });
+  // the pediment (± 150 px, apex 72 px over the entablature) with the inner field, the gold boss, swords on the shield and laurel
+  const gT = eT + f.h(72), pz0 = ez1 - 0.32, pz1 = ez1;
+  prism(k, 'stone', ROCK_L35, [[cx - px - f.w(10), eT], [cx + px + f.w(10), eT], [cx, gT]], pz0, pz1, 0.6);
+  prism(k, 'stone', ROCK_L10, [[cx - px + f.w(14), eT + f.h(8)], [cx + px - f.w(14), eT + f.h(8)], [cx, gT - f.h(14)]], pz1, pz1 + 0.02, 0.6);
+  k.b.add('wood', ICO0, M(cx, gT + f.h(6), pz1 - 0.02, 0.14, 0.14, 0.1), P.gold, 1);
+  const hy = gT - f.h(24) - f.h(42);
+  for (const t of [-1, 1]) {
+    k.b.add('wood', GEO.box, MY(cx, hy + f.h(22), pz1 + 0.05 + (t > 0 ? 0.012 : 0), 0.035, f.h(62), 0.008, 0, 0, t * 0.82), '#d6dbe4', 0.6);
+    prism(k, 'wood', mixHex('#5f9a3a', INK, 0.25), [[cx + t * f.w(26), hy], [cx + t * f.w(48), hy + f.h(4)], [cx + t * f.w(36), hy + f.h(20)]], pz1 + 0.02, pz1 + 0.035);
+  }
+  prism(k, 'wood', banner, [[cx - f.w(16), hy + f.h(42)], [cx + f.w(16), hy + f.h(42)], [cx + f.w(16), hy + f.h(24)], [cx + f.w(8), hy + f.h(6)], [cx, hy], [cx - f.w(8), hy + f.h(6)], [cx - f.w(16), hy + f.h(24)]], pz1 + 0.077, pz1 + 0.11);
+  prism(k, 'wood', P.gold, [[cx, hy + f.h(34)], [cx + f.w(7), hy + f.h(25)], [cx, hy + f.h(16)], [cx - f.w(7), hy + f.h(25)]], pz1 + 0.11, pz1 + 0.125);
+  // two lanterns on the wall at cx ± 56 px, B − 104
+  for (const s of [-1, 1]) lantern(k, 'wood', cx + s * f.w(56), f.Y(B - 104), zf, 0.85);
+  // --- fascia (12 px plumD band at wt + 2) and the roof: roofV(x0 − 18, x1 + 18, wt + 4, rY, dx 46, dy 32, plum, sw 30, sh 18)
+  const sr = siteRoof({ L: x0p - 18, R: x1p + 18, eY: wtp + 4, rY: rYp, dx: 46, dy: 32, sw: 30, sh: 18 }), rg = sr.ridge;
+  const ovx = f.w(18), ovz = 0.26, drop = f.h(rg.drop), ry = wt + 0.02 - drop, rh = Math.max(1.2, Math.min(1.9, f.h(rg.h) * 1.1));
   box(k, 'wood', P.plumD, L - ovx + 0.08, R + ovx - 0.08, f.Y(wtp + 14), ry + 0.02, zb - 0.14, zf + 0.14, 0.6);
   const roof = { x0: L - ovx, x1: R + ovx, z0: zb - ovz, z1: zf + ovz, y0: ry, h: rh, rx0: f.X(rg.x0), rx1: f.X(rg.x1) };
   tileHipRoof(k, { ...roof, pal: ROOFP, tileW: f.w(sr.sw), rows: sr.rows, sideRows: sr.sideRows, soffit: P.plumD, ridge: f.h(14), rib: 0.1, lip: 0.08 });
-  // --- the board on the eave: board(cx, wt − 6, 'ГИЛЬДИИ', 22, { bg: dk(banner, .15) }) — 136 × 44 px, cat ears on top
-  const sW = f.w(Math.max(90, 7 * 22 * 0.66 + 34)), sZ = zf + ovz - 0.02, sY = f.Y(wtp + 16);
-  const sH = signZ(k, signText(p, 'ГИЛЬДИИ'), cx, sY, sZ, sW, { bg: BOARD, fg: P.gold });
-  for (const s of [-1, 1]) {
-    const xe = cx + s * (sW / 2 - f.w(21)), yT = sY + sH + 0.03;
-    prism(k, 'wood', BOARD, [[xe - f.w(13), yT - 0.04], [xe + f.w(13), yT - 0.04], [xe + s * f.w(7), yT + f.h(20)]], sZ + 0.03, sZ + 0.095);
-    prism(k, 'wood', P.pink, [[xe - f.w(6), yT - 0.02], [xe + f.w(6), yT - 0.02], [xe + s * f.w(4), yT + f.h(11)]], sZ + 0.095, sZ + 0.112);
+  const yR = ry + rh, zm = (roof.z0 + roof.z1) / 2, slope = (t: number) => [ry + rh * t, roof.z1 - (roof.z1 - zm) * t] as const;
+  // the lilac band (t 0.36 … 0.5 of the front slope) with a row of banner diamonds
+  {
+    const [y0, z0] = slope(0.36), [y1, z1] = slope(0.5), ang = Math.atan2(y1 - y0, z0 - z1), len = Math.hypot(y1 - y0, z0 - z1);
+    const bx0 = roof.x0 + (roof.rx0 - roof.x0) * 0.43 + 0.1, bx1 = roof.x1 - (roof.x1 - roof.rx1) * 0.43 - 0.1;
+    roofPiece(k, GEO.box, MY((bx0 + bx1) / 2, (y0 + y1) / 2 + 0.03, (z0 + z1) / 2 + 0.02, bx1 - bx0, len, 0.03, 0, -ang), P.plumL);
+    const n = Math.max(3, Math.round((bx1 - bx0) / f.w(30)));
+    for (let i = 0; i <= n; i++) roofPiece(k, GEO.box, MY(bx0 + 0.16 + (bx1 - bx0 - 0.32) * i / n, (y0 + y1) / 2 + 0.05, (z0 + z1) / 2 + 0.04, 0.1, 0.1, 0.02, 0, -ang, Math.PI / 4), banner);
   }
-  // --- pennants: guildFlag(x0 + 40, wt − 70, banner, 0.8) and (x1 − 70, …): a pole on the front slope, gold knob, swallow tail
-  const slopeY = (z: number) => ry + rh * Math.min(1, Math.max(0, (zf + ovz - z) / (D / 2 + ovz)));
-  for (const xp of [x0p + 40, x1p - 70]) {
-    const x = f.X(xp), z = zf + ovz - (D / 2 + ovz) * 0.45, y0 = slopeY(z) - 0.08, top = y0 + 0.08 + f.h(78 * 0.8) + 0.06;
-    box(k, 'wood', P.metal, x - 0.025, x + 0.025, y0, top, z - 0.025, z + 0.025, 0.4);
-    k.b.add('wood', ICO, M(x, top + 0.04, z, 0.1, 0.1, 0.1), P.gold, 1);
-    const fx = (px: number) => x + f.w(px * 0.8), fy = (py: number) => top - f.h(py * 0.8);
+  // the gold crest on the ridge (a point every 22 px) and the pennants on poles at both ridge ends (guildFlag 0.62)
+  for (let x = roof.rx0 + f.w(14); x < roof.rx1 - f.w(8); x += f.w(22)) k.b.add('wood', GEO.cone4, M(x, yR + 0.06 + f.h(7), zm, f.w(10), f.h(14), 0.02), P.gold, 0.4);
+  const pennant = (x: number, top: number, z: number, s: number) => {
+    const fx = (q: number) => x + f.w(q * s), fy = (q: number) => top - f.h(q * s);
     prism(k, 'plaster', banner, [[fx(2), fy(36)], [fx(52), fy(36)], [fx(42), fy(20)], [fx(52), fy(4)], [fx(2), fy(4)]], z - 0.015, z + 0.015);
     prism(k, 'plaster', P.gold, [[fx(14), fy(27)], [fx(20), fy(20)], [fx(14), fy(13)], [fx(8), fy(20)]], z + 0.015, z + 0.025);
+  };
+  for (const ex of [roof.rx0, roof.rx1]) {
+    const top = yR + f.h(34);
+    box(k, 'wood', P.metal, ex - 0.025, ex + 0.025, yR - 0.02, top + f.h(78 * 0.62 - 34 + 92 - 78 * 0.62), zm - 0.025, zm + 0.025, 0.4);
+    const pTop = yR + f.h(92);
+    k.b.add('wood', ICO0, M(ex, pTop + 0.04, zm, 0.08, 0.08, 0.08), P.gold, 1);
+    pennant(ex, pTop, zm, 0.62);
   }
+  // the tower (64 px, rY + 18 … rY − 70) in the middle of the roof: cream, rock cap, arched window; the spire, its pole and flag
+  const tw = f.w(64) / 2, tB = f.Y(rYp + 18), tT = f.Y(rYp - 70), tz0 = zm - 0.45, tz1 = zm + 0.45;
+  box(k, 'plaster', P.cream, cx - tw, cx + tw, Math.min(tB, yR - 0.3), tT, tz0, tz1, 1.2);
+  box(k, 'stone', P.rock, cx - tw - 0.04, cx + tw + 0.04, tT - f.h(8), tT + f.h(2), tz0 - 0.04, tz1 + 0.04, 0.6);
+  { const ww = f.w(26), y0 = f.Y(rYp - 70 + 18 + 34), wh = f.h(34);
+    prism(k, 'wood', P.woodD, archPts(cx - ww / 2 - 0.05, cx + ww / 2 + 0.05, y0 - 0.05, y0 + wh - ww / 2, ww / 2 + 0.05), tz1, tz1 + 0.04, 1, [archPts(cx - ww / 2, cx + ww / 2, y0, y0 + wh - ww / 2, ww / 2).reverse()]);
+    prism(k, 'emit', P.glass, archPts(cx - ww / 2, cx + ww / 2, y0, y0 + wh - ww / 2, ww / 2), tz1, tz1 + 0.015); }
+  const sp = new THREE.ConeGeometry(1, 1, 4, 1); sp.rotateY(Math.PI / 4);
+  roofPiece(k, sp, M(cx, tT + f.h(98) / 2, zm, (tw + f.w(12)) * 2 * 0.72, f.h(98), (tz1 - tz0 + 0.24) * 0.72), P.plum); sp.dispose();
+  box(k, 'wood', P.gold, cx - tw - f.w(10), cx + tw + f.w(10), tT - 0.02, tT + 0.04, tz0 - 0.12, tz1 + 0.12, 0.4);
+  const poleTop = f.Y(rYp - 70 - 150 - 46);
+  box(k, 'wood', P.metal, cx - 0.03, cx + 0.03, tT + f.h(90), poleTop, zm - 0.03, zm + 0.03, 0.4);
+  k.b.add('wood', ICO0, M(cx, f.Y(rYp - 70 - 112), zm, 0.14, 0.14, 0.14), P.gold, 1);
+  k.b.add('wood', ICO0, M(cx, poleTop + 0.05, zm, 0.09, 0.09, 0.09), P.gold, 1);
+  pennant(cx, poleTop - 0.02, zm, 0.85);
   (k.blobs ||= []).push(cx, base + 0.01, zf + 0.3, (R - L) / 2 + 0.2, 0.45);
 }
 
@@ -739,4 +802,5 @@ registerFcModel({ ref: 'storage', fp: '1b3ceb17e5739d', note: 'plank barn, red g
 registerFcModel({ ref: 'gate', fp: '1e34776ffe04fe', note: 'stone gate with arched passage + portcullis, two round towers with purple cones, cat ears, flags; faces the town', build: buildGate });
 registerFcModel({ ref: 'mine', fp: '1fc45c03742c4b', note: 'timber portal in a rock collar, lean-to roof with moss, ШАХТА plate, lanterns, dark adit with rails', build: buildMine });
 // 12.11 (site-1112-0007): the new «Здание гильдий» of the cats fair
-registerFcModel({ ref: 'guild', fp: '1409348aa9362c', note: 'long cream stone hall, plum tiled hip roof, 4 arched windows, 2 rock pilasters, arched purple double door on 3 steps, ГИЛЬДИИ board with cat ears, 2 red pennants', build: buildGuild });
+// redrawn 12.11 afternoon (site-1112-1439): tower + spire + flag on the roof, portico with columns and pediment
+registerFcModel({ ref: 'guild', fp: '0f963d0e3380fd', note: 'cream stone hall with quoins, plum tiled hip roof with a diamond band, gold crest and end pennants, central cream tower with plum spire and big pennant, 2 stained-glass windows with red shutters, portico: 2 columns, ГИЛЬДИИ entablature, pediment with swords on a shield, arched plum door with fanlight on 2 steps, 2 lanterns', build: buildGuild });

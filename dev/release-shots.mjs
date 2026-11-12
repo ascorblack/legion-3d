@@ -13,7 +13,20 @@ const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
 const glArgs = opt.gpu === 'native' ? [] : opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
 const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.ctx?.uiHost?.setCameraMode?.('${mode}');g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
-const SHOTS = opt.set === '079' ? [
+// the longest boom, no camera colliders (a framing over walls / towers), a field of view, interaction off
+const CAMX = (fov) => `g.rig.zoom(10);g.rig.setColliders([]);g.rig.setColliderBoxes([]);g.rig.fov=${fov};g.interact.setEnabled(false);`;
+const SHOTS = opt.set === '080' ? [
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&cm=1', 'glade-in', 16000, at(2810, 3330, 'tp', 0, -0.25, 'g.rig.dist=9;g.interact.setEnabled(false);')],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&cm=1', 'glade-in2', 16000, at(2700, 3300, 'tp', 0.0, -0.2, 'g.rig.dist=7;g.interact.setEnabled(false);')],
+  // 0.8.0 (site 12.11 afternoon): «Монстры у стен» (?cm=1 = the live 12.11 view) in the glade beyond the gate, from the gate
+  // passage in third person (boom at its longest, the camera colliders off so it rises over the gate towers; interaction off);
+  // a beaten pack in the dead pose; the north forest packs from the town edge; the redrawn «Здание гильдий». Run with --hide.
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&cm=1', 'glade-gate', 16000, at(2930, 2990, 'tp', 2.84, -1.15, CAMX(58))],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&cm=1', 'glade-dead', 16000, at(2930, 2990, 'tp', 2.84, -1.15, CAMX(58) + 'setTimeout(()=>{window.__demo.cmBeat("p0");g.citymon.poll();},3300);')],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&cm=1', 'forest-north', 16000, at(1300, 950, 'tp', 0.2, -0.22, 'g.rig.fov=62;g.interact.setEnabled(false);')],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=15:40', 'guild-day', 14000, at(3600, 2610, 'tp', -0.05, 0.2, 'g.rig.zoom(-1);g.rig.fov=82;g.interact.setEnabled(false);')],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=15:40', 'guild-wide', 14000, at(3600, 2600, 'tp', -0.05, 0.08, 'g.rig.fov=80;g.interact.setEnabled(false);')],
+] : opt.set === '079' ? [
   // 0.7.9 (site 12.11): the cats fair's new «Здание гильдий» (the agent's wide framing; interaction outline off); run with --hide.
   ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=15:40', 'guild-day', 14000, at(3600, 2600, 'tp', -0.05, -0.55, 'g.rig.dist=6;g.interact.setEnabled(false);')],
   ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=23:00', 'guild-night', 14000, at(3600, 2600, 'tp', -0.05, -0.55, 'g.rig.dist=6;g.interact.setEnabled(false);')],

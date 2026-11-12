@@ -1,0 +1,506 @@
+{
+ "about": "citymon.js view (GET /api/citymon) as the live page had it on 12.11 (shape, tiers, slots, idx, levels, art ids); pids / names / rewards synthetic. `placed` = the spots the live site put each pack / elite / returning pack on (.cm-wall data-spot).",
+ "view": {
+  "ok": true,
+  "biome": "meadow",
+  "biomeName": "Луг",
+  "daily": {
+   "n": 2,
+   "max": 10,
+   "left": 8,
+   "next": 1794535200000
+  },
+  "now": 1794500000000,
+  "minLevel": 3,
+  "respawnMin": 5,
+  "elites": [
+   {
+    "eid": "e_boar",
+    "epid": "ep0",
+    "tier": 0,
+    "slot": 56549,
+    "idx": 0,
+    "n": 3,
+    "lvl": 8,
+    "name": "Вожак кабанов",
+    "hint": "",
+    "reward": {
+     "coins": 80
+    }
+   },
+   {
+    "eid": "e_boar",
+    "epid": "ep1",
+    "tier": 1,
+    "slot": 567594,
+    "idx": 1,
+    "n": 3,
+    "lvl": 12,
+    "name": "Вожак кабанов",
+    "hint": "",
+    "reward": {
+     "coins": 80
+    }
+   },
+   {
+    "eid": "e_boar",
+    "epid": "ep2",
+    "tier": 1,
+    "slot": 584580,
+    "idx": 2,
+    "n": 3,
+    "lvl": 12,
+    "name": "Вожак кабанов",
+    "hint": "",
+    "reward": {
+     "coins": 80
+    }
+   }
+  ],
+  "hero": {
+   "level": 9,
+   "busy": null,
+   "hp": 120,
+   "max": 120
+  },
+  "soon": [
+   {
+    "line": "l0",
+    "tier": 0,
+    "at": 1794500180000,
+    "slot": 322384,
+    "idx": 1,
+    "n": 2
+   }
+  ],
+  "packs": [
+   {
+    "pid": "p0",
+    "tier": 0,
+    "slot": 980997,
+    "lvl": 3,
+    "idx": 0,
+    "n": 2,
+    "pack": [
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 3,
+      "hint": ""
+     },
+     {
+      "mon": "wolf",
+      "name": "Волк",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 3,
+      "hint": ""
+     },
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 3,
+      "hint": ""
+     }
+    ],
+    "power": 130,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   },
+   {
+    "pid": "p1",
+    "tier": 1,
+    "slot": 85422,
+    "lvl": 5,
+    "idx": 0,
+    "n": 4,
+    "pack": [
+     {
+      "mon": "wolf",
+      "name": "Волк",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 5,
+      "hint": ""
+     },
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 5,
+      "hint": ""
+     },
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 5,
+      "hint": ""
+     }
+    ],
+    "power": 150,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   },
+   {
+    "pid": "p2",
+    "tier": 1,
+    "slot": 501196,
+    "lvl": 6,
+    "idx": 1,
+    "n": 4,
+    "pack": [
+     {
+      "mon": "wolf",
+      "name": "Волк",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 6,
+      "hint": ""
+     },
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 6,
+      "hint": ""
+     },
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 6,
+      "hint": ""
+     }
+    ],
+    "power": 160,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   },
+   {
+    "pid": "p3",
+    "tier": 1,
+    "slot": 381660,
+    "lvl": 7,
+    "idx": 2,
+    "n": 4,
+    "pack": [
+     {
+      "mon": "wolf",
+      "name": "Волк",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 7,
+      "hint": ""
+     },
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 7,
+      "hint": ""
+     },
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 7,
+      "hint": ""
+     }
+    ],
+    "power": 170,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   },
+   {
+    "pid": "p4",
+    "tier": 1,
+    "slot": 885056,
+    "lvl": 9,
+    "idx": 3,
+    "n": 4,
+    "pack": [
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 9,
+      "hint": ""
+     },
+     {
+      "mon": "wolf",
+      "name": "Волк",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 9,
+      "hint": ""
+     },
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 9,
+      "hint": ""
+     }
+    ],
+    "power": 190,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   },
+   {
+    "pid": "p5",
+    "tier": 2,
+    "slot": 383334,
+    "lvl": 9,
+    "idx": 0,
+    "n": 4,
+    "pack": [
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 9,
+      "hint": ""
+     },
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 9,
+      "hint": ""
+     },
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 9,
+      "hint": ""
+     }
+    ],
+    "power": 190,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   },
+   {
+    "pid": "p6",
+    "tier": 2,
+    "slot": 422536,
+    "lvl": 10,
+    "idx": 1,
+    "n": 4,
+    "pack": [
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 10,
+      "hint": ""
+     },
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 10,
+      "hint": ""
+     },
+     {
+      "mon": "crow",
+      "name": "Ворона",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 10,
+      "hint": ""
+     }
+    ],
+    "power": 200,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   },
+   {
+    "pid": "p7",
+    "tier": 2,
+    "slot": 435655,
+    "lvl": 11,
+    "idx": 2,
+    "n": 4,
+    "pack": [
+     {
+      "mon": "wolf",
+      "name": "Волк",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 11,
+      "hint": ""
+     },
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 11,
+      "hint": ""
+     },
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 11,
+      "hint": ""
+     }
+    ],
+    "power": 210,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   },
+   {
+    "pid": "p8",
+    "tier": 2,
+    "slot": 767035,
+    "lvl": 12,
+    "idx": 3,
+    "n": 4,
+    "pack": [
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 12,
+      "hint": ""
+     },
+     {
+      "mon": "wolf",
+      "name": "Волк",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 12,
+      "hint": ""
+     },
+     {
+      "mon": "boar",
+      "name": "Кабан",
+      "kind": "beast",
+      "hp": 40,
+      "atk": 6,
+      "def": 2,
+      "lvl": 12,
+      "hint": ""
+     }
+    ],
+    "power": 220,
+    "reward": {
+     "coins": 20,
+     "xp": 10
+    }
+   }
+  ],
+  "myPower": 160
+ },
+ "placed": {
+  "packs": [
+   0,
+   3,
+   4,
+   2,
+   5,
+   9,
+   8,
+   7,
+   6
+  ],
+  "elites": [
+   10,
+   12,
+   11
+  ],
+  "soon": [
+   1
+  ]
+ }
+}

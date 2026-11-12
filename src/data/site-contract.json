@@ -1353,6 +1353,48 @@
       "re": "\\['guild', 'Гильдия', \\['guild'\\]\\]",
       "severity": "degrade",
       "why": "src/ui/menus.ts JT / JK / JRK mirror the site journal tabs (GET /api/journal?tab=guild)"
+    },
+    {
+      "id": "LGCityMon (view / attackDlg / eliteDlg)",
+      "kind": "keys",
+      "obj": "LGCityMon",
+      "file": "citymon.js",
+      "keys": [
+        "view",
+        "attackDlg",
+        "eliteDlg"
+      ],
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "site 12.11 afternoon «Монстры у стен»: src/features/citymon.ts reads view() (the site's own GET /api/citymon) and, without the layer, opens attackDlg / eliteDlg like the layer's click — otherwise the 3D shows no monsters"
+    },
+    {
+      "id": "citymon.js monster buttons (.cm-wall .cmw data-cm / data-pid / data-eid, click → attackDlg / eliteDlg)",
+      "file": "citymon.js",
+      "re": "data-cm=\"pack\" data-pid=\"\\$\\{esc\\(D\\.pid\\)\\}\"[\\s\\S]*data-cm=\"elite\" data-eid=\"\\$\\{esc\\(eKey\\)\\}\"[\\s\\S]*if \\(b\\.dataset\\.cm === 'pack'\\) attackDlg\\(b\\.dataset\\.pid\\); else eliteDlg\\(b\\.dataset\\.eid\\)",
+      "severity": "degrade",
+      "why": "E on a 3D monster presses the site's own `.cmw` button (src/net/citymon.ts cityMonAct) — the site then shows its «Напасть на монстров у стен?» dialog"
+    },
+    {
+      "id": "citymon.js placeAll / spotsBy / FORM (the 3D placement port)",
+      "file": "citymon.js",
+      "re": "const FORM = \\{ 1: \\[\\[0, 0\\]\\], 2: \\[\\[-52, -6\\], \\[52, 8\\]\\], 3: \\[\\[-80, -10\\], \\[0, 14\\], \\[80, -8\\]\\], 4: \\[\\[-74, -20\\], \\[24, -24\\], \\[-30, 20\\], \\[70, 16\\]\\] \\}[\\s\\S]*const s0 = \\(D\\.n \\|\\| 1\\) >= L\\.length && D\\.idx != null \\? D\\.idx : D\\.slot \\|\\| 0;",
+      "severity": "degrade",
+      "why": "src/net/citymon.ts placeAll / FORM are ports: a changed rule puts the 3D monsters on other spots than the site (test/site-1112b.test.ts checks the live 12.11 placement)"
+    },
+    {
+      "id": "city.js LGCity.wall() { x, y, own, glade }",
+      "file": "city.js",
+      "re": "own: TOWN\\.acc \\? !!TOWN\\.acc\\.own : true[\\s\\S]{0,120}glade: \\(S\\.cats && S\\.cats\\.glade\\) \\|\\| null",
+      "severity": "degrade",
+      "why": "the gate point, the own-town flag and the cats fair's glade the monsters stand in (src/net/citymon.ts cityMonWall)"
+    },
+    {
+      "id": "fc-map.js GLADE (polygon, sign, front, 13 spots)",
+      "file": "fc-map.js",
+      "re": "GLADE\\.spots = SPOTS\\.map",
+      "severity": "degrade",
+      "why": "the glade below the gate in 3D (src/world/faircats.ts fcGlade / gladeItems; test/fixtures/faircats-map.json GLADE)"
     }
   ]
 }

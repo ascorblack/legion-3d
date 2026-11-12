@@ -62,6 +62,7 @@ if (logged) {
     report.city = await p.evaluate(() => window.__l3dContract('city'));
     report.town = await p.evaluate(() => window.__l3dTownNow());
     report.lgCityKeys = await p.evaluate(() => Object.keys(window.LGCity || {}));
+    await p.waitForTimeout(3000);   // citymon.js ticks every 1.5 s and loads its view on the first tick
     report.signals = await p.evaluate(() => {
       const cy = document.querySelector('#tab-city .cy');
       let ss = null; try { ss = sessionStorage.getItem('lgCityTown'); } catch {}
@@ -77,7 +78,20 @@ if (logged) {
         // site 12.11 (read only): the guild hall — the site's own cached on() (city.js soonB asks it too), its HUD entry,
         // whether this town has the guild building (LGCity.hasB, pure) and what the 3D layout made of it
         guildHall: (() => { try { const G = window.LGGuildHall; return { on: G && G.on ? G.on() : false, keys: G ? Object.keys(G) : null, entry: !!document.querySelector('.cy-hud .gh-entry'),
-          hasB: !!window.LGCity?.hasB?.('guild'), root: !!document.querySelector('.gh-root') }; } catch { return null; } })() };
+          hasB: !!window.LGCity?.hasB?.('guild'), root: !!document.querySelector('.gh-root') }; } catch { return null; } })(),
+        // site 12.11 afternoon (read only): monsters at the walls (citymon.js) — counts and keys only, never names
+        cityMon: (() => { try {
+          const M = window.LGCityMon, A = window.LGCityMonArt, W = window.LGCity?.wall?.(), h = W && W.X && W.X.hero ? W.X.hero() : null, v = M && M.view ? M.view() : null;
+          return { mon: M ? Object.keys(M) : null, art: A && A.IDS ? A.IDS.length : null, cm: h ? (h.cm ? Object.keys(h.cm) : false) : null,
+            wall: W ? { town: W.town, own: W.own, glade: !!W.glade, spots: W.glade?.spots?.length ?? 0 } : null,
+            view: v ? { keys: Object.keys(v), packs: (v.packs || []).map((P) => ({ tier: P.tier, n: (P.pack || []).length, mon: (P.pack || []).map((m) => m.mon) })), elites: (v.elites || []).map((E) => E.eid),
+              soon: (v.soon || []).length, eSoon: (v.eSoon || []).length, daily: v.daily || null, biome: v.biome || null } : null,
+            layer: document.querySelectorAll('.cm-wall .cmw').length, badge: !!document.querySelector('.cm-badge'),
+            // the shapes of the view's records (keys and numbers only) and where the site's own layer put each pack / elite
+            shape: v ? { pack: (v.packs || []).map((P) => ({ keys: Object.keys(P), tier: P.tier, slot: P.slot, idx: P.idx, n: P.n, lvl: P.lvl, m: Object.keys((P.pack || [])[0] || {}) })),
+              elite: (v.elites || []).map((E) => ({ keys: Object.keys(E), tier: E.tier, slot: E.slot, idx: E.idx, n: E.n, lvl: E.lvl })),
+              soon: (v.soon || []).map((x) => ({ keys: Object.keys(x), tier: x.tier, slot: x.slot, idx: x.idx, n: x.n })), hero: v.hero ? Object.keys(v.hero) : null } : null,
+            placed: v ? [...document.querySelectorAll('.cm-wall [data-spot]')].map((b) => [b.dataset.cm || 'trail', (v.packs || []).findIndex((P) => P.pid === b.dataset.pid), (v.elites || []).findIndex((E) => (E.epid || E.eid) === b.dataset.eid), +b.dataset.spot, +b.dataset.x || null, +b.dataset.y || null, b.className.baseVal ?? b.className]) : null }; } catch (e) { return String(e); } })() };
     });
   } else console.log(ts(), 'City tab not available');
 }

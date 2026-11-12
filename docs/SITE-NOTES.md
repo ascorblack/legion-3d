@@ -130,6 +130,26 @@ so the extension must treat every internal API as unstable and degrade gracefull
   `me.an` / SSE `ann` in the «Игра» HUD (`.gu-an`, close → localStorage `lgAnnX`) — src/features/announce.ts; journal tab / kind
   «Гильдия»; email login (`me.el` / `me.em`). site-chat.js + site-ui.js: a mute asks a reason (`LGSiteUi.askReason`, `reason`
   in POST …/mod, «. Причина: …»). Our follow-ups: .local/drift1112/FINDINGS.md.
+- **12.11 afternoon — «Монстры у стен» (citymon.js, soft module of the City tab).** `window.LGCityMonArt` { fig(id), IDS (28 art
+  ids: boar / wolf / crow … e_boar / e_serpent, seven SVG families, `cm-ey` eyes / `cm-x` dead crosses) } and `window.LGCityMon`
+  { tick, attackDlg, eliteDlg, fightDlg, lobbies, openCount, close, view }. Every 1.5 s tick(): only while `LGCity.wall()` answers
+  ({ x, y = the gate door, own = the hero's own town, glade = fc-art GLADE on the cats fair, else null }) and the hero has `cm`
+  (/api/me hero.cm {n, of, nx}). The view is the hero's OWN: GET `/api/citymon` (the site's own 60 s cache; reloaded when hero.cm.n
+  changes or a pack is due back): `packs` [{ pid, tier 0–2, slot, idx, n, lvl, pack [{ mon, name, kind, hp, atk, def, lvl, hint }],
+  power, reward }], `elites` [{ eid, epid, tier, slot, idx, n, lvl, name }], `soon` / `eSoon` [{ line, tier, at, slot, idx, n }],
+  `daily` { n, max 10, left, next (05:00 МСК) }, `biome`, `hero` { level, busy, hp, max }, `myPower`, `respawnMin`, `now`. No SSE.
+  draw(): placeAll() puts packs on the spots of their tier (sorted by distance from the glade centre; `idx` when the tier has as many
+  spots as packs, else `slot`), elites on the 'e' spots, returning packs as paw trails «Вернутся через m:ss»; members at FORM offsets
+  as `<button class="cmw" data-cm="pack" data-pid>` (elites `.cmw.el data-cm="elite" data-eid`) in `.cm-wall` inside the City camera,
+  wandering in walkBox; `.cm-badge` «Монстры: N» in `.cy-hud` centres the camera on the nearest pack. A click → `.cm-dlg` (role dialog,
+  aria-modal) «Напасть на монстров у стен?» → «Напасть» = POST `/api/citymon/act {op:'attack', pid}` → fightDlg: arena-field.js
+  `LGArenaField.play()` (new, also the arena's field) inside the same dialog. Elites: guild groups (`op` ecreate / ejoin / estart /
+  eleave / edisband / elist, GET `/api/citymon/fight?id=`). fc-map.js `GLADE` (x 2170–3590, y 3010…3420, poly, sign «В ПОХОД»
+  (2742, 3112), 4 front trees) + `SPOTS` (13: t 0 ×2 at the gate in the glade, t 1 ×4 along the south wall, t 2 ×4 in the north
+  forest, 'e' ×3 at the edges; each but the gate ones with its own clearing `poly`). The walk grid is unchanged: the glade is NOT
+  walkable. 3D: src/net/citymon.ts (placeAll / FORM / walkBox ports, cityMonAct presses the site's `.cmw`), src/world/citymon-art.ts,
+  src/features/citymon.ts, glade terrain src/world/faircats.ts fcGlade / gladeItems. tk-art.js guildHall lv 3 redrawn (tower + spire,
+  portico) → civic.ts buildGuild. Our follow-ups: .local/drift1112b/FINDINGS.md.
 
 ## Auth / user
 - Cookie `lsid` (httpOnly). `GET /api/me` → `{ ok, user:{login,name}, hero, roles, classes, ench, ql, now, … }`.

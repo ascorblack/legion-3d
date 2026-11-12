@@ -762,8 +762,9 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
 }
 
 /* ------------------------------------------------------------------ overlay detection */
-/** Site dialogs that may cover the game. Our own UI (#l3d-*) and the town picker inside the hidden 2D view are excluded below. */
-const DIALOGS = '.su-layer, dialog[open], [role="dialog"], [aria-modal="true"]';
+/** Site dialogs that may cover the game (also citymon.js `.cm-dlg` «Напасть на монстров у стен?» with its arena-field.js fight,
+ *  12.11). Our own UI (#l3d-*) and the town picker inside the hidden 2D view are excluded below. */
+export const DIALOGS = '.su-layer, dialog[open], [role="dialog"], [aria-modal="true"]';
 /** The site's guild hall (12.11, guildhall.js open(): `.gh-root` on <body> / the fullscreen element, html.gh-full; z 900).
  *  It replaced the guild district of 07.11 (`.gd-root`): an interior W 3840 × H 3240 (LGGuildHallMap) with its own WASD / E / Esc. */
 export const GUILD_HALL = GH_ROOT;
