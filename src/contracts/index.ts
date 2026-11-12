@@ -105,6 +105,8 @@ export interface Building {
   hit: [number, number, number, number];   // x0, x1, y0 (top of the art), y1 (bottom of the art)
   door: { x: number; y: number };          // walkable point in front of the entrance
   soon?: boolean; fair?: boolean; mine?: boolean; magic?: boolean;
+  /** The site's own words for a «скоро» building (site 12.11 «Здание гильдий»: «Здание гильдий скоро откроется»). */
+  soonText?: string;
   /** «Тюрьма и клетка» (site 30.10, citymap.js BUILDINGS jail): you cannot enter it — E opens the site's Jail window. */
   jail?: boolean;
   /** Drawn under construction (the site's art keeps the «скоро» plank / scaffold) although it opens: the Ратуша — city.js

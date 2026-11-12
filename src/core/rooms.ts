@@ -131,7 +131,7 @@ export function createRoomManager(host: RoomHost): RoomManagerEx {
       if (busy || current === id) return;
       for (const g of guards) { const no = g(id); if (no) { host.toast(no, true); return; } }
       const b = host.building(id);
-      if (b?.soon) { host.toast(SOON); return; }
+      if (b?.soon) { host.toast(b.soonText || SOON); return; }
       const def = host.registries.buildings.resolve(id);
       if (def.room === 'none') return;
       if (current) mgr.exit();

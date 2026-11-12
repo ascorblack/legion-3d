@@ -35,6 +35,9 @@ export const DEFAULT_BUILDINGS: Record<string, BuildingDef> = {
   mineboard: { model: 'mineboard', room: 'site' },
   // 30.10: «Тюрьма и клетка» — cannot be entered; E shows the site's Jail window (who sits, until when)
   jail: { model: 'jail', room: 'site' },
+  // 12.11: «Здание гильдий» (cats fair) — E is the site's own way in: LGCity.panel('guild') → ghOpen → LGGuildHall.enter()
+  //        (the site's guild hall interior over the sleeping City; src/net/guildhall.ts)
+  guild: { model: 'guild', room: 'site' },
 };
 export const BUILDING_FALLBACK: BuildingDef = { room: 'site' };
 

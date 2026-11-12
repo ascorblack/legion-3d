@@ -1,10 +1,13 @@
 /**
  * Places of the site that the 3D game opens through the site's own buttons (site 07.11):
- *  - «Гильдейский район» (guildhall.js, window.LGGuildHall): the site puts a `.gd-entry` button into its City HUD
- *    (`.cy-hud`, hidden under the 3D) once GET /api/guildhall says the district is open for this hero. The pause-menu
- *    entry appears only while that button exists and presses it: the site's own pick window, then its full-screen district
- *    (`.gd-root`, its own WASD / E / Esc; the City sleeps meanwhile). src/net/site.ts reports `.gd-root` as the overlay
- *    'district' — the 3D game hides and pauses (src/features/overlay.ts) and comes back when the site closes it.
+ *  - «Здание гильдии» (guildhall.js, window.LGGuildHall, site 12.11 — it replaced the guild district of 07.11): an interior
+ *    of the site's own (src/net/guildhall.ts). In a town with the building `guild` (the cats fair) the 3D building is the
+ *    way in: E → LGCity.panel('guild') → the site's ghOpen() → LGGuildHall.enter(); its «скоро» follows city.js soonB
+ *    (ghOn() === false) live — `syncGuildSoon` here, with the site's words «Здание гильдий скоро откроется». In any other
+ *    town the site puts `.gh-entry` into its City HUD (`.cy-hud`, hidden under the 3D) once GET /api/guildhall is ok:
+ *    the pause-menu entry appears only while that button exists and presses it. The hall (`.gh-root`, its own WASD / E /
+ *    Esc; the City sleeps) is the overlay 'guildhall' of src/net/site.ts, «Вступи в гильдию» (`.gh-modal`) a dialog —
+ *    the 3D game hides and pauses (src/features/overlay.ts) and comes back when the site closes it.
  *  - the tabs «Бой армий» (`war`, warcmd.js, /api/me `cw`), «Сезоны» (`season`, season.js, `ss`) and «Арена» (`arena`,
  *    arena.js, /api/me `ar`, site 10.11): while the site shows their tab button, the pause menu offers them; a press opens
  *    them through actions.openSitePanel — in the site's «Игра» mode as its window over the City (the 3D yields to the
@@ -22,14 +25,17 @@
 import { coreFeature } from './types';
 import { registerPauseItem } from '../ui/settings-ext';
 import { gameUiOn } from '../net/gameui';
+import { GH_ENTRY, GH_SOON, GUILD_ID, ghOn, guildSoon } from '../net/guildhall';
+import type { Building } from '../contracts';
 
 /** A site element that is in the page and not [hidden] (the City HUD itself is hidden under the 3D: not checked). */
 export const present = (doc: Pick<Document, 'querySelector'>, sel: string): HTMLElement | null => {
   const e = doc.querySelector<HTMLElement>(sel);
   return e && !e.hidden ? e : null;
 };
-export const GUILD_ENTRY = '.cy-hud .gd-entry';
-/** guilds.js entryTick(): «🛡 Гильдия / Гильдии» in the City HUD, before the district's button. */
+/** guildhall.js entryTick(): «🏰 Здание гильдии» in the City HUD of a town without the `guild` building. */
+export const GUILD_ENTRY = GH_ENTRY;
+/** guilds.js entryTick(): «🛡 Гильдия / Гильдии» in the City HUD, before the guild hall's button. */
 export const GUILDS_ENTRY = '.cy-hud .gl-entry';
 export const SITE_TABS: [id: string, label: string, order: number, icon: string][] = [['war', 'Бой армий', 23, 'banner'], ['season', 'Сезоны', 24, 'trophy'], ['arena', 'Арена 5×5', 24.5, 'swords']];
 
@@ -46,12 +52,22 @@ export const dailiesOn = (hero: any, w: any = W): boolean => !!(hero && hero.dl 
 /** The mini-map window (app.js window.LegionMiniMap) — the site offers it only in the «Игра» HUD. */
 export const miniMapOn = (w: any = W): boolean => gameUiOn(w) && !!(w.LegionMiniMap && typeof w.LegionMiniMap.open === 'function');
 
+/** The 3D guild building follows city.js soonB live (ghOn() may answer after the world was built): true = changed. */
+export function syncGuildSoon(buildings: readonly Building[] | null | undefined, w: any = W): boolean {
+  const b = buildings?.find((x) => x.id === GUILD_ID); if (!b) return false;
+  const soon = guildSoon(ghOn(w));
+  if (!!b.soon === soon) return false;
+  b.soon = soon;
+  if (soon) b.soonText = GH_SOON; else delete b.soonText;
+  return true;
+}
+
 export default coreFeature({
   id: 'site-places',
   order: 235,
   setup(ctx) {
     const offs = [
-      registerPauseItem({ id: 'site.guild', label: 'Гильдейский район', order: 26, group: 'city', icon: 'castle', enabled: () => !!present(document, GUILD_ENTRY),
+      registerPauseItem({ id: 'site.guild', label: 'Здание гильдии', order: 26, group: 'city', icon: 'castle', enabled: () => !!present(document, GUILD_ENTRY),
         run: () => { setTimeout(() => present(document, GUILD_ENTRY)?.click(), 0); } }),
       registerPauseItem({ id: 'site.guilds', label: 'Гильдии', order: 25.5, group: 'city', icon: 'shield', enabled: () => !!present(document, GUILDS_ENTRY),
         run: () => { setTimeout(() => present(document, GUILDS_ENTRY)?.click(), 0); } }),
@@ -74,6 +90,8 @@ export default coreFeature({
       seen = n;
     };
     if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('lgmail', onMail);
-    return () => { for (const o of offs) o(); if (typeof window !== 'undefined' && window.removeEventListener) window.removeEventListener('lgmail', onMail); };
+    // the guild building's «скоро» (city.js soonB → ghOn()), as often as the site's own entryTick looks (1.5 s); no request
+    const ghT = typeof setInterval === 'function' ? setInterval(() => { try { syncGuildSoon(ctx.layout()?.buildings); } catch { /* none */ } }, 1500) : 0;
+    return () => { clearInterval(ghT); for (const o of offs) o(); if (typeof window !== 'undefined' && window.removeEventListener) window.removeEventListener('lgmail', onMail); };
   },
 });

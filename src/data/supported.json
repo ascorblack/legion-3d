@@ -31,7 +31,8 @@
       "anvil": "hybrid",
       "mine": "mine3d",
       "mineboard": "site",
-      "jail": "site"
+      "jail": "site",
+      "guild": "site"
     }
   },
   "roomKinds": [

@@ -58,6 +58,7 @@ import mineHold from './mine-hold';
 import geomlint from './geomlint';
 import daynight from './daynight';
 import sitePlaces from './site-places';
+import announce from './announce';
 import fishing from './fishing';
 
 export const FEATURES: (Feature | CoreFeature)[] = [
@@ -87,6 +88,7 @@ export const FEATURES: (Feature | CoreFeature)[] = [
   geomlint,
   daynight,
   sitePlaces,
+  announce,
   fishing,
 ];
 

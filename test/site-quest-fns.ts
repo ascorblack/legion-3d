@@ -43,7 +43,10 @@ export function fnSource(src: string, name: string): string | null {
   return null;
 }
 
-export interface SiteBoss { zonesHtml(g: unknown, M: unknown, noBtn?: boolean): string; wingsHtml(g: unknown): string; bgHtml(v: unknown): string }
+export interface SiteBoss { zonesHtml(g: unknown, M: unknown, noBtn?: boolean, sc?: unknown): string; wingsHtml(g: unknown): string; bgHtml(v: unknown): string;
+  /** site 12.11 (null in older copies) */
+  schemeFor: ((g: unknown, M: unknown, id: string) => any) | null; skHtml: ((g: unknown, M: unknown) => string) | null;
+  LGQuestSchemes: { of(g: unknown, M: unknown, id: string): any; ids(): string[] } | null }
 
 /** zonesHtml / wingsHtml / bgHtml of the site copy, with the quick-action buttons on (qaOn, X.say) like a hero with `qa`. */
 export function siteBoss(): SiteBoss | null {
@@ -59,7 +62,18 @@ export function siteBoss(): SiteBoss | null {
     deadIn: () => null, deadHtml: () => '', jackHtml: () => '', bossArt: () => '<boss></boss>', ncText: (t: string) => esc(t),
     wd: (w: string) => `<w>${esc(w)}</w>`, Math, JSON, Set, Map, Object, Array, String, Number,
   };
+  // site 12.11: bgHtml asks the boss scheme registry (schemeFor / schemeFig / skHtml): the copy's own block
+  // `const MSCH = new Map();` … up to `const HASH =` (the registrations), its picture helpers stubbed (the svg is not tested)
+  const sch = schemeBlock(src);
+  Object.assign(ctx, { window: {}, SKW: 400, SKH: 230, SKG: 196, skFig: () => '', skParty: () => '', skGround: () => '', skT: () => '', skTrap: () => '' });
   vm.createContext(ctx);
-  vm.runInContext(parts.join('\n') + `\n;globalThis.__f = { ${names.join(', ')} };`, ctx, { timeout: 5000 });
+  vm.runInContext(parts.join('\n') + '\n' + (sch ?? 'const schemeFor = () => null, schemeFig = () => "", skHtml = () => "";')
+    + `\n;globalThis.__f = { ${names.join(', ')}, schemeFor: typeof schemeFor === 'function' ? schemeFor : null, skHtml: typeof skHtml === 'function' ? skHtml : null, LGQuestSchemes: window.LGQuestSchemes || null };`, ctx, { timeout: 5000 });
   return (ctx as { __f: SiteBoss }).__f;
+}
+/** quest.js (12.11): the scheme registry block — MSCH, schemeAdd / schemeFor / schemeFig / schemeMark, the chest barrow's
+ *  SK_* tables and skHtml, every schemeAdd registration. Null for older copies. */
+export function schemeBlock(src: string): string | null {
+  const a = src.indexOf('const MSCH = new Map();'), b = src.indexOf('const HASH =', a);
+  return a >= 0 && b > a ? src.slice(a, b) : null;
 }

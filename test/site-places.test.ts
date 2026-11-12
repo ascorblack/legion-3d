@@ -1,11 +1,12 @@
 /**
- * Site 07.11: the guild district (guildhall.js), the tabs «Бой армий» / «Сезоны», the district town's hall (b-hall.js r.hall.w).
- * The pause-menu entries exist only while the site shows its own buttons; the district is a blocking overlay for the 3D.
+ * Site 07.11: the tabs «Бой армий» / «Сезоны», the district town's hall (b-hall.js r.hall.w); the guild hall's HUD entry
+ * (guildhall.js, 12.11 — it replaced the 07.11 guild district; more in test/site-1112.test.ts).
+ * The pause-menu entries exist only while the site shows its own buttons; the hall is a blocking overlay for the 3D.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import feature, { present, GUILD_ENTRY, SITE_TABS } from '../src/features/site-places';
 import { pauseItems } from '../src/ui/settings-ext';
-import { DISTRICT } from '../src/net/site';
+import { GUILD_HALL } from '../src/net/site';
 import { districtHall, HYBRID_SCENES } from '../src/rooms/hybrid/scenes';
 import { siteCopy } from './site-quest-fns';
 
@@ -41,12 +42,13 @@ describe('site places in the pause menu', () => {
     off();
     expect(SITE_TABS.map((t) => t[0])).toEqual(['war', 'season', 'arena']);   // arena: site 10.11 (test/site-1110.test.ts)
   });
-  it.skipIf(!siteCopy('guildhall.js', 'gd-root'))('guildhall.js: the entry button in the City HUD and the full-screen root we watch', () => {
-    const src = siteCopy('guildhall.js', 'gd-root')!;
-    expect(DISTRICT).toBe('.gd-root');
-    expect(src).toMatch(/root\.className = 'gd-root'/);
+  it.skipIf(!siteCopy('guildhall.js', 'gh-root'))('guildhall.js: the entry button in the City HUD and the full-screen root we watch', () => {
+    const src = siteCopy('guildhall.js', 'gh-root')!;
+    expect(GUILD_HALL).toBe('.gh-root');
+    expect(GUILD_ENTRY).toBe('.cy-hud .gh-entry');
+    expect(src).toMatch(/root\.className = 'gh-root'/);
     expect(src).toMatch(/querySelector\('\.cy-hud'\)/);
-    expect(src).toMatch(/b\.className = 'gd-entry'/);
+    expect(src).toMatch(/b\.className = 'gh-entry'/);
     expect(src).toMatch(/LGCity\.sleep\(\)/);
   });
   it.skipIf(!siteCopy('app.js', 'openWar'))('app.js: the war / season tabs and their flags', () => {

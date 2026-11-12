@@ -23,6 +23,7 @@ import { readSitePals } from '../world/palette';
 import { createJailHub, jailFromMe, jailList, jailSeats, jailGeoOf, type JailHub } from './jail';
 import { questFormFill } from '../quest/model';
 import { gameUiOn, openGuWindow, pickReplayTab } from './gameui';
+import { ghOn, guildSoon, GH_SOON, GH_ROOT, GH_MODAL, GUILD_ID } from './guildhall';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
 const W = (typeof window !== 'undefined' ? window : globalThis) as any;   // importable in node tests (pure helpers below)
@@ -180,8 +181,10 @@ function townBuildings(list: any[], hero: Hero | null, magicOk: boolean): Buildi
  * the site but city.js openPanel never checks `soon` and b-hall.js is a real window (treasury, mayor, ore donations,
  * 03.11) — so it opens here too, drawn with its scaffold (`scaffold`).
  */
-export function soonOf(b: { id: string; soon?: boolean }, au: boolean, sg: boolean, mn: boolean): { soon: boolean; scaffold?: boolean } {
+export function soonOf(b: { id: string; soon?: boolean }, au: boolean, sg: boolean, mn: boolean, gh: boolean | null = null): { soon: boolean; scaffold?: boolean; soonText?: string } {
   if (b.id === 'hall' && b.soon) return { soon: false, scaffold: true };
+  // site 12.11: «Здание гильдий» is «скоро» exactly while city.js ghOn() === false (LGGuildHall missing or its GET not ok)
+  if (b.id === GUILD_ID) return guildSoon(gh) ? { soon: true, soonText: GH_SOON } : { soon: false };
   return { soon: !!b.soon && !((b.id === 'auction' && au) || (b.id === 'storage' && sg) || (b.id === 'mine' && mn)) };
 }
 function buildTownLayout(hero: Hero | null, id: string, meta: any): CityLayout | null {
@@ -229,7 +232,7 @@ function buildFairCatsLayout(hero: Hero | null, jl: boolean): CityLayout | null 
     const buildings: Building[] = (map.BUILDINGS || []).map((b: any) => ({
       ...b, door: { ...b.door }, hit: [...b.hit] as Building['hit'],
       title: b.id === 'magic' && h.ms ? String(h.ms) : b.title,
-      ...soonOf(b, !!h.au, !!h.sg, mn),
+      ...soonOf(b, !!h.au, !!h.sg, mn, b.id === GUILD_ID ? ghOn(W) : null),
     }));
     const sp = safe(() => C.spawn?.() as [number, number] | undefined, undefined);
     const L = fairCatsLayout(sc, map, buildings, { styleId: styleId(), jail: !!jl, ...(Array.isArray(sp) ? { spawn: [+sp[0], +sp[1]] as [number, number] } : {}) });
@@ -257,7 +260,7 @@ function buildKitLayout(hero: Hero | null, id: string, meta: any): CityLayout | 
     const kit = kitOf(sc);
     const buildings: Building[] = kitSiteBuildings(siteB).map((b) => ({
       ...b, title: b.id === 'magic' && h.ms ? String(h.ms) : b.title,
-      ...soonOf(b, !!h.au, !!h.sg, mn), ...kitBuildState(b as any, kit, now),
+      ...soonOf(b, !!h.au, !!h.sg, mn, b.id === GUILD_ID ? ghOn(W) : null), ...kitBuildState(b as any, kit, now),
     }));
     const sp = safe(() => C.spawn?.(T) as [number, number] | undefined, undefined);
     const L = fairCatsLayout(sc, map, buildings, { styleId: styleId(), id, ...(Array.isArray(sp) ? { spawn: [+sp[0], +sp[1]] as [number, number] } : {}) });
@@ -623,8 +626,8 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
     const t = performance.now(); if (t - ovAt < 250) return ovVal; ovAt = t;
     ovVal = anyShown('.cy-room') ? 'room' : anyShown('.mn') ? 'mine' : anyShown('.tr-win') ? 'trade'
       : anyShown('.mn-board-w') ? 'board' : anyShown('.cy-read') ? 'read'
-      // site 07.11: the guild district (guildhall.js) is a full-screen place of its own over the sleeping City
-      : anyShown(DISTRICT) ? 'district'
+      // site 12.11: the guild hall (guildhall.js LGGuildHall.enter → open: `.gh-root`, an interior of its own) over the sleeping City
+      : anyShown(GUILD_HALL) ? 'guildhall' : anyShown(GH_MODAL) ? 'dialog'
       // site 10.11: the fishing screen (fish2.js, `.f2`, z 9000) — a full-screen mini-game of its own; the City sleeps under it
       : anyShown(FISH) ? 'fish'
       // site 08.11 (city.js townShut): the town is closed and the channel has no city to fall back to — the City is shut down
@@ -761,8 +764,9 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
 /* ------------------------------------------------------------------ overlay detection */
 /** Site dialogs that may cover the game. Our own UI (#l3d-*) and the town picker inside the hidden 2D view are excluded below. */
 const DIALOGS = '.su-layer, dialog[open], [role="dialog"], [aria-modal="true"]';
-/** The site's guild district (07.11, guildhall.js open(): `.gd-root` on <body> / the fullscreen element, html.gd-full). */
-export const DISTRICT = '.gd-root';
+/** The site's guild hall (12.11, guildhall.js open(): `.gh-root` on <body> / the fullscreen element, html.gh-full; z 900).
+ *  It replaced the guild district of 07.11 (`.gd-root`): an interior W 3840 × H 3240 (LGGuildHallMap) with its own WASD / E / Esc. */
+export const GUILD_HALL = GH_ROOT;
 /** The site's fishing screen (10.11, fish2.js LGFish2.open(): `.f2` role="dialog" on <body>; app.js openFish2 puts the City to sleep). */
 export const FISH = '.f2';
 // .fr-back: the site's friends window (29.10), .cy-jw: the Jail window (30.10) — both lifted over the live 3D (features friends / jail)

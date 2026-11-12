@@ -17,7 +17,7 @@ import { toX, toZ, SX } from '../coords';
 import { GEO, M, type BatchKey } from '../batch';
 import { type Ctx, box, signZ, shade, markDoor } from '../kit';
 import { registerFcModel, type FcPlace } from './registry';
-import { siteRoof, tileHipRoof, hipRidgeAt, roofPiece, roofBox, roofCol } from './roof';
+import { siteRoof, tileHipRoof, hipRidgeAt, roofPiece, roofBox, roofCol, mixHex } from './roof';
 
 type V2 = [number, number];
 /** Metres per px of the asset's heights. */
@@ -147,8 +147,9 @@ function lantern(k: Ctx, mat: BatchKey, x: number, y: number, z: number, s = 1):
 
 /* ------------------------------------------------------------------ door transforms (the hook for faircats.ts) */
 /** Door half-width / height of BUILDING_MODELS[id].door (buildings.ts) that worldExt.ts multiplies by s. */
-const MODEL_DOOR: Record<string, [number, number]> = { hall: [0.7, 2.3], magic: [0.7, 2.3], gate: [0.7, 2.3], mine: [0.95, 2.3], storage: [0.85, 2.1], jail: [0.5, 2.0] };
-const DOOR_S: Record<string, number> = { hall: 1, magic: 1, gate: 1.35, mine: 1.35, storage: 1.25, jail: 1 };
+const MODEL_DOOR: Record<string, [number, number]> = { hall: [0.7, 2.3], magic: [0.7, 2.3], gate: [0.7, 2.3], mine: [0.95, 2.3], storage: [0.85, 2.1], jail: [0.5, 2.0], guild: [0.85, 2.1] };
+// guild: no BUILDING_MODELS entry (the lower-street fallback's door 0.85 × 2.1): × 0.8 = the drawn double door ± 0.5, 1.6 m
+const DOOR_S: Record<string, number> = { hall: 1, magic: 1, gate: 1.35, mine: 1.35, storage: 1.25, jail: 1, guild: 0.8 };
 /**
  * Where the door hit volume of a civic model goes: the entrance plane `zE` (world z; the hit box runs zE − 0.45 … zE + 0.3)
  * and the scale `s` of the model's door (hw, h). faircats.ts: `BUILDING_XF.set(b, { virt: { ...b }, z: () => zE, s })`.
@@ -654,6 +655,81 @@ function buildMine(k: Ctx, p: FcPlace): void {
   for (const s of [-1, 1]) (k.solids ||= []).push(Math.min(cx + s * ow, cx + s * (ow + pw)) - 0.03, Math.max(cx + s * ow, cx + s * (ow + pw)) + 0.03, zp0 - 0.03, zp1 + 0.03, Infinity);
 }
 
+/* ================================================================== Здание гильдий (tk-art.js guildHall, lv 3 on the fair) */
+/** fc-art.js guildB → tk-art.js guildHall(b, { lv: 3 }) (site 12.11): a long low stone-level hall — cream walls on a rock
+ *  plinth, four arched windows (rock frames, no shutters), two rock pilasters with capitals beside the arched purple double
+ *  door (rock-light frame, gold knobs, a red mat with a gold paw) on three rock steps, a plum fascia and the plum tiled
+ *  hip roof (roofV), the dark-red «ГИЛЬДИИ» board with cat ears on the eave, two red swallow-tail pennants with a gold
+ *  diamond on poles near the roof ends. Asset px: x 0.01 m, heights HY (0.015 m); depth = the foot band. */
+function buildGuild(k: Ctx, p: FcPlace): void {
+  const [vx0, vy0, vx1, B] = p.vis, f = frame(p, vx0, vx1, B), { zf, base } = f, d = doorBox('guild', p);
+  const ROOFP = [P.plum, P.plumD, P.plumL] as const, banner = '#c0504a';
+  const ROCK_L35 = mixHex(P.rock, '#fff6e6', 0.35), ROCK_D15 = mixHex(P.rock, INK, 0.15), ROCK_L15 = mixHex(P.rock, '#fff6e6', 0.15), BOARD = mixHex(banner, INK, 0.15);
+  // the site's numbers (lv 3): dx 46, w = vis width − dx − 30, centred on the door; wall 170 px, ridge max(vy0 + 110, wt − 120)
+  const cxp = p.door?.x ?? (vx0 + vx1) / 2, wpx = vx1 - vx0 - 46 - 30, x0p = Math.round(cxp - wpx / 2), x1p = x0p + wpx;
+  const wallH = 170, wtp = B - wallH, rYp = Math.max(vy0 + 110, wtp - 120);
+  const L = f.X(x0p), R = f.X(x1p), cx = f.dx, wt = f.Y(wtp);
+  const D = Math.max(2.4, zf - f.zb - 0.05), zb = zf - D;
+  // --- plinth (20 px rock), walls (cream) from just inside it, the side walls are the same box
+  box(k, 'stone', P.rock, L - 0.05, R + 0.05, base - 0.05, base + f.h(20), zb - 0.05, zf + 0.05, 0.8);
+  box(k, 'stone', shade(P.rock, 0.2), L - 0.02, R + 0.02, base + f.h(20) - 0.02, base + f.h(20) + 0.02, zf + 0.05, zf + 0.06, 0.6);   // the plinth's light top line
+  box(k, 'plaster', P.cream, L, R, base + f.h(14), wt, zb, zf, 1.2);
+  // --- windows: 2 + lv = 5 slots across, the one at the door skipped (|x − cx| < 70 px); arched, rock frames
+  const nw = 5, step = wpx / (nw + 1);
+  for (let i = 1; i <= nw; i++) {
+    const xp = x0p + step * i; if (Math.abs(xp - cxp) < 70) continue;
+    window3(k, 'wood', ROCK_D15, f.X(xp), f.Y(wtp + 76), f.w(40), f.h(46), zf, true);
+  }
+  // --- pilasters cx ± 66 px: shaft 22 px (wt + 24 … B − 14), capital 32 × 12 px — in front of the inner windows' edges
+  for (const s of [-1, 1]) {
+    const x = f.X(cxp + s * 66);
+    box(k, 'stone', ROCK_L35, x - f.w(11), x + f.w(11), base + f.h(14) + 0.04, f.Y(wtp + 24), zf - 0.01, zf + 0.12, 0.6);
+    box(k, 'stone', P.rock, x - f.w(16), x + f.w(16), f.Y(wtp + 28), f.Y(wtp + 16), zf - 0.01, zf + 0.16, 0.6);
+    box(k, 'stone', P.rock, x - f.w(15), x + f.w(15), base + f.h(14) - 0.03, base + f.h(14) + 0.08, zf - 0.01, zf + 0.15, 0.6);
+  }
+  // --- the double door (tk-art.js door(cx, B − 14, 64, 84, plumD, { double, mat: banner })), sized to the door box
+  const dsill = base + f.h(14), dw = Math.min(0.4, d.hw - 0.28), dh = Math.min(1.5, d.h - 0.18), fw = 0.1;
+  prism(k, 'wood', P.rockL, archPts(cx - dw - fw, cx + dw + fw, dsill, dsill + dh - dw, dw + fw), zf - 0.01, zf + 0.07);
+  prism(k, 'wood', P.plumD, archPts(cx - dw, cx + dw, dsill, dsill + dh - dw, dw), zf + 0.07, zf + 0.1);
+  box(k, 'wood', INK, cx - 0.012, cx + 0.012, dsill + 0.02, dsill + dh - 0.03, zf + 0.1, zf + 0.11);
+  for (const s of [-1, 1]) box(k, 'wood', shade(P.plumD, -0.25), cx + s * dw / 2 - 0.008, cx + s * dw / 2 + 0.008, dsill + 0.05, dsill + dh - dw * 0.55, zf + 0.1, zf + 0.106);   // plank lines
+  for (const s of [-1, 1]) k.b.add('wood', ICO, M(cx + s * 0.07, dsill + dh * 0.42, zf + 0.12, 0.07, 0.07, 0.05), P.gold, 1);
+  markDoor(k, 'door', cx - dw - fw, cx + dw + fw, dsill, dsill + dh + fw, zf - 0.01, zf + 0.125);
+  // --- three rock steps (stepsV 96 / 112 / 128 px wide) down to the street, the red mat with a gold paw on the top one
+  for (let i = 0; i < 3; i++) {
+    const hw = f.w(48 + i * 8), top = dsill - i * (dsill - base) / 3;
+    box(k, 'stone', i % 2 ? ROCK_L15 : shade(ROCK_L15, 0.08), cx - hw, cx + hw, base - 0.04, top, zf - 0.02, zf + 0.2 + i * 0.2, 0.6);
+  }
+  box(k, 'plaster', banner, cx - f.w(38), cx + f.w(38), dsill - 0.005, dsill + 0.03, zf + 0.03, zf + 0.19, 0.8);
+  for (const [ox, oz, r] of [[0, 0.12, 0.05], [-0.06, 0.07, 0.022], [-0.02, 0.055, 0.022], [0.02, 0.055, 0.022], [0.06, 0.07, 0.022]] as const)
+    box(k, 'plaster', P.gold, cx + ox - r, cx + ox + r, dsill + 0.025, dsill + 0.04, zf + oz - r * 0.8, zf + oz + r * 0.8, 0.5);
+  // --- fascia (12 px plumD band at wt + 2) and the roof: the site's roofV(x0 − 18, x1 + 18, wt + 4, rY, dx 46, dy 32, plum, sw 34, sh 20)
+  const sr = siteRoof({ L: x0p - 18, R: x1p + 18, eY: wtp + 4, rY: rYp, dx: 46, dy: 32, sw: 34, sh: 20 }), rg = sr.ridge;
+  const ovx = f.w(18), ovz = 0.26, drop = f.h(rg.drop), ry = wt + 0.02 - drop, rh = Math.max(0.85, Math.min(1.15, f.h(rg.h) * 1.25));
+  box(k, 'wood', P.plumD, L - ovx + 0.08, R + ovx - 0.08, f.Y(wtp + 14), ry + 0.02, zb - 0.14, zf + 0.14, 0.6);
+  const roof = { x0: L - ovx, x1: R + ovx, z0: zb - ovz, z1: zf + ovz, y0: ry, h: rh, rx0: f.X(rg.x0), rx1: f.X(rg.x1) };
+  tileHipRoof(k, { ...roof, pal: ROOFP, tileW: f.w(sr.sw), rows: sr.rows, sideRows: sr.sideRows, soffit: P.plumD, ridge: f.h(14), rib: 0.1, lip: 0.08 });
+  // --- the board on the eave: board(cx, wt − 6, 'ГИЛЬДИИ', 22, { bg: dk(banner, .15) }) — 136 × 44 px, cat ears on top
+  const sW = f.w(Math.max(90, 7 * 22 * 0.66 + 34)), sZ = zf + ovz - 0.02, sY = f.Y(wtp + 16);
+  const sH = signZ(k, signText(p, 'ГИЛЬДИИ'), cx, sY, sZ, sW, { bg: BOARD, fg: P.gold });
+  for (const s of [-1, 1]) {
+    const xe = cx + s * (sW / 2 - f.w(21)), yT = sY + sH + 0.03;
+    prism(k, 'wood', BOARD, [[xe - f.w(13), yT - 0.04], [xe + f.w(13), yT - 0.04], [xe + s * f.w(7), yT + f.h(20)]], sZ + 0.03, sZ + 0.095);
+    prism(k, 'wood', P.pink, [[xe - f.w(6), yT - 0.02], [xe + f.w(6), yT - 0.02], [xe + s * f.w(4), yT + f.h(11)]], sZ + 0.095, sZ + 0.112);
+  }
+  // --- pennants: guildFlag(x0 + 40, wt − 70, banner, 0.8) and (x1 − 70, …): a pole on the front slope, gold knob, swallow tail
+  const slopeY = (z: number) => ry + rh * Math.min(1, Math.max(0, (zf + ovz - z) / (D / 2 + ovz)));
+  for (const xp of [x0p + 40, x1p - 70]) {
+    const x = f.X(xp), z = zf + ovz - (D / 2 + ovz) * 0.45, y0 = slopeY(z) - 0.08, top = y0 + 0.08 + f.h(78 * 0.8) + 0.06;
+    box(k, 'wood', P.metal, x - 0.025, x + 0.025, y0, top, z - 0.025, z + 0.025, 0.4);
+    k.b.add('wood', ICO, M(x, top + 0.04, z, 0.1, 0.1, 0.1), P.gold, 1);
+    const fx = (px: number) => x + f.w(px * 0.8), fy = (py: number) => top - f.h(py * 0.8);
+    prism(k, 'plaster', banner, [[fx(2), fy(36)], [fx(52), fy(36)], [fx(42), fy(20)], [fx(52), fy(4)], [fx(2), fy(4)]], z - 0.015, z + 0.015);
+    prism(k, 'plaster', P.gold, [[fx(14), fy(27)], [fx(20), fy(20)], [fx(14), fy(13)], [fx(8), fy(20)]], z + 0.015, z + 0.025);
+  }
+  (k.blobs ||= []).push(cx, base + 0.01, zf + 0.3, (R - L) / 2 + 0.2, 0.45);
+}
+
 /* ================================================================== registration */
 // fp = src/data/fcart-fp.json at the time each model was made (06.11, site-1106-0007)
 registerFcModel({ ref: 'hall', fp: '03fd9e716aaa12', note: 'cream half-timbered hall, purple hipped roof, 2 dormers, clock tower with purple spire + cat ears, columned porch', build: buildHall });
@@ -662,3 +738,5 @@ registerFcModel({ ref: 'jail', fp: '106537d538e0f2', note: 'giant blue pet carri
 registerFcModel({ ref: 'storage', fp: '1b3ceb17e5739d', note: 'plank barn, red gable roof, hayloft + hoist, open front with shelves / hay, РЫБА / МОЛОКО crates', build: buildStorage });
 registerFcModel({ ref: 'gate', fp: '1e34776ffe04fe', note: 'stone gate with arched passage + portcullis, two round towers with purple cones, cat ears, flags; faces the town', build: buildGate });
 registerFcModel({ ref: 'mine', fp: '1fc45c03742c4b', note: 'timber portal in a rock collar, lean-to roof with moss, ШАХТА plate, lanterns, dark adit with rails', build: buildMine });
+// 12.11 (site-1112-0007): the new «Здание гильдий» of the cats fair
+registerFcModel({ ref: 'guild', fp: '1409348aa9362c', note: 'long cream stone hall, plum tiled hip roof, 4 arched windows, 2 rock pilasters, arched purple double door on 3 steps, ГИЛЬДИИ board with cat ears, 2 red pennants', build: buildGuild });

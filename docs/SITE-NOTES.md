@@ -113,6 +113,23 @@ so the extension must treat every internal API as unstable and degrade gracefull
   чародея», fair signposts «ЧАРОДЕЙ» / «ТРЕНЕР» (same drawing). b-hall.js «Взнос монетами» (hero `hc`). auction.js: no minimum price, «после
   первого похода» (hero `aq`). The tab scripts are served only with a session cookie now: `L3D_COOKIES=… npm run drift`.
   Our follow-ups: .local/drift1110/FINDINGS.md.
+- **12.11 night.** guildhall.js rewritten: the 07.11 guild district (`LGGuildDistrict`, `LGGuildDistrictArt`, `.gd-entry`, `.gd-root`,
+  `LGGuildHall.pick`) is gone. Now `LGGuildHallMap` (UMD: W 3840 × H 3240 interior — wall WALL_Y 420, dais DAIS_Y 1180 + steps
+  STEP_Y 1360, carpet, 4 columns, OBJ desk «Стойка» / chest «Казна» / rgate «Ворота похода» / board «Доска заданий» / trophy …, decor by
+  the guild tier, FLOOR, SPAWN, `spec(level)` → a Town Kit map), `LGGuildHallArt` (draw / colorOf / crest, Town Kit art + citygl.js) and
+  `LGGuildHall` { on, enter, close, index, open (= enter), debug, obj, act, screen, cam, place, stats, busy }. GET `/api/guildhall`
+  (index, cached 60 s, 10 min when closed / unavailable; 409 `{unavailable}` «Здания гильдий нет в этом сезоне» for us), POST
+  `/api/guildhall/act`. Entered: (1) the cats fair's new building `guild` «Здание гильдий» (fc-map.js: sign ГИЛЬДИИ, roof plum, lv 1,
+  drawn by tk-art.js guildHall lv 3; it replaced the blue house h3, path h3 → guild) — city.js goBuilding / openPanel('guild') →
+  ghOpen() → LGGuildHall.enter(); soonB: «скоро» while ghOn() === false; (2) any town without that building: `.cy-hud .gh-entry`
+  «🏰 Здание гильдии» (entryTick, LGCity.hasB). enter(): not ok → toast «Здание гильдий скоро откроется» (closed / unavailable); ok without
+  a guild → `.gh-modal.gh-noguild` (role dialog) with «Гильдии альянса» → LGGuilds.pick(); else `.gh-root` (fixed z 900, html.gh-full,
+  LGCity.sleep; own WASD / E / Esc). 3D: building model civic.ts buildGuild, E → LGCity.panel('guild'), overlay 'guildhall' / 'dialog',
+  pause entry on `.gh-entry` (src/net/guildhall.ts). quest.js: boss scheme registry `window.LGQuestSchemes` (arena bad / safe / net,
+  captions; g.bas basic moves) and «Курган-Сундук» `g.sk` (field 1–10, SK_SCHEMES) — src/quest/schemes.ts. app.js: announcements
+  `me.an` / SSE `ann` in the «Игра» HUD (`.gu-an`, close → localStorage `lgAnnX`) — src/features/announce.ts; journal tab / kind
+  «Гильдия»; email login (`me.el` / `me.em`). site-chat.js + site-ui.js: a mute asks a reason (`LGSiteUi.askReason`, `reason`
+  in POST …/mod, «. Причина: …»). Our follow-ups: .local/drift1112/FINDINGS.md.
 
 ## Auth / user
 - Cookie `lsid` (httpOnly). `GET /api/me` → `{ ok, user:{login,name}, hero, roles, classes, ench, ql, now, … }`.

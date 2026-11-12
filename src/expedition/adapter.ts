@@ -11,6 +11,7 @@
  */
 import { bossName, battleFronts, foeSideOf, placeButtons, emptyParty, EMPTY_PARTY, stageOf, kindOf, cmdFor, isMulti, SIDE_CMD, SKILLS, camFor, zoneOf, BASE_CMD, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, eventInstructions, PUZZLE_ST,
   deadIn, deadText, type QuestPuzzle, type QuestPayload, type QuestBattle, type Side, type Zone, type Role } from '../quest/model';
+import { skScheme, skMine, SK_POS, SK_DANGER, type SkScheme, type SchemeOf } from '../quest/schemes';
 
 /* ------------------------------------------------------------------ scene kinds */
 
@@ -186,6 +187,12 @@ export interface BossState {
   bite: number[];
   mech: { name: string; icon: string; fam: string; text: string; words: string[]; how: string; fake: boolean; silence: boolean; me: boolean; got: number; need: number; until: number } | null;
   zones: Platform[]; my: number | null; inFight: boolean;
+  /** site 12.11 (quest.js schemeFor): the scheme of the running mechanic — its caption (`cap`, what to do) and title */
+  scheme?: { cap: string; label: string } | null;
+  /** site 12.11: no mechanic on the boss's turn — the basic move's scheme (g.bas: «Ход охотников» / «Ход босса») */
+  basic?: { title: string; cap: string } | null;
+  /** site 12.11: «Курган-Сундук» (g.sk) — the field scheme of this move and my own lines (src/quest/schemes.ts) */
+  sk?: SkScheme | null; skMine?: string[];
 }
 export interface VoteState { title: string; done: boolean; end: number; win: number; my: number; opts: { n: number; label: string; votes: number; back: boolean }[] }
 export interface SceneState {
@@ -280,7 +287,9 @@ const baseOf = (role: string) => BASE_CMD[role as Role] || 'удар';
 export const ZONE_RU = ['щиты', 'ближний бой', 'стрелки и маги', 'жрецы'] as const;
 export const HOW_RU: Record<string, string> = { win: 'Победа!', away: 'Враги сбежали', lose: 'Отряд разбит', retreat: 'Отступление' };
 
-export interface AdaptCtx { login: string; role: string; roster: Roster; /** /api/me q2 (quest.js q2On, 08.11) */ q2?: boolean }
+export interface AdaptCtx { login: string; role: string; roster: Roster; /** /api/me q2 (quest.js q2On, 08.11) */ q2?: boolean;
+  /** site 12.11: the page's boss scheme registry (quest.js LGQuestSchemes.of, src/quest/schemes.ts pageSchemes) */
+  scheme?: SchemeOf }
 
 /* ------------------------------------------------------------------ the adapter */
 
@@ -533,11 +542,25 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
       got: num(mech.got, 0), need: num(mech.need, 0), until: num(mech.until, 0) } : null,
     zones: [], my: g && g.in ? num(g.my, 0) : null, inFight: !!(g && g.in) || (q.b ? q.b.hp != null : false),
   };
+  // site 12.11 (quest.js bgHtml): the boss move's scheme from the page's registry (LGQuestSchemes.of) — the mechanic's
+  // (schemeFor(g, M, M.id)), the basic move's on the boss's turn (schemeFor(g, null, g.bas), not while the wolf bites),
+  // the bite's ('HVB2'); an `arena` answer says which platforms are bad / safe / under a net
+  const dead = !!deadIn(q);
+  const sch = (m: any, id: string) => { if (!c.scheme || !id || !g) return null; try { const r = c.scheme(g, m, id); return r && typeof r === 'object' ? r : null; } catch { return null; } };
+  const sc = M ? sch(M, str(M.id)) : null;
+  const sb = !M && !dead && str(src.st) === 'boss' && src.bas && !src.bite ? sch(null, str(src.bas)) : null;
+  const sbite = !M && src.bite && src.zn ? sch(null, 'HVB2') : null;
+  const scA = (sc && sc.arena) || (sbite && sbite.arena) || null;
+  if (sc && (sc.cap || sc.label)) s.boss.scheme = { cap: str(sc.cap), label: str(sc.label) };
+  if (sb && (sb.cap || sb.svg)) s.boss.basic = { title: str(src.bas) === 'HVB1' ? 'Ход охотников' : 'Ход босса', cap: str(sb.cap, str(sb.label)) };
+  // «Курган-Сундук» (g.sk): the field scheme of this move (ported: the registry only gives its HTML)
+  if (src.sk && !dead) { s.boss.sk = skScheme(src, M); s.boss.skMine = skMine(src); }
   // platforms (zn): polygons in stream px [guess] → centroids normalised into an arena box in front of the boss
   const zn = src.zn && typeof src.zn === 'object' ? src.zn : null;
   if (zn && Array.isArray(zn.a) && zn.a.length) {
     const gone = new Set(arr<number>(zn.gone).map(Number));
-    const nets = new Set((mech ? arr<number>(mech.nets) : []).map(Number));
+    const nets = new Set((scA && Array.isArray(scA.net) ? arr<number>(scA.net) : mech ? arr<number>(mech.nets) : []).map(Number));
+    const aBad = new Set(scA ? arr<number>(scA.bad).map(Number) : []), aSafe = new Set(scA ? arr<number>(scA.safe).map(Number) : []);
     // wings (HPG10): the site draws the arena with MY wing as the platforms to keep (zonesHtml {id: 'M32', zones: W.z[my]})
     const Wg = src.wings && typeof src.wings === 'object' && Array.isArray(src.wings.z) ? src.wings : null;
     const area0 = num(src.area, 0);
@@ -557,13 +580,15 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
     for (const p of pts) { x0 = Math.min(x0, p.cx); x1 = Math.max(x1, p.cx); y0 = Math.min(y0, p.cy); y1 = Math.max(y1, p.cy); }
     const W = Math.max(1e-6, x1 - x0), H = Math.max(1e-6, y1 - y0);
     const area = num(src.area, 0);
-    const posMech = fam === 'position';
+    // a scheme's arena (site 12.11) makes any mechanic a «where to stand» one: zonesHtml cls() gone > net > bad > keep > safe
+    const posMech = fam === 'position' || !!(sc && sc.arena);
     const zones: Platform[] = pts.map((p: { cx: number; cy: number; n: number; nb: number[] }) => {
       const net = nets.has(p.n);
-      const danger = net || biteZ.has(p.n) || (posMech && listed.size ? (inv ? !listed.has(p.n) : listed.has(p.n)) : false);
+      const danger = net || biteZ.has(p.n) || aBad.has(p.n) || (!scA && posMech && listed.size ? (inv ? !listed.has(p.n) : listed.has(p.n)) : false);
       const wing = wingZ.has(p.n);
+      const safe = !danger && !gone.has(p.n) && (scA ? aSafe.has(p.n) : (posMech || wing));
       return { n: p.n, x: -1 + ((p.cx - x0) / W - 0.5) * 7, z: ((p.cy - y0) / H - 0.5) * 6, r: 1.25, nb: p.nb, gone: gone.has(p.n), danger,
-        safe: (posMech || wing) && !danger && !gone.has(p.n), mine: p.n === area, goal: false, ...(net ? { net } : {}), ...(wing ? { wing } : {}) };
+        safe, mine: p.n === area, goal: false, ...(net ? { net } : {}), ...(wing ? { wing } : {}) };
     });
     // the one to stand on: my platform if safe, else the first safe neighbour (any safe one when mech.any or I am nowhere)
     const mineP = zones.find((z) => z.mine);
@@ -581,6 +606,16 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
         return { name: NM[i] || `Крыло ${i + 1}`, zones: arr<number>(z).map(Number).filter(Number.isFinite), need, got, ok: got >= need, mine: i === myWing };
       });
     }
+  } else if (s.boss.sk) {
+    // «Курган-Сундук» without polygons: the site's own field (SK_POS: banks 1–4 / 5–8, bridge 10, lock plate 9) as the arena
+    const K = s.boss.sk, area = num(src.area, 0);
+    s.boss.zones = Object.keys(SK_POS).map(Number).sort((a, b) => a - b).map((n) => {
+      const [px, py] = SK_POS[n], mid = n === 9 || n === 10, cx = mid ? px : px + 22, cy = py + (n === 10 ? 15 : 20);
+      const kind = K.z[n] || 'none', danger = SK_DANGER.has(kind), safe = kind === 'safe';
+      return { n, x: -1 + (cx / 360 - 0.5) * 8, z: (cy / 182 - 0.5) * 5, r: n === 10 ? 1.1 : 1.0, nb: [], gone: false, danger, safe, mine: n === area, goal: false };
+    });
+    const mineP = s.boss.zones.find((z) => z.mine), goal = mineP && mineP.safe ? mineP : s.boss.zones.find((z) => z.safe);
+    if (goal && s.boss.zones.some((z) => z.danger)) goal.goal = true;
   } else if (src.wings && typeof src.wings === 'object' && Array.isArray(src.wings.z)) {
     // wings without platforms: still the counts (the site shows them in the mechanic card)
     const NM = ['Левое крыло', 'Центр', 'Правое крыло'], W2 = src.wings, area1 = num(src.area, 0);
@@ -599,7 +634,7 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
     s.cmds = [];
     if (B.mech.fake) s.cmds.push({ kind: 'silent', text: 'ФИНТ — НЕ ПИШИ!', note: (B.mech.name ? B.mech.name + ': ' : '') + 'обманный замах, ничего не пиши' });
     else if (B.mech.silence) s.cmds.push({ kind: 'silent', text: 'ТИШИНА — МОЛЧИ!', note: B.mech.name });
-    else if (B.mech.fam === 'position') {
+    else if (B.mech.fam === 'position' || (sc && sc.arena && B.zones.length)) {
       const goal = B.zones.find((z) => z.goal), mineP = B.zones.find((z) => z.mine);
       if (goal && mineP && goal.n === mineP.n) s.cmds.push({ kind: 'ok', text: `стой на площадке ${goal.n}`, note: 'она уцелеет' });
       else if (goal) s.cmds.push({ kind: 'say', text: `прыжок ${goal.n}`, note: 'перейди на целую площадку' });
@@ -616,9 +651,18 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
     if (mid === 'HPG1' && Array.isArray(src.wc) && B.mech.words.length)
       s.cmds.push({ kind: 'info', text: B.mech.words.map((w, i) => `${w} ${num(src.wc[i], 0)} из ${B.mech!.need}`).join(' · ') });
     if (B.wings.length && mid === 'HPG10') wingCmds(B, s);
+    // site 12.11: the scheme's caption (what to do, as the site writes it under its picture)
+    if (B.scheme && B.scheme.cap && !B.sk) s.cmds.push({ kind: 'info', text: B.scheme.cap, note: B.scheme.label || B.mech.name });
     const net = B.zones.filter((z) => z.net && !z.gone).map((z) => z.n);
     if (net.length) s.cmds.push({ kind: 'info', text: `под сетью: ${net.join(', ')}`, note: 'прыжок туда — пропустишь ход' });
     s.cmds.push(...keep);
+    if (B.sk) skCmds(B, s);
+  } else if (B.sk) {
+    // «Курган-Сундук» bites a bank without a mechanic (HSKB)
+    skCmds(B, s);
+  } else if (B.basic) {
+    // site 12.11: the boss's (hunters') basic move — nothing to answer, the scheme says what happens
+    s.cmds.push({ kind: 'info', text: `${B.basic.title}: ${B.basic.cap}` });
   } else if (B.bite.length && B.zones.length) {
     // site 07.11 (quest.js «Укус волка», no mechanic): the wolf bites these platforms; the site offers no buttons here
     const mineP = B.zones.find((z) => z.mine);
@@ -635,6 +679,20 @@ function bossOf(q: any, s: SceneState, c: AdaptCtx) {
   }
   for (const a of B.adds) if (a.count > 0 && a.hp > 0) s.cmds.push({ kind: 'say', text: `удар ${a.name.toLowerCase()} 1`, note: `прислужники ×${a.count}: ${a.name.toLowerCase() === 'волк' ? 'пока живы, стая кусает бойцов каждый ход' : 'пока живы, урон по боссу вдвое меньше'}`, dim: true });
   if (q.b?.gb?.forbid) s.cmds.push({ kind: 'info', text: 'Босс запретил прямые слова — пиши синонимом' });
+}
+
+/** «Курган-Сундук» (quest.js skHtml): the move, what to do, the counters, my lines; leaving a bad platform = its number, typed. */
+function skCmds(B: BossState, s: SceneState) {
+  const K = B.sk;
+  for (const t of B.skMine || []) s.cmds.push({ kind: 'info', text: t });
+  if (!K) return;
+  s.cmds.push({ kind: 'info', text: `Схема · ${K.cap}`, note: K.say });
+  const mineP = B.zones.find((z) => z.mine), goal = B.zones.find((z) => z.goal);
+  if (goal && /Уйти/.test(K.say)) {
+    if (mineP && mineP.n === goal.n) s.cmds.push({ kind: 'ok', text: `стой на площадке ${goal.n}`, note: 'зелёная — безопасно' });
+    else s.cmds.push({ kind: 'say', text: String(goal.n), note: 'номер зелёной площадки — уйти туда' });
+  }
+  for (const b of K.bars) s.cmds.push({ kind: b.need > 0 && b.got >= b.need ? 'ok' : 'info', text: b.label, dim: true });
 }
 
 /** HPG10 wings: where I stand, then every wing «name (площадки …): got из need». */

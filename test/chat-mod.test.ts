@@ -72,8 +72,9 @@ describe('chat moderation — pure parts', () => {
     expect(M.planCmd('/mods', 'own')).toEqual({ mods: true });
     expect(M.planCmd('/mod bad_cat', 'mod')).toEqual({ err: 'назначать модераторов может только админ чата' });
     expect(M.planCmd('/mute', 'mod')).toEqual({ err: 'укажи ник: /mute ник' });
-    expect(M.planCmd('/mute @Bad_Cat', 'mod')).toEqual({ act: 'mute', args: { login: 'bad_cat', n: 'bad_cat', min: 30 } });
-    expect(M.planCmd('/MUTE bad_cat 15', 'mod')).toEqual({ act: 'mute', args: { login: 'bad_cat', n: 'bad_cat', min: 15 } });
+    expect(M.planCmd('/mute @Bad_Cat', 'mod')).toEqual({ act: 'mute', args: { login: 'bad_cat', n: 'bad_cat', min: 30, reason: '' } });   // 12.11: a typed mute never asks
+    expect(M.planCmd('/MUTE bad_cat 15', 'mod')).toEqual({ act: 'mute', args: { login: 'bad_cat', n: 'bad_cat', min: 15, reason: '' } });
+    expect(M.planCmd('/mute bad_cat 15 спам в чате', 'mod')).toEqual({ act: 'mute', args: { login: 'bad_cat', n: 'bad_cat', min: 15, reason: 'спам в чате' } });
     expect(M.planCmd('/mute bad_cat 99999', 'mod')).toEqual({ err: 'срок мута — от 1 до 10080 минут (7 дней)' });
     expect(M.planCmd('/ban bad_cat', 'mod')).toEqual({ act: 'ban', args: { login: 'bad_cat', n: 'bad_cat', sure: true } });
     expect(M.planCmd('/unban bad_cat', 'mod')).toEqual({ act: 'unban', args: { login: 'bad_cat', n: 'bad_cat', sure: false } });

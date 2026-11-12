@@ -30,8 +30,11 @@ import { siteRoof, tileHipRoof } from './roof';
 /** Fingerprints of the site assets these models were made from (src/data/fcart-fp.json, scripts/fcart-fp.mjs). */
 const FP: Record<string, string> = {
   'house:blue': '12303730148562',
-  'house:mustard': '0fcfb9b4f64662',
-  'house:pink': '0eafc591c707fd',
+  // 12.11: the drawings changed only by the site's every-second-house roof cat (fc-art.js roofCat: i % 2 === 0 over HOUSES):
+  // the blue h3 went, so mustard (h4, now index 3) lost its cat and pink (h5, index 4) got one — faircats.ts passes the same
+  // index parity (test/site-1112.test.ts checks it against the site's own list); the house bodies are unchanged
+  'house:mustard': '196eb54a835993',
+  'house:pink': '18df982c62817a',
   'house:red': '1aba5607332201',
   'house:tavern': '09b1e6e6105c8d',
   'house:teal': '03100d59e6034a',
@@ -40,7 +43,8 @@ const FP: Record<string, string> = {
   'i:flowers': '0a08653073bb1e',
   'i:garden': '14b2dd90fb81ae',
   'i:lamp': '11c0c1a606a65f',
-  'i:laundry': '11947039ffee46',
+  // 12.11: the 150 px line by h3 went away with the house; the remaining 160 px line is drawn as before
+  'i:laundry': '1df20797ef7905',
   'i:minesign': '0701dcb7f01c90',
   'i:picnic': '10a75bafdaedec',
   // 10.11: same post and boards; only the texts (ЗВЕЗДОЧЁТ → ЧАРОДЕЙ, МУРЧАРОДЕЙНЯ → ТРЕНЕР) and so the board lengths changed —

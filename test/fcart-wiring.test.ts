@@ -47,6 +47,8 @@ describe('new cats fair — q2 budget in view (whole world, buildCity)', () => {
     const views: [string, number, number, number, number][] = [
       ['spawn', L.spawn[0], L.spawn[1], 2880, 1500], ['plaza', 2880, 2100, 2880, 1300], ['plateau', 3000, 900, 3800, 700],
       ['pond', 900, 2300, 2000, 2000], ['wall', 2880, 2700, 1200, 2950], ['forest-west', 600, 1500, -400, 1500], ['mine', 4600, 1000, 4925, 800],
+      // site 12.11: «Здание гильдий» where the blue house h3 stood
+      ['guild', 3470, 2700, 3565, 2400],
     ];
     const out: string[] = [];
     for (const [name, x, y, tx, ty] of views) {

@@ -64,7 +64,8 @@ describe('«Игра» mode (app.js LGGameUi)', () => {
     const guTab = fnSource(APP!, 'guTab')!;
     expect(guTab).toMatch(/GU_WIN\[id\]/);
     expect(guTab).toMatch(/guWin\(id\)/);
-    expect(APP!).toMatch(/window\.LGGameUi = \{ on: \(\) => GU\.on, win: \(id\) => guWin\(id\), close: \(\) => guWinClose\(\), open: \(\) => GU\.win \|\| '' \}/);
+    // 12.11 added `ann: () => guAnn()` (announcements, src/features/announce.ts) after open
+    expect(APP!).toMatch(/window\.LGGameUi = \{ on: \(\) => GU\.on, win: \(id\) => guWin\(id\), close: \(\) => guWinClose\(\), open: \(\) => GU\.win \|\| ''( \}|, )/);
     // the windows are dialogs: our overlay watcher (DIALOGS) sees them and the 3D yields
     const guWin = fnSource(APP!, 'guWin')!;
     expect(guWin).toMatch(/setAttribute\('role', 'dialog'\)/);

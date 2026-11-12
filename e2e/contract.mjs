@@ -73,7 +73,11 @@ if (logged) {
         mail: (() => { try { return !!window.LGMail?.on?.(); } catch { return null; } })(),
         fish: (() => { try { return !!window.LGFish2On?.(); } catch { return null; } })(),
         arenaTab: !!document.querySelector('.tabs button[data-tab="arena"]:not([hidden])'),
-        guildsEntry: !!document.querySelector('.cy-hud .gl-entry'), miniMap: typeof window.LegionMiniMap?.open };
+        guildsEntry: !!document.querySelector('.cy-hud .gl-entry'), miniMap: typeof window.LegionMiniMap?.open,
+        // site 12.11 (read only): the guild hall — the site's own cached on() (city.js soonB asks it too), its HUD entry,
+        // whether this town has the guild building (LGCity.hasB, pure) and what the 3D layout made of it
+        guildHall: (() => { try { const G = window.LGGuildHall; return { on: G && G.on ? G.on() : false, keys: G ? Object.keys(G) : null, entry: !!document.querySelector('.cy-hud .gh-entry'),
+          hasB: !!window.LGCity?.hasB?.('guild'), root: !!document.querySelector('.gh-root') }; } catch { return null; } })() };
     });
   } else console.log(ts(), 'City tab not available');
 }

@@ -12,6 +12,7 @@
  * Files: adapter.ts (q view → SceneState), layout.ts (formations), art.ts (models), terrain.ts (biomes), crowd.ts (party),
  * foes.ts (enemies, boss, bars, decals, projectiles), sets.ts (stage vignettes), text.ts (canvas labels), hud.ts, scene.ts.
  */
+import { pageSchemes } from '../quest/schemes';
 import * as THREE from 'three';
 import type { Appearance } from '../contracts';
 import type { AvatarKit } from '../contracts/modules';
@@ -116,7 +117,7 @@ export class ExpeditionView {
       const v = this.buf.pick(this.now(), this.adj());
       this.shown = v;
       const me = this.host.me();
-      const s = adapt(v, { login: me.login, role: me.role, roster: this.roster, q2: !!me.q2 });
+      const s = adapt(v, { login: me.login, role: me.role, roster: this.roster, q2: !!me.q2, scheme: pageSchemes(typeof window !== 'undefined' ? window : null) });
       this.state = s;
       if (s.kind !== 'off') sc.setState(s);
       this.hud?.update(s, this.secLeft(s.until));

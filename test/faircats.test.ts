@@ -45,13 +45,15 @@ describe('new cats fair — layout data (src/net/faircats.ts)', () => {
   it('reads the scene from LGFairCats / the fixture', () => {
     expect(sc).not.toBeNull();
     expect(sc.W).toBe(5760); expect(sc.H).toBe(3240);
-    expect(sc.buildings.map((b) => b.id).sort()).toEqual(['anvil', 'auction', 'board', 'forge', 'gate', 'hall', 'jail', 'magic', 'mine', 'shop', 'storage', 'tent', 'trainer']);
-    expect(sc.rim.length).toBeGreaterThan(10); expect(sc.stairs.length).toBe(3); expect(sc.houses.length).toBe(6);
+    expect(sc.buildings.map((b) => b.id).sort()).toEqual(['anvil', 'auction', 'board', 'forge', 'gate', 'guild', 'hall', 'jail', 'magic', 'mine', 'shop', 'storage', 'tent', 'trainer']);
+    // site 12.11: «Здание гильдий» replaced the blue house h3
+    expect(sc.rim.length).toBeGreaterThan(10); expect(sc.stairs.length).toBe(3); expect(sc.houses.length).toBe(5);
+    expect(sc.houses.map((h) => h.id)).not.toContain('h3');
     expect(sc.items.length).toBeGreaterThan(150);
     expect(fairCatsScene(null)).toBeNull(); expect(fairCatsScene({ RIM: [] })).toBeNull();
     // hostile / broken entries are dropped, not thrown
     const bad = fairCatsScene({ ...fx, BUILDINGS: [...(fx as any).BUILDINGS, { id: 'x', vis: [1, 2] }, null], ITEMS: [{ k: 'tree', x: 'a', y: 1 }] })!;
-    expect(bad.buildings.length).toBe(13); expect(bad.items.length).toBe(0);
+    expect(bad.buildings.length).toBe(14); expect(bad.items.length).toBe(0);
   });
   it('mirrors fc-city.js buildings(): jail only when open, magic only with the shop, the old fair titles', () => {
     const meta = (id: string) => (fairMap as any).BUILDINGS.find((b: any) => b.id === id);
@@ -59,7 +61,7 @@ describe('new cats fair — layout data (src/net/faircats.ts)', () => {
     expect(off.some((b) => b.id === 'jail')).toBe(false);
     expect(off.some((b) => b.id === 'magic')).toBe(false);
     const on = fairCatsBuildings(sc, meta, { jail: true, magic: true });
-    expect(on.length).toBe(13);
+    expect(on.length).toBe(14);
     expect(on.find((b) => b.id === 'shop')!.title).toBe('Лавка');
     expect(on.find((b) => b.id === 'jail')!.jail).toBe(true);
     const h = on.find((b) => b.id === 'hall')!; expect(h.hit).toEqual([2560, 3200, 1060, 1500]); expect(h.door).toEqual({ x: 2880, y: 1522 });

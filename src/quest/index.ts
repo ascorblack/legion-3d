@@ -6,6 +6,7 @@
  * the site's own button, TYPED ones as a line fed into the site's own «Команда в поход»; without the site's flag (`hero.qa`) the
  * card says «пиши в чат стрима» with the commands as copyable chips. No request is ever built here.
  */
+import { skScheme, skMine, pageSchemes, type SchemeOf } from './schemes';
 import type { Store, Actions, QuestView } from '../contracts';
 import { onPageKeys } from '../engine/input';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
@@ -128,8 +129,9 @@ function cardOf0(v: QuestView | null, me: { login: string; role: string; q2?: bo
     let urge: Card['urge'];
     if (M) urge = M.fake ? { kind: 'silent', text: 'ФИНТ — не пиши!' } : M.fam === 'silence' ? { kind: 'silent', text: 'Тишина: молчи' } : M.me ? { kind: M.how ? 'word' : 'info', text: M.how || M.tip || 'Цель — ты!' } : M.how || M.word ? { kind: 'word', text: String(M.how || M.word) } : { kind: 'info', text: M.name };
     else if (Array.isArray(g.bite) && g.bite.length && g.zn) urge = { kind: 'info', text: `Волк кусает площадк${g.bite.length > 1 ? 'и' : 'у'} ${g.bite.join(' и ')}` };
+    else if (g.sk && g.sk.bite) urge = { kind: 'info', text: skScheme(g, null)?.say || 'Сундук кусает берег' };
     else if (g.st === 'party') urge = g.acted ? { kind: 'ok', text: 'ход сделан' } : { kind: 'say', text: baseCmd(me.role) || 'удар' };
-    return { icon: '👹', title: `${g.name} · фаза ${g.ph} из ${g.phs}`, right: M?.until ? '' : `босс ${Math.round((g.hp || 0) * 100)}%`, until: M?.until, where: g.in ? (g.my > 0 ? 'ты в бою' : 'твой герой пал') : 'ты не в этом бою', hp: g.in ? g.my : null, urge, note: bossNote(g) || undefined, inParty };
+    return { icon: '👹', title: `${g.name} · фаза ${g.ph} из ${g.phs}`, right: M?.until ? '' : `босс ${Math.round((g.hp || 0) * 100)}%`, until: M?.until, where: g.in ? (g.my > 0 ? 'ты в бою' : 'твой герой пал') : 'ты не в этом бою', hp: g.in ? g.my : null, urge, note: bossNote(g, pageSchemes(typeof window !== 'undefined' ? window : null)) || undefined, inParty };
   }
   if (q.tr) {
     const T = q.tr, act = T.st === 'act' || T.st === 'wait';
@@ -173,7 +175,7 @@ function cardOf0(v: QuestView | null, me: { login: string; role: string; q2?: bo
 const WING_RU = ['Левое крыло', 'Центр', 'Правое крыло'];
 /** Site 07.11 (quest.js bossHtml): the mechanic's name plus what the card adds now — targets (tgn), nets, the wings (HPG10)
  *  with need / got, per-word counters (HPG1), hunters with their own health (adds with count 0). */
-export function bossNote(g: any): string {
+export function bossNote(g: any, scheme?: SchemeOf): string {
   const M = g && g.mech, out: string[] = [];
   if (M && M.name) out.push(String(M.name));
   if (M && Array.isArray(M.tgn) && M.tgn.length) out.push('цели: ' + M.tgn.join(', '));
@@ -186,6 +188,15 @@ export function bossNote(g: any): string {
   }
   const hunt = (Array.isArray(g && g.adds) ? g.adds : []).filter((a: unknown) => Array.isArray(a) && !+a[1]);
   if (hunt.length) out.push('«удар ' + hunt.map((a: any[]) => `${a[0]}» ${Math.round((+a[2] || 0) * 100)}%`).join(' · «удар '));
+  // site 12.11: «Курган-Сундук» (g.sk) — the field scheme of this move, its counters and my lines (quest.js skHtml)
+  const K = g && g.sk ? skScheme(g, M) : null;
+  if (K) { out.push(`Схема · ${K.cap}: ${K.say}`); for (const b of K.bars) out.push(b.label); }
+  for (const t of skMine(g)) out.push(t);
+  // the scheme of the move from the page's registry (quest.js schemeFor): the mechanic's caption, or the basic move's
+  if (!K && scheme && g) {
+    const r = M ? scheme(g, M, String(M.id || '')) : g.st === 'boss' && g.bas && !g.bite ? scheme(g, null, String(g.bas)) : null;
+    if (r && r.cap) out.push((M ? '' : (g.bas === 'HVB1' ? 'Ход охотников: ' : 'Ход босса: ')) + String(r.cap));
+  }
   return out.join(' · ');
 }
 function meIn(b: any, me: { login: string; role: string }) {

@@ -23,9 +23,11 @@ import { setModal, type ModalInput } from '../core/modal';
 /* ================================================================ pure (site parity) */
 
 export type ModRole = 'own' | 'mod' | null;
-export interface Muted { until?: number }
+/** site 12.11: a mute carries the moderator's `reason` (site-chat.js whyTail «. Причина: …»). */
+export interface Muted { until?: number; reason?: string }
 export type ModOp = 'del' | 'mute' | 'ban' | 'unban' | 'mod' | 'unmod';
-export interface ModArgs { id?: string; login?: string; min?: number; n?: string; sure?: boolean }
+/** `reason` (site 12.11, mute only): undefined = ask for it first (the site's LGSiteUi.askReason), '' = none. */
+export interface ModArgs { id?: string; login?: string; min?: number; n?: string; sure?: boolean; reason?: string }
 /** A chat line as moderation needs it: id, author login, shown name, the author's chat role (r) and kind (k: dm is never moderated). */
 export interface ModLine { id: string; l: string; n?: string; r?: string; k?: string }
 
@@ -50,8 +52,19 @@ export function canMod(role: ModRole, me: string, m: ModLine): boolean {
   return !!role && m.k !== 'dm' && String(m.l || '').toLowerCase() !== String(me || '').toLowerCase() && (role === 'own' || !m.r);
 }
 
-/** Body of POST <base>/mod — site chatAct(): `{ op, id: o.id, login: o.login, min: o.min }` (JSON drops the undefined keys). */
-export const modBody = (op: ModOp, o: ModArgs) => ({ op, id: o.id, login: o.login, min: o.min });
+/** Body of POST <base>/mod — site chatAct(): `{ op, id: o.id, login: o.login, min: o.min }` (JSON drops the undefined keys),
+ *  site 12.11: `reason` for a mute when one was given. */
+export const modBody = (op: ModOp, o: ModArgs) => ({ op, id: o.id, login: o.login, min: o.min, ...(op === 'mute' && o.reason ? { reason: o.reason } : {}) });
+/** site-chat.js muteWhat(): «мут 30 мин» — the line under the reason dialog's title. */
+const MUTE_MENU: readonly (readonly [number, string])[] = [[1, '1 мин'], [5, '5 мин'], [10, '10 мин'], [30, '30 мин'], [60, '1 ч'], [360, '6 ч'], [1440, '24 ч'], [10080, '7 дней']];
+export const muteWhat = (min?: number): string => 'мут ' + ((MUTES.find((x) => x[0] === min) || MUTE_MENU.find((x) => x[0] === min) || [0, leftT((min || 0) * 60000)])[1]);
+/** site-chat.js whyTail(): «. Причина: …» after a mute notice (12.11). */
+export const whyTail = (m: Muted | null | undefined): string => (m && m.reason ? `. Причина: ${m.reason}` : '');
+/** site-chat.js askWhy(): the site's own reason dialog (LGSiteUi.askReason — '' = no reason, null = cancelled), '' without it. */
+export function askWhy(w: any, o: ModArgs, what: string): Promise<string | null> {
+  try { const U = w && w.LGSiteUi; if (U && typeof U.askReason === 'function') return Promise.resolve(U.askReason({ who: o.n || o.login, what })); } catch { /* none */ }
+  return Promise.resolve('');
+}
 /** Path of the moderation endpoint (GET = window, POST = action). */
 export const modPath = (base: string, q = '') => base + '/mod' + q;
 
@@ -84,7 +97,7 @@ export function planCmd(text: string, role: ModRole): CmdPlan {
   if (cmd === 'help' || cmd === 'помощь') return { sys: own ? `Команды: /mod ник · /unmod ник · /mods · ${CHAT_HELP}` : `Команды: ${CHAT_HELP}` };
   if (cmd === 'mods') return own ? { mods: true } : { err: 'список модераторов — у админа чата' };
   if (cmd === 'mod' || cmd === 'unmod') { if (!own) return { err: 'назначать модераторов может только админ чата' }; if (bad) return needNick; return { act: cmd, args: { login: nick, n: nick } }; }
-  if (cmd === 'mute') { if (bad) return needNick; const m = arg == null ? 30 : Math.round(+arg); if (!(m >= 1 && m <= 10080)) return { err: 'срок мута — от 1 до 10080 минут (7 дней)' }; return { act: 'mute', args: { login: nick, n: nick, min: m } }; }
+  if (cmd === 'mute') { if (bad) return needNick; const m = arg == null ? 30 : Math.round(+arg); if (!(m >= 1 && m <= 10080)) return { err: 'срок мута — от 1 до 10080 минут (7 дней)' }; const why = String(text).slice(1).trim().split(/\s+/).slice(3).join(' ').slice(0, 200); return { act: 'mute', args: { login: nick, n: nick, min: m, reason: why } }; }
   if (cmd === 'ban' || cmd === 'unban') { if (bad) return needNick; return { act: cmd, args: { login: nick, n: nick, sure: cmd === 'ban' } }; }
   return { err: `нет такой команды: /${cmd}. Список — /help` };
 }
@@ -101,7 +114,7 @@ export class ModState {
   me(d: any, now = Date.now()): string | null {
     if (!d || typeof d !== 'object') return null;
     let note: string | null = null;
-    if ('muted' in d) { this.muted = d.muted || null; if (this.muted) note = this.muted.until ? `Модератор запретил тебе писать на ${leftT(this.muted.until - now)}` : 'Модератор запретил тебе писать в чат'; }
+    if ('muted' in d) { this.muted = d.muted || null; if (this.muted) note = (this.muted.until ? `Модератор запретил тебе писать на ${leftT(this.muted.until - now)}` : 'Модератор запретил тебе писать в чат') + whyTail(this.muted); }
     if ('mod' in d && this.role !== 'own') this.role = roleOf(d.mod);
     return note;
   }
@@ -131,12 +144,15 @@ export interface ModFeed {
 /** One chat's moderation: state + requests + commands (no DOM). */
 export class Moderator {
   readonly st = new ModState();
-  constructor(readonly base: string, readonly q: string, private api: ModApi, private feed: ModFeed) {}
+  constructor(readonly base: string, readonly q: string, private api: ModApi, private feed: ModFeed,
+    private why: (o: ModArgs) => Promise<string | null> = (o) => askWhy(typeof window !== 'undefined' ? window : null, o, muteWhat(o.min))) {}
   get role(): ModRole { return this.st.role; }
   /** GET <base>/mod<q> */
   async info(): Promise<any> { const r = await this.api(modPath(this.base, this.q)); if (r && r.ok) this.st.panel(r); return r; }
   /** POST <base>/mod<q> { op, id, login, min } and apply the answer like the site. `sure` = the ban was confirmed. */
   async act(op: ModOp, o: ModArgs): Promise<boolean> {
+    // site 12.11 chatAct: a mute without a reason yet asks the site's reason dialog first (null = the moderator cancelled)
+    if (op === 'mute' && o.reason === undefined) { const w = await this.why(o); if (w === null) return false; o = { ...o, reason: w }; }
     const r = await this.api(modPath(this.base, this.q), modBody(op, o));
     if (!r || !r.ok) { this.feed.note(errText(r), false); return false; }
     const gone: string[] = [];

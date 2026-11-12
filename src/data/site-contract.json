@@ -917,50 +917,48 @@
       "why": "site 07.11 keeps the last chosen town across tabs in localStorage lgCityTown@<channel> (townLs); src/net/town.ts readTownSignals falls back to it — otherwise a new tab boots 3D in the fair while the site shows the district town"
     },
     {
-      "id": "LGGuildDistrict (guild district layout, guildhall.js)",
-      "file": "guildhall.js",
-      "re": "const CAP = 100[\\s\\S]*function layout\\(o\\)[\\s\\S]*return \\{ CAP, TIER_MAX",
-      "severity": "degrade",
-      "why": "site 07.11: the guild district is a Town Kit town of its own (LGGuildDistrict.layout → LGTownKitMap.town), opened over the sleeping City; src/net/site.ts reports its root as the overlay 'district', src/features/site-places.ts — FINDINGS .local/drift1107 plan for a 3D district"
-    },
-    {
-      "id": "LGGuildDistrictArt (guild district art, guildhall.js)",
-      "kind": "global",
-      "name": "LGGuildDistrictArt",
-      "file": "guildhall.js",
-      "keys": [
-        "draw",
-        "houseProps",
-        "hall",
-        "house"
-      ],
-      "type": "function",
-      "when": "lazy",
-      "severity": "degrade",
-      "why": "the district is drawn by the Town Kit art (LGTownKitArt.drawTown) plus these houses / the main hall — the source of a future 3D district (FINDINGS .local/drift1107)"
-    },
-    {
-      "id": "LGGuildHall (open / pick / index)",
+      "id": "LGGuildHall (on / enter / close / index)",
       "kind": "keys",
       "obj": "LGGuildHall",
       "file": "guildhall.js",
       "keys": [
-        "open",
+        "on",
+        "enter",
         "close",
-        "pick",
         "index",
-        "debug"
+        "open"
       ],
       "when": "lazy",
       "severity": "degrade",
-      "why": "the guild district window: the pause-menu entry presses its .gd-entry button (src/features/site-places.ts)"
+      "why": "site 12.11 guild hall (an interior over the sleeping City): on() = city.js ghOn for the 3D guild building «скоро» (src/features/site-places.ts syncGuildSoon, src/net/guildhall.ts), enter() behind LGCity.panel('guild')"
     },
     {
-      "id": "guildhall.js .gd-entry in .cy-hud, .gd-root over the sleeping City",
+      "id": "guildhall.js .gh-entry in .cy-hud (towns without the guild building), .gh-root over the sleeping City",
       "file": "guildhall.js",
-      "re": "querySelector\\('\\.cy-hud'\\)[\\s\\S]*b\\.className = 'gd-entry'[\\s\\S]*root\\.className = 'gd-root'[\\s\\S]*LGCity\\.sleep\\(\\)",
+      "re": "querySelector\\('\\.cy-hud'\\)[\\s\\S]*hasB\\('guild'\\)[\\s\\S]*b\\.className = 'gh-entry'[\\s\\S]*\\.gh-modal[\\s\\S]*root\\.className = 'gh-root'[\\s\\S]*LGCity\\.sleep\\(\\)",
       "severity": "degrade",
-      "why": "src/features/site-places.ts shows «Гильдейский район» while .cy-hud .gd-entry exists; src/net/site.ts overlay() = 'district' while .gd-root is shown (the 3D hides and pauses) — otherwise the district opens under our canvas"
+      "why": "src/features/site-places.ts «Здание гильдии» presses .cy-hud .gh-entry; src/net/site.ts overlay() = 'guildhall' while .gh-root is shown, 'dialog' for .gh-modal (the 3D hides and pauses) — otherwise the hall opens under our canvas"
+    },
+    {
+      "id": "guildhall.js enter(): «Здание гильдий скоро откроется» for a closed / unavailable hall",
+      "file": "guildhall.js",
+      "re": "async function enter\\(\\)[\\s\\S]{0,200}index\\(true\\)[\\s\\S]{0,200}r\\.closed \\|\\| r\\.unavailable\\) \\? 'Здание гильдий скоро откроется'",
+      "severity": "degrade",
+      "why": "src/net/guildhall.ts GH_SOON / ghRefusal: the 3D says the same words when E is pressed at the «скоро» guild building (the site's toast is under our canvas)"
+    },
+    {
+      "id": "city.js guild building: soonB = ghOn() === false, goBuilding / openPanel → ghOpen → LGGuildHall.enter()",
+      "file": "city.js",
+      "re": "b\\.id === 'guild' \\? ghOn\\(\\) === false[\\s\\S]*function ghOpen\\(\\) \\{[\\s\\S]{0,120}G\\.enter\\(\\)[\\s\\S]*if \\(id === 'guild'\\) \\{ ghOpen\\(\\); return; \\}",
+      "severity": "degrade",
+      "why": "src/core/registries.ts guild → room 'site' (LGCity.panel('guild') is the site's own way in), src/net/site.ts soonOf(guild) mirrors soonB — otherwise E at the 3D guild building does nothing / says the wrong thing"
+    },
+    {
+      "id": "fc-map.js «Здание гильдий» (guild, sign ГИЛЬДИИ, roof plum)",
+      "file": "fc-map.js",
+      "re": "id: 'guild', title: 'Здание гильдий', sign: 'ГИЛЬДИИ'",
+      "severity": "degrade",
+      "why": "src/world/fcart/civic.ts buildGuild (tk-art.js guildHall lv 3) on the building's vis / foot — the asset model of the cats fair's new building"
     },
     {
       "id": "city.js «Только друзей» (lgCityFr, LGFriends.friends, .cy-fro)",
@@ -1320,6 +1318,41 @@
       "re": "mtEl\\.className = 'lg-maint'; mtEl\\.setAttribute\\('role', 'alertdialog'\\); mtEl\\.setAttribute\\('aria-modal', 'true'\\);",
       "severity": "degrade",
       "why": "10.11: «Технические работы» over everything — aria-modal, the 3D yields (src/net/site.ts DIALOGS)"
+    },
+    {
+      "id": "quest.js boss schemes (LGQuestSchemes.of: arena bad / safe / net, cap)",
+      "file": "quest.js",
+      "re": "window\\.LGQuestSchemes = \\{ add: schemeAdd, has: [^\\n]*of: schemeFor[\\s\\S]*arena: \\{ bad, safe",
+      "severity": "degrade",
+      "why": "src/expedition/adapter.ts asks the page's registry (src/quest/schemes.ts pageSchemes): red / green platforms of a scheme arena, «прыжок N», the caption; the boss's basic move (g.bas) — otherwise the 3D arena shows no safe platform for strike moves"
+    },
+    {
+      "id": "quest.js «Курган-Сундук» (g.sk, SK_POS / SK_SCHEMES, skHtml)",
+      "file": "quest.js",
+      "re": "const SK_POS = \\{ 1: \\[18, 40\\][\\s\\S]*const SK_SCHEMES = \\{[\\s\\S]*function skHtml\\(g, M\\)",
+      "severity": "degrade",
+      "why": "src/quest/schemes.ts ports SK_SCHEMES (field kinds / texts / counters, test/site-1112.test.ts runs the site's own) — the 3D chest-barrow field and its HUD note"
+    },
+    {
+      "id": "app.js announcements (me.an, .gu-an .gu-ann / .gu-anh / .gu-ant / .gu-anx)",
+      "file": "app.js",
+      "re": "function guAnn\\(\\)[\\s\\S]{0,1200}'gu-ann'[\\s\\S]{0,600}'gu-anh'[\\s\\S]{0,300}'gu-ant'[\\s\\S]{0,300}'gu-anx'",
+      "severity": "degrade",
+      "why": "src/features/announce.ts reads the cards the site renders in its «Игра» HUD (under our canvas) and presses their ×"
+    },
+    {
+      "id": "site-chat.js mute reason (askWhy → LGSiteUi.askReason, `reason`)",
+      "file": "site-chat.js",
+      "re": "op === 'mute' && o\\.reason === undefined[\\s\\S]{0,200}askWhy[\\s\\S]*op === 'mute' && o\\.reason \\? \\{ reason: o\\.reason \\}",
+      "severity": "degrade",
+      "why": "src/ui/chat-mod.ts Moderator.act asks the site's reason dialog and sends `reason` like chatAct; /mute nick N reason…"
+    },
+    {
+      "id": "app.js journal tab «Гильдия» (JT guild)",
+      "file": "app.js",
+      "re": "\\['guild', 'Гильдия', \\['guild'\\]\\]",
+      "severity": "degrade",
+      "why": "src/ui/menus.ts JT / JK / JRK mirror the site journal tabs (GET /api/journal?tab=guild)"
     }
   ]
 }

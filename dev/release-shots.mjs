@@ -9,10 +9,15 @@ const args = process.argv.slice(2);
 const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => { const i = a.indexOf('='); return i < 0 ? [a.slice(2), '1'] : [a.slice(2, i), a.slice(i + 1)]; }));
 const out = args.find((a) => !a.startsWith('--')) || '.local/relshots'; mkdirSync(out, { recursive: true });
 const W = +(opt.w || 1600), H = +(opt.h || 900), Q = opt.q ?? '3';
-const glArgs = opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+// --gpu = the Windows GPU box (d3d11); --gpu=native: Chromium's own choice (a Linux box with a GPU draws WebGL on it by itself)
+const glArgs = opt.gpu === 'native' ? [] : opt.gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
-const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
-const SHOTS = opt.set === '078' ? [
+const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.ctx?.uiHost?.setCameraMode?.('${mode}');g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
+const SHOTS = opt.set === '079' ? [
+  // 0.7.9 (site 12.11): the cats fair's new «Здание гильдий» (the agent's wide framing; interaction outline off); run with --hide.
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=15:40', 'guild-day', 14000, at(3600, 2600, 'tp', -0.05, -0.55, 'g.rig.dist=6;g.interact.setEnabled(false);')],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=23:00', 'guild-night', 14000, at(3600, 2600, 'tp', -0.05, -0.55, 'g.rig.dist=6;g.interact.setEnabled(false);')],
+] : opt.set === '078' ? [
   // 0.7.8 (site 11.11): an own stone dug → the loot toast «Выкопан: … +N руды» (me.lg / dug view), then the next stone's sign
   // «получишь: …» (LGMineShares projection) and the «Сейчас» line; run with --w=960 --h=540 for the review shot
   ['mine', 'dig=2&bots=0&econ=1', 'mine-loot-toast', 9000, 'js:const m=window.__mine,F=m.fake;F.st.bl={};F.st.dg={};m.client.model.st.bl={};m.client.model.st.dg={};for(const b of document.querySelectorAll("[data-a=\\"coach-x\\"]"))b.click();const d=document.getElementById("dbg");if(d)d.style.display="none";const off=m.client.on((e)=>{if(e.type==="burst"&&e.bursts.some((b)=>b.mine)){off();m.goNear(2,1.2);m.look(m.rig.yaw,0.02);}});m.digNear(0);'],

@@ -24,17 +24,21 @@ export const STANDALONE = ['pause', 'settings', 'help'];
 /** Contract/legacy aliases → our ids. */
 export const ALIAS: Record<string, string> = { character: '', journal: 'log', equipment: 'gear', inventory: 'bag', rating: 'legion', world: 'map', controls: 'help' };
 
-const JK: Record<string, [string, string]> = {
+export const JK: Record<string, [string, string]> = {
   fight: ['⚔️', 'Бой'], boss: ['🐉', 'Босс'], dice: ['🎲', 'Кости'], event: ['🎭', 'Событие'], trap: ['🪤', 'Ловушка'], shop: ['🛒', 'Покупка'],
   ench: ['🔨', 'Заточка'], auc: ['⚖️', 'Аукцион'], look: ['🎩', 'Облик'], loot: ['🎁', 'Вещь'], find: ['🔍', 'Находка'], coins: ['🪙', 'Монеты'],
   hero: ['⭐', 'Герой'], award: ['🏅', 'Награда'], store: ['📦', 'Склад'], ach: ['🏆', 'Достижение'], trade: ['🤝', 'Обмен'], bug: ['🐞', 'Репорт'],
+  // app.js JK: soc / mail (10.11), guild (12.11: guild runs and wars in the journal)
+  soc: ['📊', 'Соц. рейтинг'], mail: ['✉️', 'Почта'], guild: ['🛡️', 'Гильдия'],
 };
 /** The journal's boss kind is named after the channel's Prologue boss (quest view `bn`, default «Закхуэль»). */
 const jkBoss = (q: unknown): [string, string] => ['🐉', bossName(q as { bn?: unknown } | null).n];
-const JT: [string, string][] = [['all', 'Все'], ['fight', 'Бой'], ['shop', 'Покупки'], ['find', 'Находки'], ['coins', 'Монеты'], ['ach', 'Достижения']];
-const JRK: Record<string, Record<string, string>> = {
+/** app.js JT (the tabs the site's journal reads by GET /api/journal?tab=…); site 12.11 added «Гильдия». */
+export const JT: [string, string][] = [['all', 'Все'], ['fight', 'Бой'], ['shop', 'Покупки'], ['find', 'Находки'], ['coins', 'Монеты'], ['ach', 'Достижения'], ['guild', 'Гильдия']];
+export const JRK: Record<string, Record<string, string>> = {
   dice: { win: 'Выиграл', lose: 'Проиграл', tie: 'Ничья' }, fight: { win: 'Победа', lose: 'Поражение' }, boss: { win: 'Победа', lose: 'Поражение' },
   trap: { win: 'Справился', lose: 'Пострадал' }, shop: { win: 'Готово', lose: 'Не вышло' }, hero: { win: '', lose: '' }, ach: { win: 'Открыто' }, store: { win: '', lose: '' },
+  guild: { win: 'Победа', lose: 'Поражение', tie: 'Ничья' },
 };
 const JR: Record<string, string> = { win: 'Победа', lose: 'Неудача', tie: 'Ничья' };
 interface JEntry { id: string; at: number; k: string; t: string; r?: string; c?: number; x?: number; cl?: { go?: string; done?: unknown; pick?: unknown } | null }

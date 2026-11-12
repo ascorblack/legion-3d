@@ -88,14 +88,15 @@ export default coreFeature({
           // world ids are building ids (optionally 'door:<id>'); using it always goes through the room manager
           const id = wi.id.replace(/^door:/, '');
           const b = byId.get(id);
-          const soon = !!b?.soon;
           // the drawn door (outlineBox) or the door layer of the facade (outlineRegionOf)
           const region = outlineRegionOf(wi as Interactable & { outlineBox?: THREE.Box3 });
           const ol = region ? doorOutline(root, region, id) : null;
           if (ol) offs.push(ol.dispose);
           offs.push(ctx.interact.add({
-            ...wi, id: 'door:' + id, ...(ol ? { outline: ol.get } : {}), label: b && !(b.jail || b.id === 'jail') ? doorLabel(b.title, soon, wi.icon ?? b.icon) : wi.label,   // the Jail is not entered: its own label
-            icon: wi.icon ?? b?.icon, title: b?.title ?? wi.label, soon,
+            ...wi, id: 'door:' + id, ...(ol ? { outline: ol.get } : {}),
+            // live: a building's «скоро» may change after the world was built (site 12.11: the guild hall's first GET)
+            get label() { return b && !(b.jail || b.id === 'jail') ? doorLabel(b.title, !!b.soon, wi.icon ?? b.icon) : wi.label; },   // the Jail is not entered: its own label
+            icon: wi.icon ?? b?.icon, title: b?.title ?? wi.label, get soon() { return !!b?.soon; },
             enabled: () => open(id)() && (!wi.enabled || wi.enabled()),
             use: () => { void ctx.rooms.enter(id); },
           } as Interactable));
