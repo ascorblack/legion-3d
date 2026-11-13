@@ -102,7 +102,7 @@ function dumpRefs(table, samples, defs) {
   }
   // PNG renders (best effort): cairosvg through uv
   const py = `import sys, cairosvg\nfor f in sys.argv[1:]:\n    try:\n        cairosvg.svg2png(url=f, write_to=f[:-4] + '.png', output_width=None)\n    except Exception as e:\n        print('png failed', f, e)\n`;
-  const r = spawnSync('uv', ['run', '--quiet', '--with', 'cairosvg', 'python', '-c', py, ...files.filter((f) => !/\/(tk:)?(terrain|relief)\.svg$/.test(f))], { encoding: 'utf8', timeout: 170000 });
+  const r = spawnSync('uv', ['run', '--quiet', '--with', 'cairosvg', 'python', '-c', py, ...files.filter((f) => !/\/(tk:)?(terrain|relief|fog)\.svg$/.test(f))], { encoding: 'utf8', timeout: 170000 });
   if (r.status !== 0) console.log('png renders skipped:', (r.stderr || r.error || '').toString().split('\n').slice(-3).join(' '));
   else if (r.stdout) console.log(r.stdout.trim());
   console.log(`refs: ${files.length} svg → .local/fcart/ref/`);

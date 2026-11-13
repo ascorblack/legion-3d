@@ -42,6 +42,13 @@ p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => { if (/legion-3d|\[l3d\]/.test(m.text())) console.log(ts(), `[${m.type()}]`, m.text().slice(0, 300)); });
 await p.addInitScript({ content: "try { localStorage.setItem('l3d.auto', '0'); } catch (e) {}" });
 await p.addInitScript({ content: readFileSync(dist + '/bridge.js', 'utf8') });
+// site 13.11 live link (LGLiveLink: WebSocket /ws first, SSE /api/live fallback): count what the bridge tees, by name
+await p.addInitScript({ content: `(() => { const B = window.__L3D_BUS; if (!B) return; const n = window.__l3dLiveSeen = {};
+  for (const t of ['sse:me', 'sse:city', 'sse:mine', 'sse:q', 'sse:j', 'sse:jail', 'sse:dm', 'sse:open', 'sse:error']) B.on(t, () => { n[t] = (n[t] || 0) + 1; });
+  B.on('sse:city', (d) => { if (d && (d.chat || d.chatDel)) n.cityChat = (n.cityChat || 0) + 1; }); })();` });
+const wire = { ws: 0, wsEv: 0, sse: 0 };   // transport seen on the wire (counts only; never payloads)
+p.on('websocket', (ws) => { if (/\/ws$/.test(new URL(ws.url()).pathname)) { wire.ws++; ws.on('framereceived', (f) => { if (String(f.payload || '').startsWith('{"op":"ev"')) wire.wsEv++; }); } });
+p.on('request', (r) => { if (/\/api\/live(\?|$)/.test(r.url())) wire.sse++; });
 await p.goto(url, { waitUntil: 'load' });
 await p.evaluate(readFileSync(dist + '/game.js', 'utf8'));
 await p.waitForTimeout(1500);
@@ -95,11 +102,20 @@ if (logged) {
     });
   } else console.log(ts(), 'City tab not available');
 }
+// the live link: the transport the SITE picked (WebSocket only with hero.lw) and what reached window.__L3D_BUS over it
+await p.waitForTimeout(logged ? 6000 : 1500);
+report.live = await p.evaluate(() => ({ linkLib: typeof window.LGLiveLink, live: window.LGLive ? window.LGLive() : null,
+  kind: window.__L3D_BUS ? window.__L3D_BUS.last['live:kind'] ?? null : null, seen: window.__l3dLiveSeen || null }));
+report.live.wire = wire;
 
 const breaks = [...(report.page?.breaks || []), ...(report.city?.breaks || [])];
 const degrades = [...(report.page?.degrades || []), ...(report.city?.degrades || [])];
 console.log('\n===== site contract (runtime) =====');
 console.log(JSON.stringify({ ...report, blocked, pageErrors: errors.slice(0, 5) }, null, 1));
+const lv = report.live || {}, seen = lv.seen || {};
+// a logged-in page whose live link carried nothing to the bus: the bridge does not see the transport the site picked
+if (logged && lv.live && !(seen['sse:me'] || seen['sse:city'] || seen['sse:q'])) degrades.push({ id: 'live link teed (bridge sees the site\'s transport)', severity: 'degrade', missing: ['sse:* on __L3D_BUS over ' + (wire.ws ? 'WebSocket' : 'SSE')] });
+console.log(`LIVE transport=${lv.kind || 'none'} wire ws=${wire.ws} (ev frames ${wire.wsEv}) sse=${wire.sse} bus me=${seen['sse:me'] || 0} city=${seen['sse:city'] || 0} cityChat=${seen.cityChat || 0} q=${seen['sse:q'] || 0}`);
 console.log(`RESULT breaks=${breaks.length} degrades=${degrades.length} town=${report.town ? report.town.id + ' via ' + report.town.via : 'n/a'}`);
 await b.close();
 process.exit(breaks.length ? 3 : opt.strict && degrades.length ? 2 : 0);

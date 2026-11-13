@@ -25,7 +25,7 @@ import * as THREE from 'three';
 import type { Building, CityLayout } from '../contracts';
 import type { FairCatsScene, FairCatsLayout, FcItem, FcStair } from '../net/faircats';
 import { fairCatsOf, inPoly, rimY, inGlade, type FcGlade } from '../net/faircats';
-import { kitOf } from '../net/townkit';
+import { kitOf, forestMix } from '../net/townkit';
 import { toX, toZ, SX, SZ, fromX, fromZ } from './coords';
 import { GEO, M } from './batch';
 import { type Ctx, box, rbox, cyl, ball, cone, shade } from './kit';
@@ -404,6 +404,7 @@ export function fcStreets(k: Ctx, sc: FairCatsScene, groundAt: (x: number, y: nu
 /** The city wall along the bottom with towers, open at the gate (shared with the Town Kit; none without numbers). */
 export function fcWall(k: Ctx, sc: FairCatsScene): void {
   if (![sc.wall.x0, sc.wall.x1, sc.wall.y0, sc.wall.y1, sc.wall.gate[0], sc.wall.gate[1]].every(Number.isFinite)) return;
+  if (sc.wall.k === 'palisade') { fcPalisade(k, sc); return; }
   // ---- fc-art.js wallPiece / wallTower: a grey stone wall (rockD body, rockL coping, merlons) along the bottom, open at
   // the gate, with round stone towers under PURPLE conical roofs (cat ears, a gold / pink pennant)
   k.b.tag = 'terrain:wall';
@@ -426,6 +427,40 @@ export function fcWall(k: Ctx, sc: FairCatsScene): void {
     rbox(k, 'canvas', i % 2 ? FCP.pink : FCP.gold, X + 0.26, yT + 0.32, zc, 0.5, 0.22, 0.02, 0, 0, 0, 1);
     k.colliders.push(X - R, X + R, 0, top + 2, zc - R, zc + R);
   });
+}
+
+/**
+ * Site 13.11 (tk-art.js palisade / watchtower, Town Kit T.wall.k 'palisade'): a wooden stockade along the bottom, open at
+ * the gate — 22 px stakes every 24 px with a jittered pointed top, two rails on the town side — and square wooden
+ * watchtowers at T.wall.towers (four legs with X braces, a platform, a plank cabin, a hip roof in T.wall.roof).
+ */
+export function fcPalisade(k: Ctx, sc: FairCatsScene): void {
+  const w = sc.wall, za = zOf(w.y0) + 0.25, zb = zOf(w.y1) - 0.2, zc = zb - 0.2, hh = 2.2;
+  const wood = '#a8784a', woodL = '#c89a64', woodD = '#7a5230', rail = '#8a6a44';
+  k.b.tag = 'terrain:wall';
+  for (const [a, b] of [[w.x0, w.gate[0]], [w.gate[1], w.x1]] as P2[]) {
+    if (b - a < 8) continue;
+    for (let x = a; x < b - 4; x += 24) {
+      const wp = Math.min(22, b - x), X = toX(x + wp / 2), t = hh + hash(x, 3) * 0.14, r = wp * SX * 0.5;
+      box(k, 'wood', shade(wood, hash(x, 5) * 0.14 - 0.07), toX(x), toX(x + wp), -0.1, t, zc - 0.11, zc + 0.11, 0.6);
+      cone(k, 'wood', woodD, X, t - 0.03, zc, r * 0.98, 0.29, true, 0.6);   // the point: its base inside the stake's top
+    }
+    for (const yb of [0.45, hh - 0.55]) box(k, 'wood', rail, toX(a) + 0.01, toX(b) - 0.01, yb, yb + 0.12, zc - 0.2, zc - 0.1, 0.8);
+    k.colliders.push(toX(a), toX(b), 0, hh + 0.3, za, zb);
+  }
+  const roof = ROOF[w.roof ?? 'red'] ?? ROOF.red;
+  for (const tx of w.towers ?? []) {
+    if (!(tx > w.x0 && tx < w.x1) || (tx > w.gate[0] - 60 && tx < w.gate[1] + 60)) continue;
+    const X = toX(tx), R = 0.85, pl = 3.0, top = pl + 1.15;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(k, 'wood', woodD, X + sx * R - 0.08, X + sx * R + 0.08, -0.1, pl, zc + sz * R - 0.08, zc + sz * R + 0.08, 0.6);
+    for (const sz of [-1, 1]) for (const d of [-1, 1]) rbox(k, 'wood', wood, X, pl * 0.45, zc + sz * (R + (d < 0 ? 0.02 : 0.09)), 0.08, Math.hypot(2 * R, pl * 0.8), 0.06, 0, 0, d * Math.atan2(2 * R, pl * 0.8), 0.6);
+    box(k, 'wood', woodD, X - R - 0.12, X + R + 0.12, pl, pl + 0.16, zc - R - 0.12, zc + R + 0.12, 0.6);   // the platform
+    box(k, 'wood', woodL, X - R - 0.08, X + R + 0.08, pl + 0.16, top, zc - R - 0.08, zc + R + 0.08, 0.6);   // the plank cabin
+    for (let i = -2; i <= 2; i++) box(k, 'wood', woodD, X + i * 0.34 - 0.02, X + i * 0.34 + 0.02, pl + 0.2, top - 0.05, zc + R + 0.08, zc + R + 0.11, 0.6);
+    box(k, 'wood', '#2a1e18', X - 0.35, X + 0.35, pl + 0.55, pl + 0.85, zc + R + 0.09, zc + R + 0.12, 0.6);   // the look-out slot
+    cone(k, 'roof', roof, X, top - 0.02, zc, R + 0.3, 1.2, true, 0.8);   // the hip roof (cone4: square, half-width = r), 0.2 m eaves
+    k.colliders.push(X - R - 0.15, X + R + 0.15, 0, top + 1.3, zc - R - 0.15, zc + R + 0.15);
+  }
 }
 
 export function fcPlazaRound(k: Ctx, cx: number, cy: number, y: number): void {
@@ -731,8 +766,9 @@ export function fcGlade(k: Ctx, g: FcGlade): void {
   const edge = chaikin(g.poly, 2);
   flat(grow(edge, 35), yOf(0), 'lowPaving', GLC.rim, 2.4);
   flat(edge, yOf(1), 'lowPaving', GLC.grassD, 2.4);
-  flat(chaikin(g.poly.map(([x, y]) => [g.cx + (x - g.cx) * 0.94, 3010 + (y - 3010) * 0.9] as P2), 2), yOf(2), 'lowPaving', GLC.grass, 2.4);
-  patch(2880, 3046, 250, 46, yOf(3), 0.7);
+  const y0 = Number.isFinite(g.y0) ? g.y0 : 3010;   // the fair: 3010 (fc-art.js literal); a kit town: its glade's y0 (tk-art.js)
+  flat(chaikin(g.poly.map(([x, y]) => [g.cx + (x - g.cx) * 0.94, y0 + (y - y0) * 0.9] as P2), 2), yOf(2), 'lowPaving', GLC.grass, 2.4);
+  patch(g.cx, y0 + 36, 250, 46, yOf(3), 0.7);
   const order = g.spots.map((p, i) => [p.x, i] as const).sort((a, b) => a[0] - b[0]), band = new Map(order.map(([, i], j) => [i, 1 + (j % 2)]));
   g.spots.forEach((p, i) => {
     const bd = p.poly && p.poly.length > 2 ? band.get(i)! : 2;
@@ -766,8 +802,8 @@ export function fcForest(k: Ctx, L: FairCatsLayout, groundAt: (x: number, y: num
   const sc = L.faircats, kit = kitOf(sc), town = sc.town;
   if (town.length < 3) return 0;
   const biome = kit?.biome ?? 'meadow';
-  if (biome === 'desert') return 0;
-  const pineShare = ['ice', 'tundra', 'north', 'snow', 'mountain'].includes(biome) ? 0.8 : biome === 'ash' || biome === 'blight' ? 0.5 : 0.3;
+  if (biome === 'desert' && !kit?.nature) return 0;
+  const pineShare = forestMix(kit).pine;   // T.nature (site 13.11) or the biome's mix
   k.b.tag = 'forest';
   let seed = 977;
   const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
@@ -797,6 +833,8 @@ export function fcForest(k: Ctx, L: FairCatsLayout, groundAt: (x: number, y: num
     if (wallOk && Math.abs(px - gx) < 190 && py > W.y0 - 40) continue;                              // the gate road out
     if (L.free(px, py) || L.free(px + 40, py) || L.free(px - 40, py) || L.free(px, py + 30) || L.free(px, py - 30)) continue;
     if (sc.stairs.some((st) => px > st.x0 - 150 && px < st.x1 + 150 && py > st.y0 - 60 && py < st.y1 + 60)) continue;   // crowns off the flights / the cart ramp
+    const g0 = groundAt(px, py);   // a crown over a bank / a tier edge would sink into the ground beside the trunk
+    if ([[-90, 0], [90, 0], [0, -45], [0, 45]].some(([dx, dy]) => Math.abs(groundAt(px + dx, py + dy) - g0) > 0.3)) continue;
     const pine = r2 < pineShare, s = (pine ? 1.15 : 1.0) * (0.85 + r3 * 0.55) * (d > 12 ? 1.25 : 1);
     k.inst.add(pine ? 'fc:fpine' : 'fc:foak', X, groundAt(px, py) - 0.05, Z, r1 * 40, s, s * (0.9 + r2 * 0.25));
     n++;
@@ -820,11 +858,62 @@ export function fcForest(k: Ctx, L: FairCatsLayout, groundAt: (x: number, y: num
   return n;
 }
 
+const BERRY = '#e8402e';
+/**
+ * tk-art.js rowanTree (site 13.11): a slim trunk, a round three-tone crown (#3f7434 / #5a9440 / #7eb552) with seven bunches
+ * of red berries on it; `ring` = the round wooden bench round the trunk (the site's arc at the tree's foot).
+ */
+export function rowan(k: Ctx, X: number, g: number, Z: number, s: number, seed: number, ring: boolean): void {
+  let q = (seed * 4513 + 29) >>> 0;
+  const r = () => ((q = (Math.imul(q, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const R = 0.95 * s, cy = g + 2.1 * s;
+  cyl(k, 'wood', '#6a4a30', X, g, Z, 0.11 * s, 1.6 * s, 8, 0.5);
+  lump(k, 'leaf', '#3f7434', X, cy, Z, R, 0.85);
+  lump(k, 'leaf', '#5a9440', X - 0.3 * s, cy + 0.32 * s, Z + 0.25 * s, R * 0.7, 0.85);
+  lump(k, 'leaf', '#7eb552', X + 0.25 * s, cy + 0.55 * s, Z + 0.3 * s, R * 0.45, 0.85);
+  for (let i = 0; i < 7; i++) {
+    const a = r() * Math.PI * 2, e = (r() - 0.35) * 0.9, bx = X + Math.cos(a) * Math.cos(e) * R * 0.98, bz = Z + Math.sin(a) * Math.cos(e) * R * 0.98, by = cy + Math.sin(e) * R * 0.8;
+    for (const [ox, oy] of [[0, 0], [-0.06, -0.05], [0.06, -0.05], [0, -0.1]]) ball(k, 'canvas', BERRY, bx + ox * s, by + oy * s, bz, 0.05 * s);
+  }
+  if (ring) {   // the bench: the site's arc behind the trunk (A … 0 0 1: over the top = the far side), open towards the viewer
+    const rr = 0.75 * s, seg = 2 * rr * Math.sin(Math.PI / 16) * 0.9;   // 9 boards on a half circle, a small gap between them
+    for (let i = 0; i < 9; i++) {
+      const a = Math.PI * (i / 8), cx = X + Math.cos(a) * rr, cz = Z - Math.sin(a) * rr;
+      rbox(k, 'wood', '#a8784a', cx, g + 0.42, cz, seg, 0.07, 0.3, -a + Math.PI / 2);
+      if (i % 2 === 0) box(k, 'wood', '#7a5230', cx - 0.04, cx + 0.04, g, g + 0.4, cz - 0.04, cz + 0.04, 0.6);
+    }
+  }
+}
+
 function placeItem(k: Ctx, sc: FairCatsScene, it: FcItem, G: (x: number, y: number) => number, lampHead: number, lampHeads: number[], posts: Set<string>): void {
   const P = k.pal, x = it.x, y = it.y, X = toX(x), Z = toZ(y), g = G(x, y), s = typeof it.s === 'number' ? it.s : 1, rot = hash(x, y) * 6.28;
   k.b.tag = 'prop:' + it.k;
   switch (it.k) {
     case 'tree': k.inst.add(VK.tree, X, g, toZ(y - 4), rot, 1.15 * s); break;
+    case 'rowan': rowan(k, X, g, toZ(y - 4), s, x * 3 + y, !!it.ring); break;   // site 13.11 tk-art.js rowanTree
+    case 'hives': {   // tk-art.js hivesSvg: n straw-yellow-roofed hives on a plank (h 58 + i·7 % 3 · 6 px)
+      const n = Math.max(1, Math.min(6, Math.round(+(it.n as number) || 3))), Zh = toZ(y - 6);
+      box(k, 'wood', P.woodD, toX(x - n * 27 - 8), toX(x + n * 27 + 8), g, g + 0.14, Zh - 0.3, Zh + 0.3, 0.6);
+      for (let i = 0; i < n; i++) {
+        const hx = toX(x - (n - 1) * 27 + i * 54), h = 0.62 + ((i * 7) % 3) * 0.06;
+        rbox(k, 'wood', '#b4834a', hx, g + 0.14 + h / 2, Zh, 0.4, h, 0.42);
+        for (const f of [0.3, 0.62]) box(k, 'wood', '#7a5230', hx - 0.205, hx + 0.205, g + 0.14 + h * f, g + 0.14 + h * f + 0.03, Zh - 0.215, Zh + 0.215, 0.6);
+        cone(k, 'roof', '#f0c464', hx, g + 0.14 + h, Zh, 0.38, 0.26, true, 0.6);
+        box(k, 'wood', '#2a2026', hx - 0.06, hx + 0.06, g + 0.14 + h * 0.4, g + 0.14 + h * 0.4 + 0.06, Zh + 0.2, Zh + 0.225, 0.5);   // the flight hole
+      }
+      break;
+    }
+    case 'racks': {   // tk-art.js racksSvg: two posts, two bars, six rowan bunches hanging in turn from the top / lower bar
+      const Zr = toZ(y - 4);
+      for (const dx of [-60, 60]) cyl(k, 'wood', P.woodL, toX(x + dx), g, Zr, 0.05, 1.05, 8, 0.5);
+      for (const yb of [1.0, 0.62]) rbox(k, 'wood', P.woodL, X, g + yb, Zr, 1.4, 0.06, 0.06);
+      for (let i = 0; i < 6; i++) {
+        const bx = toX(x - 50 + i * 20), by = g + (i % 2 ? 0.62 : 1.0);
+        cyl(k, 'wood', '#3a2a20', bx, by - 0.15, Zr, 0.008, 0.12, 8, 0.5);   // the string hangs under the bar
+        for (const [ox, oy] of [[0, -0.18], [-0.04, -0.22], [0.04, -0.22], [0, -0.27]]) ball(k, 'canvas', BERRY, bx + ox, by + oy, Zr + 0.02, 0.035);
+      }
+      break;
+    }
     case 'blossom': k.inst.add('fc:blossom', X, g, toZ(y - 4), rot, 1.1 * s); break;
     case 'pine': k.inst.add('fc:pine', X, g, toZ(y - 4), rot, 1.05 * s); break;
     case 'bush': k.inst.add(VK.bush, X, g, toZ(y - 10), rot, 0.9); break;

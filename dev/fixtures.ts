@@ -12,6 +12,7 @@ import { fairCatsScene, fairCatsBuildings, fairCatsLayout, type FairCatsLayout, 
 import { campScene, villageScene } from '../src/net/town';
 import { soonOf } from '../src/net/site';
 import townkit from '../test/fixtures/townkit-map.json';
+import townkitD04 from '../test/fixtures/townkit-d04.json';
 import { townKitScene, kitOf, kitBuildState } from '../src/net/townkit';
 
 /** free / nearest over a walk grid of the fair fixture (cells C px from AREA.y0, 1 = walkable). */
@@ -226,10 +227,11 @@ export function fairCatsFixtureLayout(o: { styleId?: string; jail?: boolean; mag
  * tk-map.js): the layout src/net/site.ts buildKitLayout builds from window.LGTownKitTowns[id] / LGTownKitMap /
  * LGTownKitCity — levelled plots (a building below level 5 is smaller), one construction running (scaffolding, closed),
  * the kit's walk grid. `?tk=<id>` in dist-dev/game.html and dist-dev/world.html (`?tk=1` keeps the fixture's id);
- * `?biome=ice` etc. repaints it in another biome.
+ * `?biome=ice` etc. repaints it in another biome. `?tk=d04` = the site's own kit town «Рябиново» (13.11: test/fixtures/townkit-d04.json
+ * from /site/towns/d04.js — palisade + watchtowers, the glade, rowans, hives, berry racks, the forest mix T.nature).
  */
 export function kitFixtureLayout(o: { styleId?: string; id?: string; biome?: string; magic?: boolean } = {}): FairCatsLayout {
-  const m = townkit as any, now = m.cfg.now;
+  const m = (o.id === 'd04' ? townkitD04 : townkit) as any, now = m.cfg.now;
   const T = { ...m.T, ...(o.biome ? { biome: o.biome } : {}) };
   const sc = townKitScene(T, m.levelled, { building: m.cfg.building, now, rail: m.RAIL, owner: 'demo' })!;
   const kit = kitOf(sc);

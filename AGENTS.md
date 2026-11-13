@@ -69,6 +69,9 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   under our canvas: its entries are pause-menu items (src/features/site-places.ts: mail, arena, guilds, daily tasks, mini-map). Fishing
   (fish2.js) = E at the cats fair's pond / the old fair's canal → the site's own screen (src/features/fishing.ts, overlay 'fish'); a 3D
   fishing game is planned in .local/drift1110/FINDINGS.md. Drift needs `L3D_COOKIES` now (tab scripts are cookie-gated).
+- Live link (site 13.11, /lib/site-live.js `LGLiveLink`): app.js opens the live channel as a WebSocket to `/ws` (only with hero `lw`)
+  or SSE `/api/live`; the bridge taps both (src/bridge/bridge.ts: frames `{"op":"ev","e":…,"d":…}` → bus `sse:<name>`, `live:kind`).
+  `node e2e/contract.mjs` prints `LIVE transport=…`. Notes: docs/SITE-NOTES.md «Live channel», .local/drift1113/FINDINGS.md.
 - Site contract: `src/data/site-contract.json` is checked statically (`npm run drift`) and at runtime (boot guard in
   `src/net/site.ts` via `src/net/contract.ts`; `node e2e/contract.mjs` against the live page).
 - Asset models of the new fair / Town Kit (`src/world/fcart/`: registry, civic / shops / houses models) are pinned to the

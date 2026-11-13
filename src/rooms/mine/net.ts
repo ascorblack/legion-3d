@@ -6,8 +6,9 @@
  * (docs/MINE.md «Client decision»). The site's mine must NOT be open at the same time (one presence per tab):
  * the room closes it before entering (LGMine.close()).
  *
- * Cadence (as mine.js): enter once; GET state every 3 s (with a live channel only every 10th tick unless looks are
- * wanted); ping every 60 s while visible; go once per walk (we: throttled ≥ GO_MS while walking, last point on stop);
+ * Cadence (as mine.js): enter once; GET state on a 3 s tick: with a live channel (or while it reconnects) only every 10th
+ * tick unless looks are wanted; with the live link down for good (13.11 LGPollOk) at most every 10 / 15 / 30 / 60 s
+ * (backoff on failures), and never while the site holds after a 503 / 429 (LGSiteUi.hold); ping every 60 s while visible; go once per walk (we: throttled ≥ GO_MS while walking, last point on stop);
  * dig / stop / sell / buy / lamp / claim / pick / oreBag only on the player's explicit action; leave on exit.
  */
 import { dayLimit } from './state';
@@ -48,7 +49,16 @@ export interface MineClientOpts {
   hidden?: () => boolean;
   timers?: Timers;
   now?: () => number;
+  /** Site 13.11 (app.js window.LGPollOk): may a client poll now — the live link is down for good (3 failures / > 20 s).
+   *  Default: the page's own; without it, true. */
+  pollOk?: () => boolean;
+  /** Site 13.11 (site-ui.js LGSiteUi.hold.left()): ms every poll waits after a 503 / 429 (Retry-After). Default: the page's. */
+  held?: () => number;
+  rnd?: () => number;
 }
+/** site-ui.js 13.11 POLL_STEPS: the backoff of a poll while the live link is down (× 1 … 1.5 jitter, `up`). */
+export const MINE_POLL_STEPS = [10000, 15000, 30000, 60000] as const;
+export const minePollWait = (fails: number, rnd: number): number => Math.round(MINE_POLL_STEPS[Math.min(fails, MINE_POLL_STEPS.length - 1)] * (1 + 0.5 * rnd));
 export type MineEvent =
   | { type: 'state'; newFloor: boolean }
   | { type: 'presence' }
@@ -138,6 +148,13 @@ export class MineClient {
   tip(text: string, bad = false): void { this.emit({ type: 'tip', text, bad }); }
   /** A live channel is up when a 'mine' event arrived recently (the server sends views every few seconds). */
   live(): boolean { return this.now() - this.lastSse < 20000; }
+  private pollAt = 0; private pollFails = 0;
+  private pollOk(): boolean {
+    try { const f = this.o.pollOk ?? (typeof window !== 'undefined' ? (window as unknown as { LGPollOk?: () => boolean }).LGPollOk : undefined); return typeof f === 'function' ? !!f() : true; } catch { return true; }
+  }
+  private siteHeld(): number {
+    try { const v = this.o.held ? this.o.held() : typeof window !== 'undefined' ? (window as any).LGSiteUi?.hold?.left?.() : 0; return Number.isFinite(+v) ? Math.max(0, +v) : 0; } catch { return 0; }
+  }
   private hidden(): boolean { if (this.held) return true; try { return !!(this.o.hidden && this.o.hidden()); } catch { return false; } }
   /** The 3D mine is held behind the classic site (F8): no polls, pings or live-event work until hold(false). */
   held = false;
@@ -179,8 +196,15 @@ export class MineClient {
   async poll(full = false, force = false): Promise<void> {
     if (this.closed || !this.entered || (this.hidden() && !full)) return;
     const M = this.model;
+    // site 13.11 (mine.js poll): no poll while the site holds (503 / 429 Retry-After); while the live link is down for good
+    // (LGPollOk) a backoff of POLL_STEPS instead of every tick; otherwise every 10th tick (live or reconnecting)
+    const polling = !this.live() && this.pollOk();
+    if (!full && !force && this.siteHeld()) return;
+    if (!full && !force && polling && !M.lkWant.size && this.now() < this.pollAt) return;
     this.pollN++;
-    if (!full && !force && this.live() && this.pollN % 10 && !M.lkWant.size) return;
+    if (!full && !force && !polling && this.pollN % 10 && !M.lkWant.size) return;
+    const rnd = this.o.rnd ?? Math.random;
+    if (polling) this.pollAt = this.now() + minePollWait(this.pollFails, rnd());
     // site 31.10: riding — the chosen floor's view whole (v is shared by the floors: «the same view» of the previous floor says
     // nothing about the new one); the key the poll went out with (a poll of the previous floor is not applied after the ride)
     const c0 = this.c;
@@ -188,6 +212,7 @@ export class MineClient {
     const lk = [...M.lkWant].slice(0, 60); M.lkWant.clear(); if (lk.length) this.lkAt = this.now();
     const mc = this.chat.on && this.chat.poll && !this.live() ? `&mc=${this.chat.c || 0}` : '';
     const r: MinePayload = await this.o.api('/api/mine/state' + this.q() + have + (this.sid ? `&sid=${this.sid}` : '') + (lk.length ? `&lk=${encodeURIComponent(lk.join(','))}` : '') + mc);
+    if (polling) { this.pollFails = r && r.ok ? 0 : this.pollFails + 1; this.pollAt = this.now() + Math.max(minePollWait(this.pollFails, rnd()), this.siteHeld()); }
     if (this.closed || !r || !r.ok) return;
     if (this.c !== c0) return;
     if (r.mchat && this.chat.on) this.chatIn(r.mchat);

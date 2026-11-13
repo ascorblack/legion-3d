@@ -17,7 +17,7 @@
  *   - one representative per ref: the most frequent variant (ties → the smallest hash); `n` = how many props the map
  *     draws for the ref, `v` = distinct variants, `box` = [w, h] px of the representative.
  * Refs (prefix '' for the fair, 'tk:' for a Town Kit town): building id ('hall', 'jail', …), 'house:<roof>' /
- * 'house:tavern', 'i:<kind>', and the map layers 'wall', 'tower', 'forest', 'terrain', 'plaza', 'stairs', 'ramp',
+ * 'house:tavern', 'i:<kind>', and the map layers 'wall', 'tower', 'forest', 'terrain', 'fog' (13.11), 'plaza', 'stairs', 'ramp',
  * 'mine', 'mountain', 'pond', 'relief'.
  */
 
@@ -125,7 +125,9 @@ const near = (a: number, b: number, d = 2) => Math.abs(a - b) <= d;
 export function layerRef(l: ArtLayer, map: ArtMap): string | null {
   const x1 = l.x + l.w, y1 = l.y + l.h;
   if (l.w === l.h && (l.w === 940 || l.w === 1200)) return null;   // CH = 640 tiles with a 150 / 280 px margin
-  if (near(l.x, -40) && near(l.y, -40)) return 'terrain';
+  // the ground (G.big pass 0) starts 40 px out of the map; since 13.11 the art reaches EDGE.art px further (fc-art.js /
+  // tk-art.js EXT) and a fog layer (pass 8) has the same box: its gradients are named fcFog* / tkFog*
+  if ((near(l.x, -40) && near(l.y, -40)) || (l.x < -40 && l.y < -40 && near(l.x, l.y) && l.x + l.w > (map.W ?? 0))) return /id="(fc|tk)Fog/.test(l.svg) ? 'fog' : 'terrain';
   const streets = map.STREETS ?? map.streets ?? [];
   for (const s of streets) if (s && s.rr && near(l.x, s.rr[0]) && near(l.y, s.rr[1]) && near(x1, s.rr[2]) && near(y1, s.rr[3])) return 'plaza';
   for (const s of map.STAIRS ?? map.stairs ?? []) if (near(l.x, s.x0 - 30) && near(l.y, s.y0 - 30) && near(x1, s.x1 + 30)) return s.k === 'ramp' ? 'ramp' : 'stairs';

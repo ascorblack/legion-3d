@@ -15,7 +15,8 @@ so the extension must treat every internal API as unstable and degrade gracefull
   exactly the site's wrapper — on F8 / classic, on a failed boot, and while the site's own mine screen (`.mn`) is open. It is never
   installed at document_start: the site's wrapper would capture it as «the function under it» and `LG_FETCH.n` would stay false for the
   whole page load. The 3D mine uses our own client and never runs `tele()`. We do not touch `requestAnimationFrame` or `LGMine`.
-  `EventSource` is replaced by the bridge (the live feed has no other source without a second connection); the telemetry does not look at it.
+  `EventSource` and `WebSocket` are replaced by the bridge (the live feed has no other source without a second connection); the telemetry
+  does not look at them (13.11 `tlPi` still checks `fetch` and `requestAnimationFrame` only).
   Test: `test/fetch-telemetry.test.ts`, `e2e/fetch-tee.mjs`; refresh `test/fixtures/site-telemetry.js` when `tlPi` changes.
 - **F8 inside the mine (31.10, src/net/site-mine.ts, src/features/mine-hold.ts).** Opening the site's mine puts the City to sleep
   (`LGCity.sleep()`: city leave, `LGCity.debug()` = null); its «В город» (`LGMine.exit()`) leaves the mine and wakes the City (city
@@ -161,8 +162,21 @@ so the extension must treat every internal API as unstable and degrade gracefull
   stats{}, role, gear: heavy|light|cloth, look{weapon|armor|shield|hat|charm}, effect, on (equipped), wearable,
   en (enchant level), dur? }`.
 
-## Live channel (SSE)
-`GET /api/live` (EventSource opened by app.js). Named events:
+## Live channel (live link: WebSocket or SSE)
+Since 13.11 app.js opens it through `/lib/site-live.js` `window.LGLiveLink.open({ sse, ws, onAuth, backoff, hold })`:
+- **WebSocket first** — `ws()` gives `{ url: (wss|ws)://<host>/ws, ch: LG_CH.login, sm }` only when `hero.lw` is set, the hero is not
+  in the cage and the page is not the streamer dock; otherwise SSE right away. Server `{op:'hello', user}` → the client sends
+  `{op:'live', ch, sm?}` → `{op:'liveok'}`; then every event is ONE text frame `{"op":"ev","e":"<name>","d":<json>}` (same names and
+  payloads as SSE). `liveerr` off / no_channel / forbidden → SSE for `T.noWsMs` (10 min); login_required / close 4001 → onAuth;
+  `T.wsTries` (4) sockets that never open → SSE for 10 min.
+- **SSE fallback** — `GET /api/live[?sm=1]`, named events; `T.sseErrs` (3) errors (or CLOSED) → reconnect with backoff
+  (site-ui.js `LIVE_STEPS`, Retry-After `hold`).
+- Polls (`/api/me`, `/api/city/state`, mine state, chats) run only when `window.LGPollOk()` (live link down for good: ≥ 3 failures or
+  down > 20 s) and never during `LGSiteUi.hold.left()` (503 / 429), with `POLL_STEPS` 10 / 15 / 30 / 60 s backoff.
+- The bridge taps both (src/bridge/bridge.ts): the bus gets `sse:<name>` either way and `live:kind` = 'ws' | 'sse'. For our account
+  `hero.lw` is not set (13.11), so the site uses SSE. `node e2e/contract.mjs` prints `LIVE transport=… bus me=… city=…`.
+
+Named events:
 - `me` — full `{hero,…}` snapshot like `/api/me`.
 - `city` — city batch: `a` (arrived: `[{l,n,lv,lk,g,aw,gh,x,y,tx,ty,dt}]`), `m` (moved: `[[l,fx,fy,tx,ty,dtMs]]`),
   `g` (gone: `[login]`), `n` (players count), `chat` (`[{id,s,l,n,t,at,c,cn,k?,ev?,to?}]`), `chatDel`, `c` (cursor),

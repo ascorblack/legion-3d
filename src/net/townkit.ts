@@ -25,7 +25,7 @@
  * the parts the fair has only one of (any number of tiers, rocks, water bodies, bridges) and the biome / levels / builds.
  */
 import type { Building } from '../contracts';
-import type { FairCatsScene, FcBuilding, FcHouse, FcItem, FcStair, FcStreet } from './faircats';
+import { fairCatsGlade, type FairCatsScene, type FcBuilding, type FcGlade, type FcHouse, type FcItem, type FcStair, type FcStreet } from './faircats';
 
 type P2 = [number, number];
 type Q4 = [number, number, number, number];
@@ -47,6 +47,8 @@ export interface KitInfo {
   /** The building's full-size (level 5) art box: the model height follows vis / vis5. */
   vis5: Record<string, Q4>;
   owner: string;
+  /** Site 13.11: the forest's tree mix (T.nature, e.g. { dark: 5, pine: 3, rowan: 1 }; tk-art.js natureTree) or null = by biome. */
+  nature: Record<string, number> | null;
 }
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v) ? +v : NaN);
@@ -90,6 +92,7 @@ export function townKitScene(L: any, levelled: readonly any[], o: { building?: R
     const houses: FcHouse[] = list(L.houses).map((h, i) => ({ id: String(h.id ?? 'h' + i), k: String(h.k || 'house'), vis: q4(h.vis), foot: q4(h.foot), door: { x: num(h.door?.x), y: num(h.door?.y) }, roof: String(h.roof || 'red') })).filter((h) => ok4(h.foot));
     const items: FcItem[] = list(L.items).filter((it) => typeof it.k === 'string' && Number.isFinite(+it.x) && Number.isFinite(+it.y)).map((it) => JSON.parse(JSON.stringify(it)));
     const Wl = L.wall && typeof L.wall === 'object' ? L.wall : null;
+    const glade = kitGlade(L.glade);
     // the pier of the fair = the first bridge over water (the solids cut water there; the deck is drawn per bridge)
     const pierR = bridges[0]?.rects ?? [];
     const sc: FairCatsScene & { kit: KitInfo } = {
@@ -99,12 +102,41 @@ export function townKitScene(L: any, levelled: readonly any[], o: { building?: R
       rails: pts(L.rails), pond: w0?.poly ?? [],
       pier: pierR[0] ? { x0: pierR[0][0], y0: pierR[0][1], x1: pierR[0][2], y1: pierR[0][3], end: pierR[1] ?? NANQ } : { x0: NaN, x1: NaN, y0: NaN, y1: NaN, end: NANQ },
       buildings, houses, items,
-      wall: Wl ? { y0: num(Wl.y0), y1: num(Wl.y1), x0: num(Wl.x0), x1: num(Wl.x1), gate: Array.isArray(Wl.gate) ? [num(Wl.gate[0]), num(Wl.gate[1])] : [NaN, NaN] } : { y0: NaN, y1: NaN, x0: NaN, x1: NaN, gate: [NaN, NaN] },
+      wall: Wl ? { y0: num(Wl.y0), y1: num(Wl.y1), x0: num(Wl.x0), x1: num(Wl.x1), gate: Array.isArray(Wl.gate) ? [num(Wl.gate[0]), num(Wl.gate[1])] : [NaN, NaN],
+        ...(Wl.k === 'palisade' ? { k: 'palisade' as const, towers: (Array.isArray(Wl.towers) ? Wl.towers : []).map(num).filter(Number.isFinite), roof: word(Wl.roof, 'red') } : {}) } : { y0: NaN, y1: NaN, x0: NaN, x1: NaN, gate: [NaN, NaN] },
+      ...(glade ? { glade } : {}),
       jail: { c0: NaN, c1: NaN, ct: NaN, back: NaN, fy: NaN, seats: [], walk: NANQ },
-      kit: { id: String(L.id || ''), biome: word(L.biome, 'meadow'), tiers, rocks, water, bridges, lvl, build, vis5, owner: String(o.owner || '').slice(0, 40) },
+      kit: { id: String(L.id || ''), biome: word(L.biome, 'meadow'), tiers, rocks, water, bridges, lvl, build, vis5, owner: String(o.owner || '').slice(0, 40), nature: natureOf(L.nature) },
     };
     return sc;
   } catch { return null; }
+}
+/**
+ * T.glade of a kit town (site 13.11, tk-art.js gladeOf: the spots without `gate` get the same 18-point clearing as fc-map.js
+ * spotPoly) → the cats fair's glade shape, or undefined.
+ */
+export function kitGlade(G: any): FcGlade | undefined {
+  if (!G || typeof G !== 'object' || !Array.isArray(G.spots)) return fairCatsGlade(G);
+  const spotPoly = (p: any): P2[] => {
+    const rx = +p.rx || 170, ry = +p.ry || 120, out: P2[] = [];
+    for (let i = 0; i < 18; i++) { const a = (i / 18) * Math.PI * 2, sn = Math.sin(a); out.push([Math.round(+p.x + Math.cos(a) * rx), Math.round(+p.y + 10 + sn * (sn < 0 ? ry + 10 : 150))]); }
+    return out;
+  };
+  return fairCatsGlade({ ...G, spots: G.spots.map((p: any) => (p && !p.gate && !Array.isArray(p.poly) && Number.isFinite(+p.x) && Number.isFinite(+p.y) ? { ...p, poly: spotPoly(p) } : p)) });
+}
+/** T.nature (tree kind → weight) → plain weights, or null. */
+export function natureOf(n: unknown): Record<string, number> | null {
+  if (!n || typeof n !== 'object' || Array.isArray(n)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(n as Record<string, unknown>)) if (/^[a-z]{1,16}$/.test(k) && typeof v === 'number' && v > 0 && Number.isFinite(v)) out[k] = v;
+  return Object.keys(out).length ? out : null;
+}
+/** The pine / rowan shares of the forest: T.nature when the town has one, else by biome (the 3D's old rule). */
+export function forestMix(kit: Pick<KitInfo, 'biome' | 'nature'> | null): { pine: number; rowan: number } {
+  const n = kit?.nature;
+  if (n) { const sum = Object.values(n).reduce((a, b) => a + b, 0) || 1; return { pine: (n.pine || 0) / sum, rowan: (n.rowan || 0) / sum }; }
+  const biome = kit?.biome ?? 'meadow';
+  return { pine: ['ice', 'tundra', 'north', 'snow', 'mountain'].includes(biome) ? 0.8 : biome === 'ash' || biome === 'blight' ? 0.5 : 0.3, rowan: 0 };
 }
 export const kitOf = (sc: FairCatsScene | null | undefined): KitInfo | null => (sc as (FairCatsScene & { kit?: KitInfo }) | null | undefined)?.kit ?? null;
 

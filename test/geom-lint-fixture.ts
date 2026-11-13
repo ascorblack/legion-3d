@@ -20,6 +20,7 @@ export const TOWNS: [string, () => CityLayout][] = [
   ['village', () => villageFixtureLayout('cats')],
   ['cherts', () => villageFixtureLayout('cherts')],
   ['townkit', () => kitFixtureLayout({ magic: true })],
+  ['tk-d04', () => kitFixtureLayout({ id: 'd04', magic: true })],   // site 13.11: the kit town «Рябиново» (palisade, glade, rowans)
 ];
 
 /* ------------------------------------------------------------------ the ratchet */

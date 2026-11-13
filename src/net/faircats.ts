@@ -34,7 +34,9 @@ export interface FairCatsScene {
   stairs: FcStair[]; streets: FcStreet[]; paths: { id: string; w: number; pts: P2[] }[]; rails: P2[];
   pond: P2[]; pier: { x0: number; x1: number; y0: number; y1: number; end: [number, number, number, number] };
   buildings: FcBuilding[]; houses: FcHouse[]; items: FcItem[];
-  wall: { y0: number; y1: number; x0: number; x1: number; gate: [number, number] };
+  wall: { y0: number; y1: number; x0: number; x1: number; gate: [number, number];
+    /** Site 13.11 (Town Kit T.wall.k): a wooden palisade with watchtowers at `towers` (x, px) under `roof` instead of the stone wall. */
+    k?: 'palisade'; towers?: number[]; roof?: string };
   jail: FcJail;
   /** Site 12.11 afternoon (fc-map.js GLADE): the forest glade outside the wall below the gate — NOT walkable (the walk grid
    *  ends at the town polygon / the gate passage), drawn as a clearing with a signpost and front trees; `spots` = the

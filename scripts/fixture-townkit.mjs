@@ -8,7 +8,8 @@
 //   - `OBST`, `grid` (levels 0 blocked, 1 town, 2 tier, 3 stairs), `home`, `spawn`: townAt(T, lvMap) = make() of the kit.
 // Without a published kit town the input is the cats fair's own geometry (fc-map.js, itself built on LGTownKitMap since
 // 05.11) restated as a kit spec — the kit is the generalisation of that map; a kit file of the site can be given instead.
-//   node scripts/fixture-townkit.mjs <site copy dir> [--kit=<file of /site/towns/<id>.js>] [--id=d06] [--biome=forest]
+//   node scripts/fixture-townkit.mjs <site copy dir> [--kit=<file of /site/towns/<id>.js>] [--id=d06] [--biome=forest] [--out=test/fixtures/x.json]
+// A kit file's own art hooks (T.art: functions) are dropped — the fixture is numbers and names only.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,7 +90,7 @@ const out = {
   grid: { C: M.C, cols: M.cols, rows: M.rows, G: Array.from(M.G).join(''), lv5Patch: runs },
   home: M.home, spawn,
 };
-writeFileSync(join(ROOT, 'test/fixtures/townkit-map.json'), JSON.stringify(plain(out)) + '\n');
+writeFileSync(opt.out ? resolve(opt.out) : join(ROOT, 'test/fixtures/townkit-map.json'), JSON.stringify(plain(out)) + '\n');
 const lv = [0, 0, 0, 0]; for (const v of M.G) lv[v]++;
 console.log(`townkit fixture (${out.source}): id ${T.id}, biome ${T.biome}, ${L.W}×${L.H}, ${levelled.length} buildings (levels ${levelled.map((b) => b.id + ':' + b.lvl).join(' ')}), ${L.houses.length} houses, ${L.items.length} items, ${L.tiers.length} tiers, ${L.rocks.length} rocks, ${L.water.length} water, ${L.stairs.length} stairs, ${M.OB.length} obstacles, grid ${M.cols}×${M.rows} levels ${lv.join('/')}, lv5 patch ${runs.length} runs → test/fixtures/townkit-map.json`);
 if (!opt.kit) {

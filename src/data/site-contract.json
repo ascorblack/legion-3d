@@ -427,6 +427,33 @@
       "severity": "break"
     },
     {
+      "id": "LGLiveLink (site-live.js: WebSocket /ws, SSE fallback)",
+      "kind": "global",
+      "name": "LGLiveLink",
+      "file": "site-live.js",
+      "keys": [
+        "open"
+      ],
+      "type": "function",
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "site 13.11: app.js opens the live channel through LGLiveLink.open — the bridge (src/bridge/bridge.ts) taps both of its transports; a different live client may use a transport the bridge does not see (no players, chat, expedition, mine updates in 3D)"
+    },
+    {
+      "id": "site-live.js frame {\"op\":\"ev\",\"e\":…,\"d\":…} over new WebSocket(url)",
+      "file": "site-live.js",
+      "re": "const EV = '\\{\"op\":\"ev\",\"e\":\"', EVD = '\",\"d\":';[\\s\\S]*s = new WS\\(w\\.url\\);[\\s\\S]*s\\.onmessage = \\(e\\) => \\{[\\s\\S]*emit\\(t\\.slice\\(EV\\.length, q\\), t\\.slice\\(q \\+ EVD\\.length, -1\\)\\)[\\s\\S]*s = new ES\\(o\\.sse\\(\\)\\)",
+      "severity": "degrade",
+      "why": "the bridge's socket tap (src/bridge/bridge.ts liveFrame) cuts frames exactly like this; a new framing = live events over WebSocket not teed"
+    },
+    {
+      "id": "app.js live link: LGLiveLink.open({ sse: /api/live, ws: (wss|ws)://host/ws })",
+      "file": "app.js",
+      "re": "LGLiveLink\\.open\\(\\{\\s*sse: \\(\\) => \\(window\\.LG_BASE \\|\\| ''\\) \\+ '/api/live' \\+ q,\\s*ws: \\(\\) => \\(wsOn\\(\\) \\? \\{ url: \\(location\\.protocol === 'https:' \\? 'wss://' : 'ws://'\\) \\+ location\\.host \\+ '/ws'",
+      "severity": "degrade",
+      "why": "the bridge taps sockets to /ws on the page's host (src/bridge/bridge.ts isLiveWs) and EventSources to /api/live"
+    },
+    {
       "id": "SSE event me",
       "re": "addEventListener\\(\\s*['\"`]me['\"`]",
       "why": "hero state",
@@ -1385,9 +1412,9 @@
     {
       "id": "city.js LGCity.wall() { x, y, own, glade }",
       "file": "city.js",
-      "re": "own: TOWN\\.acc \\? !!TOWN\\.acc\\.own : true[\\s\\S]{0,120}glade: \\(S\\.cats && S\\.cats\\.glade\\) \\|\\| null",
+      "re": "town: S\\.town \\|\\| 'fair', own: TOWN\\.acc \\? !!\\(TOWN\\.acc\\.own \\|\\| TOWN\\.acc\\.home \\|\\| TOWN\\.acc\\.why === 'home' \\|\\| TOWN\\.acc\\.why === 'camp'\\) : true[\\s\\S]{0,120}glade: \\(S\\.cats && S\\.cats\\.glade\\) \\|\\| null",
       "severity": "degrade",
-      "why": "the gate point, the own-town flag and the cats fair's glade the monsters stand in (src/net/citymon.ts cityMonWall)"
+      "why": "the gate point, the own-town flag (13.11: own, home, why home / camp — the site decides, cityMonWall reads W.own as it is) and the glade the monsters stand in: the cats fair's and, since 13.11, a Town Kit town's (S.cats = the tk-city.js result with glade) (src/net/citymon.ts cityMonWall)"
     },
     {
       "id": "fc-map.js GLADE (polygon, sign, front, 13 spots)",

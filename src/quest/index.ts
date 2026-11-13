@@ -10,7 +10,7 @@ import { skScheme, skMine, pageSchemes, type SchemeOf } from './schemes';
 import type { Store, Actions, QuestView } from '../contracts';
 import { onPageKeys } from '../engine/input';
 import type { MountQuestHud, QuestHud } from '../contracts/modules';
-import { bossName, deadIn, deadText, questWarnings, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, q2Of, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload } from './model';
+import { bossName, deadIn, deadText, questWarnings, emptyParty, EMPTY_PARTY, eventInstructions, mergeOwn, q2Of, PUZZLE_ST, puzzleMy, puzzleAnsText, puzzleTask, puzzleTyped, type QuestPuzzle, type QuestPayload, type QuestLoot } from './model';
 import { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, type SiteControls, type SiteBtn } from './siteui';
 import { setHtml } from '../core/html';
 export { readSite, pressSite, feedSiteSay, primeSite, siteQaOn, chatChips, hotButtons, findSite, qaSig, siteScope } from './siteui';
@@ -90,12 +90,27 @@ export function cardOf(v: QuestView | null, me: { login: string; role: string; q
   if (c && D) return { ...c, urge: { kind: 'info', text: '💀 Пал в бою · ' + deadText(D) } };
   return c;
 }
+/** quest.js 13.11 LT_RAR: the loot vote's headline by rarity. */
+export const LOOT_RAR: Record<string, [string, string]> = { legendary: ['🌟', 'Легендарная добыча'], epic: ['🎁', 'Эпическая добыча'] };
+/**
+ * The loot vote (quest.js lootHtml, 13.11): rarity headline, the item, own vote — `my` is the login voted for ('*' = to a
+ * random member; older views: true), its name from the nominee list `nl` / the leaders `top`.
+ */
+export function lootCard(L: QuestLoot, inParty: boolean): Card {
+  const R = LOOT_RAR[String(L.rar || '')] || ['🎁', 'Делёж вещи'];
+  const my = L.my, nm = my === '*' ? 'случайному' : typeof my === 'string' && my ? String(((L.nl || []).find((c) => c[0] === my) || (L.top || []).find((c) => c[0] === my) || [my, my])[1]) : '';
+  return { icon: R[0], title: `${R[1]}: ${L.name}`, right: '', until: L.until,
+    urge: nm ? { kind: 'ok', text: `твой голос: ${nm}` } : my ? { kind: 'ok', text: 'твой голос учтён' } : { kind: 'info', text: 'Голосуй в чате, кому отдать вещь (номер, ник или «случайно»)' }, inParty };
+}
+
 function cardOf0(v: QuestView | null, me: { login: string; role: string; q2?: boolean }, baseCmd: (role: string) => string, fresh?: QuestView | null): Card | null {
   if (!v || !v.on) return null;
   const q = v as any, inParty = q.party === 'in';
   // 28.10 (empty-party, quest.js v.nb): the gather ended with nobody — the site shows only this, nothing else of the view
   if (emptyParty(q)) return { icon: '⏳', title: EMPTY_PARTY.title, right: '', urge: { kind: 'info', text: EMPTY_PARTY.back }, note: EMPTY_PARTY.note, inParty: false, empty: true };
   const BN = bossName(fresh as any, q);   // 28.10 (prologue-boss-name): the channel's Prologue boss, default «Закхуэль»
+  // 13.11 (quest.js tabHtml): a loot vote that runs while a battle / boss / lair is still shown goes on top of it
+  if (q.loot && (q.b || q.bg || q.lair)) return lootCard(q.loot, inParty);
   if (q.b && !(q.b.gb && q.bg)) {
     const b = q.b, m = meIn(b, me), multi = !!(b.cr?.fr?.length > 1) || !!b.two;
     const cmd = (() => { const c = baseCmd(m.role) || 'удар'; return multi && m.side && c !== 'лечить' ? `${c} ${SIDE_CMD[m.side] || ''}`.trim() : c; })();
@@ -165,7 +180,7 @@ function cardOf0(v: QuestView | null, me: { login: string; role: string; q2?: bo
       opts: (V.opts || []).map((o: any) => ({ n: +o[0], label: String(o[1]), votes: +o[3] || 0, my: V.my === o[0] })),
       urge: V.my ? { kind: 'ok', text: `твой голос: ${V.my}` } : { kind: 'say', text: 'номер варианта' }, inParty };
   }
-  if (q.loot) return { icon: '🎁', title: `Делёж: ${q.loot.name}`, right: '', until: q.loot.until, urge: q.loot.my ? { kind: 'ok', text: 'твой голос учтён' } : { kind: 'info', text: 'Голосуй в чате, кому отдать вещь (номер, ник или «случайно»)' }, inParty };
+  if (q.loot) return lootCard(q.loot, inParty);
   // 28.10 (quest.js gwName): the Halloween gather at the portal — join with «портал»
   const hwG = !!(q.gather && q.gather.hw);
   const urge: Card['urge'] = q.gather && !inParty ? { kind: 'say', text: hwG ? 'портал' : 'поход' } : undefined;

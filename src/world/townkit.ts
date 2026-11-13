@@ -19,7 +19,7 @@ import { toX, toZ } from './coords';
 import { M } from './batch';
 import { type Ctx, box, shade } from './kit';
 import { FC_H, FC_MH, FC_PIER, FC_POND } from './fcground';
-import { polyGeo, stripGeo, hash, ICO1, fcRails, fcStreets, fcWall, fcBank, fcFlight } from './faircats';
+import { polyGeo, stripGeo, hash, ICO1, fcRails, fcStreets, fcWall, fcBank, fcFlight, fcGlade } from './faircats';
 
 type P2 = [number, number];
 const zOf = (y: number) => toZ(y);
@@ -55,6 +55,8 @@ export function buildKitTerrain(k: Ctx, sc: FairCatsScene, kit: KitInfo, groundA
     const g = polyGeo(sc.town, 0, kit.water.map((w) => w.poly)); k.b.add('lowPaving', g, M(0, 0, 0), '#ffffff', 2.4); g.dispose();
     const f = polyGeo(big, 0, [sc.town]); k.b.add('lowPaving', f, M(0, 0, 0), shade(TIER_TINT[kit.biome] ?? '#ffffff', -0.38), 2.4); f.dispose();
   } else { const g = polyGeo(big, 0, kit.water.map((w) => w.poly)); k.b.add('lowPaving', g, M(0, 0, 0), '#ffffff', 2.4); g.dispose(); }
+  // ---- the forest glade below the gate (site 13.11: tk-art.js gladeGround, the same as the cats fair's)
+  if (sc.glade) { k.b.tag = 'terrain:glade'; fcGlade(k, sc.glade); }
   // ---- tiers
   k.b.tag = 'terrain:tiers';
   const tint = TIER_TINT[kit.biome] ?? '#e6f0dc';

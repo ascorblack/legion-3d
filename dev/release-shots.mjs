@@ -14,8 +14,22 @@ const glArgs = opt.gpu === 'native' ? [] : opt.gpu ? ['--use-angle=d3d11', '--en
 // js:<code> as the 5th field: run in the page after the wait (camera placement via the dev hook), then wait 2.5 s
 const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;g.ui?.setHudVisible?.(false);g.player.teleport(${x},${y});g.ctx?.uiHost?.setCameraMode?.('${mode}');g.rig.setMode('${mode}',{instant:true});g.rig.yaw=${yaw};g.rig.pitch=${pitch};${extra}`;
 // the longest boom, no camera colliders (a framing over walls / towers), a field of view, interaction off
+// the hero and every name tag out of the frame (a view of the place), interaction outline off
+const HIDE = 'g.meAv.root.visible=false;g.labels.root.visible=false;g.interact.setEnabled(false);setTimeout(()=>{g.meAv.root.visible=false;},1500);';
+const FPV = (fov) => `g.vm.root.visible=false;g.labels.root.visible=false;g.interact.setEnabled(false);g.rig.fov=${fov};setTimeout(()=>{g.vm.root.visible=false;g.labels.root.visible=false;},1500);`;
 const CAMX = (fov) => `g.rig.zoom(10);g.rig.setColliders([]);g.rig.setColliderBoxes([]);g.rig.fov=${fov};g.interact.setEnabled(false);`;
-const SHOTS = opt.set === '080' ? [
+const SHOTS = opt.set === '081' ? [
+  // 0.8.1 (site 13.11): the Town Kit town «Рябиново» (?tk=d04 = test/fixtures/townkit-d04.json from /site/towns/d04.js): the wooden
+  // palisade with watchtowers, the rowans (the big one with its bench), berry racks and beehives, the glade beyond the gate.
+  // First person with the weapon and every name tag hidden (FPV): views of the town. g.rig.yaw: forward = (−sin yaw, −cos yaw)
+  // in (x, z) — 0 north, π/2 west, π south. Run with --hide.
+  ['game', 'tk=d04&magic=1&bots=0&hwc=off&tod=12:00', 'tk-rowan', 15000, at(3050, 2280, 'fp', 0.42, 0.12, FPV(68))],
+  ['game', 'tk=d04&magic=1&bots=0&hwc=off&tod=12:00', 'tk-tower', 15000, at(2700, 2700, 'fp', 3.68, 0.18, FPV(68))],
+  ['game', 'tk=d04&magic=1&bots=0&hwc=off&tod=12:00', 'tk-tower-w', 15000, at(1250, 2800, 'fp', 2.47, 0.16, FPV(68))],
+  ['game', 'tk=d04&magic=1&bots=0&hwc=off&tod=12:00', 'tk-hives', 15000, at(2660, 720, 'fp', 0, -0.35, FPV(58))],
+  ['game', 'tk=d04&magic=1&bots=0&hwc=off&tod=12:00', 'tk-racks', 15000, at(2560, 2110, 'fp', 0, -0.08, FPV(66))],
+  ['game', 'tk=d04&magic=1&bots=0&hwc=off&tod=12:00', 'tk-glade', 15000, at(2000, 3380, 'tp', 0, -0.35, HIDE + CAMX(70) + 'g.labels.root.visible=false;')],
+] : opt.set === '080' ? [
   ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&cm=1', 'glade-in', 16000, at(2810, 3330, 'tp', 0, -0.25, 'g.rig.dist=9;g.interact.setEnabled(false);')],
   ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00&cm=1', 'glade-in2', 16000, at(2700, 3300, 'tp', 0.0, -0.2, 'g.rig.dist=7;g.interact.setEnabled(false);')],
   // 0.8.0 (site 12.11 afternoon): «Монстры у стен» (?cm=1 = the live 12.11 view) in the glade beyond the gate, from the gate

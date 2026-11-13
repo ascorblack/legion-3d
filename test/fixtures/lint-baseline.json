@@ -255,5 +255,21 @@
   "overlap": 39,
   "plane": 0,
   "ledge": 0
+ },
+ "tk-d04": {
+  "float": 0,
+  "loose": 0,
+  "sunk": 0,
+  "overlap": 0,
+  "door": 0,
+  "stairs": 0,
+  "rails": 0,
+  "onramp": 0,
+  "zfight": 14,
+  "uv": 1,
+  "plane": 0,
+  "ledge": 0,
+  "lamp": 0,
+  "outline": 0
  }
 }

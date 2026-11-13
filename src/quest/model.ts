@@ -187,7 +187,9 @@ export interface QuestDungeon {
 }
 /** live 31.10 (inside the finished boss view): `rar` rarity, `top` the leaders [login, name, votes], `rnd` the weight of
  *  «случайно», `my` '' / '*' (random) / the login voted for */
-export interface QuestLoot { name: string; until: number; n?: number; my?: boolean | number | string; rar?: string; rnd?: number; top?: [string, string, number][] }
+export interface QuestLoot { name: string; until: number; n?: number; my?: boolean | number | string; rar?: string; rnd?: number; top?: [string, string, number][];
+  /** site 13.11 (quest.js lootHtml): nominees [login, name, …], item info { cls, st: [label, value][] }, vote id */
+  nl?: [string, string, ...unknown[]][]; info?: { cls?: string; st?: [string, string][] }; id?: string | number }
 export interface ShopItem { id: string; name: string; rarity?: string; price: number; qty: number; curio?: boolean; slot?: string; stats?: Record<string, number>; [k: string]: unknown }
 export interface QuestShop { name?: string; icon?: string; items: ShopItem[] }
 /** Place buttons (the streamer's siteBtns): t = chat line sent as is, g = group ('', 'tg', 'act', 'esc'). */
