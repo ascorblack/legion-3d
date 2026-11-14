@@ -37,11 +37,15 @@ so the extension must treat every internal API as unstable and degrade gracefull
 - City files are lazy-loaded on first open of the City tab (`cityfair.js`, `citymap.js`, `cityart.js`,
   `citygl.js` (Pixi), `itemgrid.js`, `site-chat.js`, `citystore.js`, the building windows, `city.js`).
 - **Building windows (31.10).** The windows of the City's buildings are separate files: `/site/cityshop.js` (the shared shop code:
-  `STOCK`, the buy card `buyAsk`, `stockOf / goodsOf / coinsFor / lockedHere`, `/api/city/stock`, `/api/cityBuy`, `/api/buymat` →
+  `STOCK`, the buy card `buyAsk`, `stockOf / goodsOf / coinsFor / lockedHere`, `/api/city/stock`, `/api/cityBuy` (`/api/buymat` until 13.11) →
   `window.LGCityShop(C)`) and one `/site/b-<id>.js` per id of the page data `LG_CITYV.bl` (`forge tent shop magic hall board trainer`,
   version `LG_CITYV.bw`; `b-board.js` has the board reading overlay `.cy-read`, `b-hall.js` `/api/mine/hall` + `/api/mineHall`) →
   `window.LGCityBuildings[id](C, SH)`; `/site/citystore.js` is the Storage window. app.js builds the paths from the list, so
   `scripts/drift.mjs` reads `LG_CITYV` from the page (`cityModuleUrls`). Behaviour unchanged; `LGCity.panel(id)` still opens them.
+- **Enchant materials are not sold (14.11).** POST `/api/buymat` is gone (cityshop.js, b-shop.js, app.js forge window). The forge
+  stock still lists `mats` (star / sphere): their tag reads «Не продаётся» and buyAsk says «X - не продаётся · Звёзды и сферы
+  находят в походе, у боссов, в Шахте, на рыбалке и за ежедневные задания.» (only «Понятно»). `can = !!h && csOn() && c > 0`;
+  b-shop.js has no material tiles any more. 3D: src/rooms/common/stock.ts offerOf kind `nosale`; the rows room has no materials.
 - **Jail (30.10, flag legionary.jailPublic).** `/api/me` top level `jail = {reason, until, untilText}` (this hero is a prisoner) and
   `jl` (the jail is open for this viewer); `GET /api/jail` → `{ok, list:[{l,n,lv,lk,g,gh,aw,u}], n, staff?, why?}`, SSE `jail` (same).
   citymap.js `LOW.jail {x0,x1,top,base,c0,c1,ct,back,fy,door,seats[8],walk,move}` — 31.10 beyond the canal by the lower fence
@@ -174,7 +178,8 @@ Since 13.11 app.js opens it through `/lib/site-live.js` `window.LGLiveLink.open(
 - Polls (`/api/me`, `/api/city/state`, mine state, chats) run only when `window.LGPollOk()` (live link down for good: ≥ 3 failures or
   down > 20 s) and never during `LGSiteUi.hold.left()` (503 / 429), with `POLL_STEPS` 10 / 15 / 30 / 60 s backoff.
 - The bridge taps both (src/bridge/bridge.ts): the bus gets `sse:<name>` either way and `live:kind` = 'ws' | 'sse'. For our account
-  `hero.lw` is not set (13.11), so the site uses SSE. `node e2e/contract.mjs` prints `LIVE transport=… bus me=… city=…`.
+  `hero.lw` is not set (13.11), so the site uses SSE; since 14.11 it is, and the live contract shows `LIVE transport=ws`.
+  `node e2e/contract.mjs` prints `LIVE transport=… bus me=… city=…`. Teed names: me city mine q j sm style jail dm pz.
 
 Named events:
 - `me` — full `{hero,…}` snapshot like `/api/me`.
@@ -182,6 +187,11 @@ Named events:
   `g` (gone: `[login]`), `n` (players count), `chat` (`[{id,s,l,n,t,at,c,cn,k?,ev?,to?}]`), `chatDel`, `c` (cursor),
   `tr…` (trade).
 - `mine`, `j` (journal entry), `q` (quest view: `{on, dl (stream delay s), late[], now, …}`), `sm` (streamer).
+- `ann` — `{ an, nw? }` announcements; 14.11: with hero `ak` the new ones (`nw`, by `p`) first run once in a ticker line
+  (`window.LGAnnTick`: `now()` = `{ p, t, g }`, `held(a)`), their card is held meanwhile (src/features/announce.ts readTicker).
+- `pz` — 14.11 short maintenance pause: `{ on:false, warnAt }` → countdown `.lg-pz-warn` «Через N с - короткие технические
+  работы…»; `{ on:true }` → the full-screen `.lg-maint` alertdialog (polls /api/me every 5 s); `/api/me` `ver` changing → the
+  page reloads within 20 s. 3D: src/features/sitepause.ts shows the countdown.
 
 ## City API (POST JSON unless noted)
 - `/api/city/enter {x,y,town}` → `{ok, me{x,y}, town, a[], n, max, chat[], c, tr}`

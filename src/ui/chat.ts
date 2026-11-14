@@ -1055,8 +1055,13 @@ export class Chat {
       this.dTabsMo?.disconnect(); this.dTabsEl?.removeEventListener('click', this.onSiteTab);
       this.dTabsEl = tabs; tabs.addEventListener('click', this.onSiteTab);
       if (typeof MutationObserver === 'function') {
-        this.dTabsMo = new MutationObserver(() => { if (this.mine && tabs.hidden && b.querySelector<HTMLElement>('.cy-chat-p')?.hidden !== false) tabs.hidden = false; });
-        this.dTabsMo.observe(tabs, { attributes: true, attributeFilter: ['hidden'] });
+        this.dTabsMo = new MutationObserver(() => {
+          if (this.mine && tabs.hidden && b.querySelector<HTMLElement>('.cy-chat-p')?.hidden !== false) tabs.hidden = false;
+          // site 14.11 (site-chat.js tabsApply / tabsReset): the player may reorder the tabs — the site re-appends its
+          // [data-tab] buttons, which would leave our «⛏ Шахта» in front of «Общий»; keep it last, where it was put
+          if (this.dBtn && this.dBtn.parentElement === tabs && tabs.lastElementChild !== this.dBtn) tabs.appendChild(this.dBtn);
+        });
+        this.dTabsMo.observe(tabs, { attributes: true, attributeFilter: ['hidden'], childList: true });
       }
     }
     this.dockMineView();

@@ -553,11 +553,11 @@
       "why": "buy for coins from the 3D shop's card (POST {item, price, n?, town?} — only on the player's «Да»)"
     },
     {
-      "id": "/api/buymat",
+      "id": "cityshop.js materials not sold (14.11)",
       "file": "cityshop.js",
-      "re": "'/api/buymat', \\{ mat: it\\.mat",
+      "re": "const coinsFor = \\(it, h\\) => \\{ const b = it\\.mat \\? 0 : [\\s\\S]*function buyAsk\\([\\s\\S]{0,1600}if \\(it\\.mat\\) \\{[\\s\\S]{0,500}- не продаётся</p><p class=\"note\">Звёзды и сферы находят в походе",
       "severity": "degrade",
-      "why": "enchant materials from the 3D forge's card (POST {mat, ack?} — only on the player's «Да»)"
+      "why": "14.11: POST /api/buymat is gone — enchant materials are never sold; the 3D card says «не продаётся» and where they are found, and sends nothing (src/rooms/common/stock.ts offerOf kind 'nosale', MAT_FIND)"
     },
     {
       "id": "DOM .tr-win",
@@ -1100,11 +1100,11 @@
       "why": "08.11: booth samples are bought for coins through buyAsk — the 3D tent sends the same good (src/rooms/common/stock.ts lookItem / sampleOffer)"
     },
     {
-      "id": "cityshop.js buyAsk can (looks too)",
+      "id": "cityshop.js buyAsk can (coins only)",
       "file": "cityshop.js",
-      "re": "const can = !!h && \\(it\\.mat \\? !!\\(h\\.ef && c\\) : csOn\\(\\) && c > 0\\);",
+      "re": "const can = !!h && csOn\\(\\) && c > 0;",
       "severity": "degrade",
-      "why": "08.11: «Купить» exactly when the site can — `it.look` no longer excluded (src/rooms/common/stock.ts offerOf)"
+      "why": "14.11: «Купить» exactly when the site can — a hero, coin purchases (`cs`) and a coin price; materials never (src/rooms/common/stock.ts offerOf)"
     },
     {
       "id": "cityshop.js cityBuy body {item, price, n?, town?}",
@@ -1366,6 +1366,42 @@
       "re": "function guAnn\\(\\)[\\s\\S]{0,1200}'gu-ann'[\\s\\S]{0,600}'gu-anh'[\\s\\S]{0,300}'gu-ant'[\\s\\S]{0,300}'gu-anx'",
       "severity": "degrade",
       "why": "src/features/announce.ts reads the cards the site renders in its «Игра» HUD (under our canvas) and presses their ×"
+    },
+    {
+      "id": "LGAnnTick (the announcement ticker, 14.11)",
+      "kind": "keys",
+      "obj": "LGAnnTick",
+      "file": "app.js",
+      "keys": [
+        "held",
+        "event",
+        "now",
+        "queue"
+      ],
+      "when": "lazy",
+      "severity": "degrade",
+      "why": "14.11: hero `ak` — a new announcement runs once as a ticker line (`.ann-tk`, under our canvas) and its card is held meanwhile; src/features/announce.ts readTicker shows LGAnnTick.now() as a card"
+    },
+    {
+      "id": "app.js ticker line { p, t, g } / guAnn holds it",
+      "file": "app.js",
+      "re": "ANT\\.q\\.push\\(\\{ p: String\\(a\\.p\\), t: String\\(a\\.t\\), g: !!a\\.g \\}\\)[\\s\\S]*now: \\(\\) => \\(ANT\\.cur \\? \\{ \\.\\.\\.ANT\\.cur \\} : null\\)[\\s\\S]*!\\(T && T\\.held\\(a\\)\\)",
+      "severity": "degrade",
+      "why": "src/features/announce.ts readTicker reads { p, t, g } (head «Объявление» / «Объявление игры», newlines → « · » like antNext)"
+    },
+    {
+      "id": "app.js live event pz (maintenance pause countdown)",
+      "file": "app.js",
+      "re": "function pauseWarn\\(at\\)[\\s\\S]{0,600}`Через \\$\\{left\\} с - короткие технические работы \\(меньше минуты\\)\\. Ничего не потеряется\\.`[\\s\\S]*ES\\.addEventListener\\('pz', \\(e\\) => \\{ try \\{ pauseEvent\\(JSON\\.parse\\(e\\.data\\)\\)",
+      "severity": "degrade",
+      "why": "14.11: the bridge tees `pz` (src/bridge/bridge.ts) and src/features/sitepause.ts shows the site's countdown (`.lg-pz-warn` lies under our canvas); the pause itself is the site's .lg-maint dialog"
+    },
+    {
+      "id": "site-chat.js tabsApply reorders only [data-tab]",
+      "file": "site-chat.js",
+      "re": "function tabsApply\\(box, order\\) \\{[\\s\\S]{0,200}querySelectorAll\\('\\[data-tab\\]'\\)[\\s\\S]{0,500}for \\(const b of want\\) bar\\.appendChild\\(b\\);",
+      "severity": "degrade",
+      "why": "14.11: the player reorders the chat tabs; our dock's «⛏ Шахта» (no data-tab) is put back last by src/ui/chat.ts dockMineAttach"
     },
     {
       "id": "site-chat.js mute reason (askWhy → LGSiteUi.askReason, `reason`)",

@@ -49,7 +49,7 @@ async function build(id: string, posts: { path: string; body: any }[] = []) {
   const env: any = {
     building: { id, title: id, hit: [0, 0, 0, 0], door: { x: 0, y: 0 } }, styleId: 'cats', quality: 2, store, actions,
     input: { setGameplay() {} }, interact: { add: (i: any) => { inters.push(i); return () => {}; }, get target() { return target; } },
-    scene: null, itemModels: null, toast() {}, exit() {}, showSitePanel() {}, hideSitePanel() {}, player: () => ({ x: 0, z: 3 }), ench: { coins: { star: 300, sphere: 900 } },
+    scene: null, itemModels: null, toast() {}, exit() {}, showSitePanel() {}, hideSitePanel() {}, player: () => ({ x: 0, z: 3 }),
   };
   const room = SHOPS.includes(id) ? await createShopRoom(env, { stock: stockJson as any }) : await createHybridRoom(env);
   return { room, inters, setTarget: (t: any) => { target = t; } };

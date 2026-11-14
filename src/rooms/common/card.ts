@@ -13,7 +13,7 @@ import { CSS } from '../../ui/styles';
 import { cardHtml } from '../../ui/card';
 import { esc, rarOf, coinStyle, CLASS_NAME } from '../../ui/data';
 import { moneyParts } from '../../ui/money';
-import { offerOf, sampleOffer, buyReq, placeName, tipItem, LOCK_T, type Offer, type PriceEnv, type StockItem, type Booth, type BoothSample } from './stock';
+import { offerOf, sampleOffer, buyReq, placeName, tipItem, LOCK_T, NOSALE_T, type Offer, type PriceEnv, type StockItem, type Booth, type BoothSample } from './stock';
 import { RARITY_HEX } from './items';
 import { setHtml } from '../../core/html';
 
@@ -184,7 +184,12 @@ export class BuyCard {
     if (of.kind === 'locked') {
       price = `<div class="rm-price"><div class="lbl">Цена</div><div class="rm-pts">🔒 ${LOCK_T}</div></div><p class="note warn">${esc(of.note)}</p>`;
       acts = `<button type="button" class="btn ghost" data-close data-primary>Понятно</button>`;
-    } else if (of.kind === 'coins' || of.kind === 'mat') {
+    } else if (of.kind === 'nosale') {
+      // 14.11 (cityshop.js buyAsk `if (it.mat)`): «X - не продаётся» + where the materials are found; only «Понятно»
+      price = `<div class="rm-price"><div class="lbl">Цена</div><div class="rm-pts">${NOSALE_T}</div></div>
+        <p class="note amber">«${esc(v.t === 'good' ? v.it.name : v.s.name)}» — не продаётся. ${esc(of.note)}</p>`;
+      acts = `<button type="button" class="btn ghost" data-close data-primary>Понятно</button>`;
+    } else if (of.kind === 'coins') {
       price = `<div class="rm-price"><div class="lbl">Цена</div>${moneyHtml(of.coins)}${of.thief > 1 ? `<div class="rm-bal">Для тебя за воровство цена ${kx(of.thief)}.</div>` : ''}${of.foreign > 1 && of.kind === 'coins' ? `<div class="rm-bal">${of.home ? 'Край' : 'Чужой округ'}: цена ${kx(of.foreign)}.</div>` : ''}${of.rank ? `<div class="rm-bal">Звание не ниже «${esc(of.rank)}».</div>` : ''}</div>`;
       if (ask) {
         const have = +(h?.money || 0), qn = Math.max(1, Math.min(of.qmax || 1, v.qn)), sum = of.coins * qn;

@@ -15,7 +15,7 @@ import type { Hero } from '../src/contracts';
 
 const ST = stockJson as unknown as CityStock;
 const heroOf = (patch: Record<string, unknown> = {}): Hero => ({ ...JSON.parse(JSON.stringify((meJson as any).hero)), ...patch });
-const env = (h: Hero | null, o: Partial<PriceEnv> = {}): PriceEnv => ({ hero: h, ench: { coins: { star: 300, sphere: 900 } }, ...o });
+const env = (h: Hero | null, o: Partial<PriceEnv> = {}): PriceEnv => ({ hero: h, ...o });
 
 /* ---------------------------------------------------------------- minimal fake DOM (canvas + elements) */
 beforeAll(() => {
@@ -95,14 +95,14 @@ describe('stock', () => {
     expect(offerOf(mid, 'forge', e).coins).toBe(128);
   });
 
-  it('enchant materials: /api/buymat for heroes with ef, stream otherwise', () => {
+  it('enchant materials (14.11): never sold — «не продаётся», no request, whatever the hero has', () => {
     const star = ST.forge!.mats![0] as StockItem;
-    const o = offerOf(star, 'forge', env(heroOf({ money: 5000 })));
-    expect(o.kind).toBe('mat'); expect(o.coins).toBe(300);
-    expect(o.req).toEqual({ path: '/api/buymat', body: { mat: 'star' } });
-    expect(offerOf(star, 'forge', env(heroOf({ money: 5000, thK: 2 }))).req!.body).toEqual({ mat: 'star', ack: 1 });
-    expect(offerOf(star, 'forge', env(heroOf({ ef: undefined }))).kind).toBe('closed');
-    expect(offerOf(star, 'forge', env(heroOf({ ef: undefined }))).note).toBe('За монеты - когда откроется заточка.');
+    for (const h of [heroOf({ money: 5000, cs: 1 }), heroOf({ money: 5000, thK: 2, cs: 1 }), heroOf({ ef: undefined })]) {
+      const o = offerOf(star, 'forge', env(h));
+      expect(o).toMatchObject({ kind: 'nosale', can: false, req: null, coins: 0, list: 0 });
+      expect(o.note).toMatch(/находят в походе/);
+      expect(coinsFor(star, env(h))).toBe(0);
+    }
   });
 
   it('tent looks: owned → /api/wear, else bought for coins (08.11: look-<booth>-<id>)', () => {
@@ -143,7 +143,7 @@ describe('forge room (offline, fake site)', () => {
     const room = await createShopRoom({
       building: { id: 'forge', title: 'Кузня', hit: [0, 0, 0, 0], door: { x: 0, y: 0 } }, styleId: 'cats', quality: 2, store, actions,
       input: { setGameplay() {} }, interact: { add: (i: any) => { inters.push(i); return () => {}; }, get target() { return target; } },
-      scene: null, itemModels: null, toast() {}, exit() {}, player: () => ({ x: 0, z: 3 }), ench: { coins: { star: 300, sphere: 900 } },
+      scene: null, itemModels: null, toast() {}, exit() {}, player: () => ({ x: 0, z: 3 }),
     }, { stock: ST });
     // budget
     let tris = 0, meshes = 0;

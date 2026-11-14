@@ -69,7 +69,6 @@ const actions: Actions = {
   equip: async () => ({ ok: true }), unequip: async () => ({ ok: true }), use: async () => ({ ok: true }), wear: async () => ({ ok: true }), say: async () => ({ ok: true }),
   async get<T>(path: string): Promise<T> {
     if (path === '/api/city/stock') return stockJson as unknown as T;
-    if (path === '/api/me') return { ok: true, ench: { coins: { star: 300, sphere: 900 } } } as unknown as T;
     return { ok: false } as unknown as T;
   },
   async post<T>(path: string, body: any): Promise<T> {

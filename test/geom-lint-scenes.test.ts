@@ -35,7 +35,7 @@ describe('geometry lint: rooms, mine, expedition', () => {
         const store: any = { hero, me: null, walkers: new Map(), chat: [], online: 1, quest: null, layout: null, on: () => () => {} };
         const env: any = {
           building: { id, title: id, hit: [0, 0, 0, 0], door: { x: 0, y: 0 } }, styleId: 'cats', quality: 2, store, actions: { get: async () => stockJson, post: async () => ({ ok: true }) },
-          input: { setGameplay() {} }, interact: { add: () => () => {}, target: null }, scene: null, itemModels: null, toast() {}, exit() {}, showSitePanel() {}, hideSitePanel() {}, player: () => ({ x: 0, z: 3 }), ench: { coins: { star: 300, sphere: 900 } },
+          input: { setGameplay() {} }, interact: { add: () => () => {}, target: null }, scene: null, itemModels: null, toast() {}, exit() {}, showSitePanel() {}, hideSitePanel() {}, player: () => ({ x: 0, z: 3 }),
         };
         const room: any = SHOPS.includes(id) ? await createShopRoom(env, { stock: stockJson as any }) : await createHybridRoom(env);
         col.addScene(room.root, SKIP);

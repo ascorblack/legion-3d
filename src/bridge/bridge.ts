@@ -60,8 +60,9 @@ declare global {
   };
   Object.defineProperty(w, '__L3D_BUS', { value: bus, configurable: false, enumerable: false, writable: false });
 
-  // jail: who sits in the cage (30.10); dm: the sender of the newest direct message (src/ui/dm.ts toast)
-  const TEE = new Set(['me', 'city', 'mine', 'q', 'j', 'sm', 'style', 'jail', 'dm']);
+  // jail: who sits in the cage (30.10); dm: the sender of the newest direct message (src/ui/dm.ts toast);
+  // pz: a short maintenance pause is coming / on (14.11, app.js pauseEvent — src/features/sitepause.ts countdown)
+  const TEE = new Set(['me', 'city', 'mine', 'q', 'j', 'sm', 'style', 'jail', 'dm', 'pz']);
   const parse = (d: unknown): unknown => { if (typeof d !== 'string') return d; try { return JSON.parse(d); } catch { return d; } };   // keep raw
   /* ---- EventSource: listen ourselves on every source the site opens to /api/live ---- */
   const ES = w.EventSource;

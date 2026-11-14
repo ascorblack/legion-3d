@@ -212,7 +212,7 @@ export class DebugMode {
     out.push({ id: 'city', title: 'Обратно в город', icon: '🏙️', color: '#ffcf6a', sub: 'туда, где ты стоял', go: () => this.exitAll() });
     for (const id of ['forge', 'magic', 'shop', 'tent']) {
       out.push({ id, title: SHOP_TITLES[id] || id, icon: SHOP_ICON[id] || '🏪', color: '#ff8fa3', sub: '3D-лавка · демо-товары',
-        go: () => void this.openPlace(SHOP_TITLES[id] || id, async (rctx) => { const env = envFromCtx(rctx); env.ench = null; return createShopRoom(env, { stock: demoData()?.stock ?? demoStock() }); }, id) });
+        go: () => void this.openPlace(SHOP_TITLES[id] || id, async (rctx) => { const env = envFromCtx(rctx); return createShopRoom(env, { stock: demoData()?.stock ?? demoStock() }); }, id) });
     }
     const hyb = ctx.registries.rooms.get('hybrid');
     for (const [id, [title, icon]] of Object.entries(HYBRID_RU)) {

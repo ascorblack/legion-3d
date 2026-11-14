@@ -5,12 +5,17 @@
  * `lgAnnX`) while the hero walks in the City (guAnnCity: no window, not jailed, not in the mine / fishing). That HUD lies
  * under our canvas, so the 3D mirrors what the site renders there: the same cards, read from the site's DOM, and its ×
  * presses the site's own close button (a local list on the site — nothing is sent). No site cards → nothing here.
+ *
+ * Site 14.11 (app.js LGAnnTick, hero `ak`): a NEW announcement first runs once as a ticker line (`.ann-tk` on <body>,
+ * under our canvas too) and its card is held back while it runs (guAnn skips `LGAnnTick.held(a)`). The 3D shows the
+ * ticker's current line (`LGAnnTick.now()` = { p, t, g }) as a card of its own without ×, so the announcement is not
+ * invisible for the length of the run; the site's own card follows when the ticker is done.
  */
 import { coreFeature } from './types';
 import { esc } from '../ui/data';
 import { setHtml } from '../core/html';
 
-export interface Ann { id: string; head: string; text: string; game: boolean }
+export interface Ann { id: string; head: string; text: string; game: boolean; /** The site's ticker line (14.11): no × */ tick?: boolean }
 /** The site's rendered cards (only while its box is shown: guAnn sets `hidden` when it is off). */
 export const ANN_BOX = '.gu-an';
 export function readAnns(root: Pick<Document, 'querySelector'> | null | undefined): Ann[] {
@@ -24,6 +29,15 @@ export function readAnns(root: Pick<Document, 'querySelector'> | null | undefine
     out.push({ id: String(id), head: it.querySelector('.gu-anh')?.textContent || 'Объявление канала', text, game: !!it.classList?.contains('gu-ann-g') });
   }
   return out;
+}
+/** The announcement the site's ticker runs now (app.js LGAnnTick.now(), 14.11), as the ticker words it. */
+export function readTicker(win: unknown): Ann | null {
+  const T = (win as { LGAnnTick?: { now?: () => unknown } } | null | undefined)?.LGAnnTick;
+  type Cur = { p?: unknown; t?: unknown; g?: unknown };
+  let c: Cur | null;
+  try { c = T && typeof T.now === 'function' ? (T.now() as Cur | null) : null; } catch { c = null; }
+  if (!c || c.p == null || !c.t) return null;
+  return { id: 'tk:' + String(c.p), head: c.g ? 'Объявление игры' : 'Объявление', text: String(c.t).replace(/\s*\n+\s*/g, ' · '), game: !!c.g, tick: true };
 }
 export const annKey = (list: readonly Ann[]): string => list.map((a) => a.id + '\u0001' + a.text).join('\u0002');
 /** Press the site's × of one card (app.js annClose: its localStorage list, then guAnn repaints). */
@@ -42,6 +56,7 @@ const CSS = `.l3d-ann{position:absolute;top:96px;left:50%;transform:translateX(-
 .l3d-ann .it.g{box-shadow:0 0 0 1.5px #7fd6e6aa,0 8px 22px #0007}
 .l3d-ann b{display:block;color:#ffcf6a;font:800 11px/1.2 'Nunito',sans-serif;letter-spacing:.03em;text-transform:uppercase;margin-bottom:2px}
 .l3d-ann .it.g b{color:#7fd6e6}
+.l3d-ann .it.tk{padding-right:12px;box-shadow:0 0 0 1.5px #ffcf6acc,0 8px 22px #0007}
 .l3d-ann p{margin:0;overflow-wrap:anywhere;white-space:pre-line}
 .l3d-ann button{position:absolute;top:6px;right:6px;width:24px;height:24px;border:0;border-radius:8px;background:#ffffff14;color:#f7eadf;font:700 14px/1 sans-serif;cursor:pointer}
 .l3d-ann button:hover,.l3d-ann button:focus-visible{background:#ffffff2e;outline:none}`;
@@ -62,11 +77,15 @@ export default coreFeature({
     });
     const tick = () => {
       // the site shows its cards only while the hero walks in the City; the 3D: only while the street is on screen
-      const list = !ctx.state.classic && !ctx.state.overlay && !ctx.rooms?.current ? readAnns(document) : [];
+      const street = !ctx.state.classic && !ctx.state.overlay && !ctx.rooms?.current;
+      const tk = street ? readTicker(window) : null;
+      const list = street ? (tk ? [tk, ...readAnns(document)].slice(0, 2) : readAnns(document)) : [];
       const k = annKey(list);
       if (k !== key) {
         key = k;
-        setHtml(box, list.map((a) => `<div class="it${a.game ? ' g' : ''}" role="note"><b>${esc(a.head)}</b><p>${esc(a.text)}</p><button type="button" data-id="${esc(a.id)}" aria-label="Закрыть объявление" title="Закрыть">×</button></div>`).join(''));
+        setHtml(box, list.map((a) => a.tick
+          ? `<div class="it tk${a.game ? ' g' : ''}" role="status"><b>${esc(a.head)}</b><p>${esc(a.text)}</p></div>`
+          : `<div class="it${a.game ? ' g' : ''}" role="note"><b>${esc(a.head)}</b><p>${esc(a.text)}</p><button type="button" data-id="${esc(a.id)}" aria-label="Закрыть объявление" title="Закрыть">×</button></div>`).join(''));
       }
       box.hidden = !list.length;
     };

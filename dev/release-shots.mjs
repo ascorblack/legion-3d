@@ -18,7 +18,16 @@ const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;
 const HIDE = 'g.meAv.root.visible=false;g.labels.root.visible=false;g.interact.setEnabled(false);setTimeout(()=>{g.meAv.root.visible=false;},1500);';
 const FPV = (fov) => `g.vm.root.visible=false;g.labels.root.visible=false;g.interact.setEnabled(false);g.rig.fov=${fov};setTimeout(()=>{g.vm.root.visible=false;g.labels.root.visible=false;},1500);`;
 const CAMX = (fov) => `g.rig.zoom(10);g.rig.setColliders([]);g.rig.setColliderBoxes([]);g.rig.fov=${fov};g.interact.setEnabled(false);`;
-const SHOTS = opt.set === '081' ? [
+const SHOTS = opt.set === '082' ? [
+  // 0.8.2 (site 14.11): enchant materials are no longer sold — the forge's star / sphere read «не продаётся» and their card
+  // says where they are found (only «Понятно», nothing is sent); the rows' counter carries potions only. The HUD: a new
+  // announcement while the site's ticker runs it (window.LGAnnTick, hero `ak`) and the maintenance-pause countdown (`pz`).
+  // Run WITHOUT --hide (the card and the HUD lines are the subject); 960×540 for the review.
+  ['rooms', 'room=forge&ms=0&aim=23', 'forge-mats', 6000],
+  ['rooms', 'room=forge&ms=0&aim=23&card=1', 'forge-mat-card', 6000],
+  ['rooms', 'room=shop&ms=0&cam=0.3,1.55,1.0&look=0,0.9,-1.9', 'rows-counter', 6000],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00', 'hud-ticker-pause', 14000, 'js:const g=window.__l3dGame;g.player.teleport(2880,2350);g.rig.setMode("tp",{instant:true});g.rig.yaw=0;g.rig.pitch=-0.2;g.rig.dist=6;window.LGAnnTick={held:()=>false,event(){},queue:()=>[],now:()=>({p:"d1",t:"Сегодня в 20:00 — турнир на арене!\\nПриходите всей гильдией",g:false})};window.__L3D_BUS.emit("sse:pz",{on:false,warnAt:Date.now()+45000});'],
+] : opt.set === '081' ? [
   // 0.8.1 (site 13.11): the Town Kit town «Рябиново» (?tk=d04 = test/fixtures/townkit-d04.json from /site/towns/d04.js): the wooden
   // palisade with watchtowers, the rowans (the big one with its bench), berry racks and beehives, the glade beyond the gate.
   // First person with the weapon and every name tag hidden (FPV): views of the town. g.rig.yaw: forward = (−sin yaw, −cos yaw)

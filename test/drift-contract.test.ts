@@ -75,11 +75,11 @@ describe('site contract', () => {
     expect(cityModuleUrls('<script>window.LG_CITYV={broken</script>', 'https://h')).toEqual([]);
   });
   it('the shop / jail checks fail on a site without the 31.10 modules and pass on one with them', () => {
-    const checks = contract.checks.filter((c: any) => ['/api/cityBuy', '/api/buymat', '/api/city/stock', 'DOM .cy-read'].includes(c.id));
+    const checks = contract.checks.filter((c: any) => ['/api/cityBuy', 'cityshop.js materials not sold (14.11)', '/api/city/stock', 'DOM .cy-read'].includes(c.id));
     expect(checks.length).toBe(4);
     const old = { '/site/city.js': "X.act('/api/cityBuy', { item: it.id, price: c })", '/site/app.js': '' };
-    expect(checkContract(old, { checks }).map((x: any) => x.id).sort()).toEqual(['/api/buymat', '/api/city/stock', '/api/cityBuy', 'DOM .cy-read']);
-    const now = { ...old, '/site/cityshop.js': "C.X.api('/api/city/stock'); C.X.act('/api/buymat', { mat: it.mat }); C.X.act('/api/cityBuy', { item: it.id, price: c })", '/site/b-board.js': "r.className = 'cy-read'" };
+    expect(checkContract(old, { checks }).map((x: any) => x.id).sort()).toEqual(['/api/city/stock', '/api/cityBuy', 'DOM .cy-read', 'cityshop.js materials not sold (14.11)']);
+    const now = { ...old, '/site/cityshop.js': "C.X.api('/api/city/stock'); const coinsFor = (it, h) => { const b = it.mat ? 0 : +it.coins || 0; }; function buyAsk(it) { if (it.mat) { q.innerHTML = `<p class=\"lead\">«${esc(nm)}» - не продаётся</p><p class=\"note\">Звёзды и сферы находят в походе`; } C.X.act('/api/cityBuy', { item: it.id, price: c }) }", '/site/b-board.js': "r.className = 'cy-read'" };
     expect(checkContract(now, { checks })).toEqual([]);
   });
 });

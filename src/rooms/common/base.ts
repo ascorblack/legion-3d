@@ -54,8 +54,6 @@ export interface RoomEnv {
   variant?: string;
   /** District town (lv3): which goods its buildings' levels allow (cityshop.js shopView; from the layout, src/net/site.ts). */
   goodsKeep?: GoodsKeep | null;
-  /** /api/me .ench (material prices); optional. */
-  ench?: { coins?: { star?: number; sphere?: number } } | null;
 }
 
 export function envFromCtx(ctx: RoomContext): RoomEnv {
@@ -239,7 +237,7 @@ export class RoomBase {
   }
   /** Price environment for the current hero. */
   priceEnv = (): PriceEnv => ({
-    hero: this.env.store.hero as Hero | null, ench: this.env.ench || null,
+    hero: this.env.store.hero as Hero | null,
     foreignK: this.env.town ? this.env.town.foreignK : 1, home: !!(this.env.town && this.env.town.home), town: this.env.town ? this.env.town.id : null,
     topIds: topIdsOf(this.stock),
   });
@@ -250,14 +248,17 @@ export class RoomBase {
    */
   goodLabel(it: StockItem, b: string): string {
     const of = offerOf(it, b, this.priceEnv());
-    if (of.kind === 'coins' || of.kind === 'mat') return `Купить: ${it.name} — ${moneyText(of.coins, of.coins, coinStyle())}`;
+    if (of.kind === 'coins') return `Купить: ${it.name} — ${moneyText(of.coins, of.coins, coinStyle())}`;
     if (of.kind === 'locked') return `Осмотреть: ${it.name} — 🔒 ${LOCK_T.toLowerCase()}`;
+    if (of.kind === 'nosale') return `Осмотреть: ${it.name} — не продаётся`;
     return `Осмотреть: ${it.name} — ${of.list ? `${moneyText(of.list, of.list, coinStyle())}, сейчас не купить` : 'пока не продаётся'}`;
   }
   tagSpec(it: StockItem, b: string, hot = false): TagSpec {
     const of = offerOf(it, b, this.priceEnv());
-    if (of.kind === 'coins' || of.kind === 'mat') return { name: it.name, rarity: it.rarity, coins: of.coins, poor: of.poor, hot };
+    if (of.kind === 'coins') return { name: it.name, rarity: it.rarity, coins: of.coins, poor: of.poor, hot };
     if (of.kind === 'locked') return { name: it.name, rarity: it.rarity, text: '🔒 после захвата', hot };
+    // 14.11: enchant materials are not sold (cityshop.js shopView priceText «Не продаётся»)
+    if (of.kind === 'nosale') return { name: it.name, rarity: it.rarity, text: 'не продаётся', hot };
     // closed: the good's coin price as the site's tag shows it (cityfair.js priceTag, 08.11 — no points gem any more)
     return of.list ? { name: it.name, rarity: it.rarity, coins: of.list, hot } : { name: it.name, rarity: it.rarity, text: 'не продаётся', hot };
   }
@@ -318,7 +319,7 @@ export class RoomBase {
         const g: Good = { it: pg.it, b: pg.b, box: boxes[i], hit: hb, tag, range: ranges[i], inter: null as unknown as Interactable };
         g.inter = this.interact({
           id: `room:good:${pg.b}:${pg.it.id}:${i}`, label: this.goodLabel(pg.it, pg.b), icon: '🛒', hit, reach: 4.5, proximity: false,
-          use: () => { const of = offerOf(g.it, g.b, this.priceEnv()); this.openGood(g, (of.kind === 'coins' || of.kind === 'mat') && !of.why); },
+          use: () => { const of = offerOf(g.it, g.b, this.priceEnv()); this.openGood(g, of.kind === 'coins' && !of.why); },
           alt: { label: 'Осмотреть', use: () => this.openGood(g, false) },
           // the room outlines the good itself (setHot: follows the aim, stays on the good of an open card)
           highlight: () => { /* drawn by setHot */ },

@@ -1,11 +1,11 @@
 /**
- * «Лавка» / «Торговые ряды»: food on painted wall shelves under striped awnings, potions (and the enchant materials,
- * like the site's shop tiles) on the counter, the cook behind it; baskets and crates of colourful produce, hanging
+ * «Лавка» / «Торговые ряды»: food on painted wall shelves under striped awnings, potions on the counter (14.11: no more
+ * enchant materials — b-shop.js dropped its star / sphere tiles, they are not sold), the cook behind it; baskets and crates of colourful produce, hanging
  * herbs, garlic and peppers, a chalkboard menu, bunting and a festoon of bulbs — a bright market stall, not a cellar.
  */
 import * as THREE from 'three';
 import type { RoomBase, RoomEnv } from '../common/base';
-import { msOn, type RowsStock, type StockItem } from '../common/stock';
+import type { RowsStock } from '../common/stock';
 import { Frame, counter, shelves, awning, COUNTER_TOP, DAIS } from './furniture';
 import { rowsTheme, lavaCracks, basaltWall, lavaGrate, pitchfork } from './style';
 import { bunting, stringLights, basket, sack, potPlant, hanging, cloth, wallLamp, candle, mug, roundRug, stool } from '../common/decor';
@@ -39,11 +39,6 @@ export function buildRows(R: RoomBase, st: RowsStock | null, env: RoomEnv): void
   }
 
   const food = (st && st.food) || [], potions = (st && st.potions) || [];
-  const h = env.store.hero;
-  const mats: StockItem[] = h && h.ef && !msOn(h) ? [
-    { id: 'enchant_star', mat: 'star', slot: 'material', rarity: 'uncommon', name: 'Счастливая звезда' },
-    { id: 'enchant_sphere', mat: 'sphere', slot: 'material', rarity: 'rare', name: 'Сфера сохранения' },
-  ] : [];
   // food: left wall shelves (and the right wall when there is a lot of it), painted, under a striped awning
   const left = food.slice(0, 10), right = food.slice(10, 20);
   const SH = { w: 3.8, depth: 0.5, fit: 0.32, col: C.shelfBack, side: C.shelf, lip: C.lip, mat: 'plaster' as const, iron: ch };
@@ -71,13 +66,20 @@ export function buildRows(R: RoomBase, st: RowsStock | null, env: RoomEnv): void
     sack(K, W / 2 - 0.5, 2.0, '#d8c08a'); sack(K, W / 2 - 0.45, 2.55, '#c8b07a', 0.85); sack(K, W / 2 - 0.9, 2.3, '#e0c89a', 0.7);
     K.solid(W / 2 - 1.15, W / 2, 1.7, 2.85, 0.65);
   }
-  // counter (painted blue, cloth, potions and materials on it)
+  // counter (painted blue, cloth, potions on it)
   const CF = new Frame(0, -D / 2, 0);
   counter(R, CF, -1.9, 1.9, 1.9, 2.5, C.counter, C.counterTop, ch ? 'metal' : 'wood');
   cloth(K, -1.9, 1.9, -D / 2 + 1.9, -D / 2 + 2.5, COUNTER_TOP + 0.001, Th.cloth, 0.16, ch ? '#ffc83d' : '#fff3dc');
-  const onCounter = [...potions, ...mats].slice(0, 6), n = onCounter.length;
+  // the goods close together in the middle (≤ 0.9 m apart; 14.11 left only the potions, often two of them), the counter's
+  // ends dressed: a bread basket on the left, a mug and a candle on the right (decor only, no hit volumes)
+  const onCounter = potions.slice(0, 6), n = onCounter.length, span = Math.min(3.0, Math.max(0, n - 1) * 0.9);
+  if (n <= 4) {
+    basket(K, CF.x(-1.55, 2.2), COUNTER_TOP + 0.013, CF.z(-1.55, 2.2), 0.17, ch ? ['#2a1a1a', '#a0602a'] : ['#d9a066', '#e0b070']);
+    mug(K, CF.x(1.5, 2.12), COUNTER_TOP + 0.013, CF.z(1.5, 2.12), ch ? '#3a3346' : '#7fb0e8');
+    candle(K, CF.x(1.68, 2.3), COUNTER_TOP + 0.013, CF.z(1.68, 2.3));
+  }
   onCounter.forEach((it, i) => {
-    const lx = n === 1 ? 0 : -1.5 + 3.0 * (i / (n - 1));
+    const lx = n === 1 ? 0 : -span / 2 + span * (i / (n - 1));
     R.good(it, b, { x: CF.x(lx, 2.2), y: COUNTER_TOP + 0.013, z: CF.z(lx, 2.2), fit: 0.3, fitH: it.slot === 'potion' }, [CF.x(lx, 2.57), COUNTER_TOP - 0.1, CF.z(lx, 2.57), 0, -0.3]);
   });
   // striped awning over the counter on two posts

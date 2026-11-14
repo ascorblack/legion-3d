@@ -83,7 +83,7 @@ describe('texture mapping: no smeared / squeezed textures', () => {
         const hero = { ...JSON.parse(JSON.stringify((meJson as any).hero)), money: 100000 };
         const store: any = { hero, me: null, walkers: new Map(), chat: [], online: 1, quest: null, layout: null, on: () => () => {} };
         const env: any = { building: { id, title: id, hit: [0, 0, 0, 0], door: { x: 0, y: 0 } }, styleId: st, quality: 2, store, actions: { get: async () => stockJson, post: async () => ({ ok: true }) },
-          input: { setGameplay() {} }, interact: { add: () => () => {}, target: null }, scene: null, itemModels: null, toast() {}, exit() {}, showSitePanel() {}, hideSitePanel() {}, player: () => ({ x: 0, z: 3 }), ench: { coins: { star: 300, sphere: 900 } } };
+          input: { setGameplay() {} }, interact: { add: () => () => {}, target: null }, scene: null, itemModels: null, toast() {}, exit() {}, showSitePanel() {}, hideSitePanel() {}, player: () => ({ x: 0, z: 3 }) };
         const room: any = ['forge', 'magic', 'shop', 'tent'].includes(id) ? await createShopRoom(env, { stock: stockJson as any }) : await createHybridRoom(env);
         room.dispose();
       }

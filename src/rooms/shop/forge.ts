@@ -1,6 +1,7 @@
 /**
  * «Кузня» / «Лавка чародея» (until 10.11 «Лавка звездочёта») interiors: stands per class like the site (stand title, top row = weapons, middle shelf =
- * shields / hats, case = armour / charms), the keeper behind a counter with the enchant materials, hearth or star dome.
+ * shields / hats, case = armour / charms), the keeper behind a counter with the enchant materials (shown, «не продаётся»
+ * since 14.11), hearth or star dome.
  */
 import * as THREE from 'three';
 import type { RoomBase } from '../common/base';
@@ -114,7 +115,7 @@ export function buildForge(R: RoomBase, st: ShopStock | null, b: 'forge' | 'magi
       K.cyl('back', '#f7ead0', x, y, z, 0.035, 0.18, 8); K.ball('emit', '#ffcf6a', x, y + 0.23, z, 0.03, 1.5); K.glow(x, y + 0.24, z, 0.5, '#ffcf6a', 0.8);
     }
   }
-  // counter with the enchant materials
+  // counter with the enchant materials (stock `mats`; 14.11: not sold — the card says where they are found)
   const C = new Frame(0, -D / 2, 0);
   counter(R, C, -1.5, 1.5, 1.85, 2.4, magic ? '#3a2a6e' : Th.counter ? Th.counter[0] : P.wood, magic ? '#8a6ac8' : Th.counter ? Th.counter[1] : P.woodL, ch ? 'metal' : 'wood');
   if (ch) {   // the iron counter: golden horns on its corners, a lava slot along the front, gold rivets

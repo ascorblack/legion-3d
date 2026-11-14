@@ -6,7 +6,8 @@
  * Money: `coins` are bronze (1 silver = 100, 1 gold = 10 000). `price` is the old channel-points price (08.11: no longer sold for points).
  * A hero with `cs` buys for coins at any time (POST /api/cityBuy {item, price, n?, town?}); without `cs` the goods are
  * «сейчас не купить · Покупки в «Городе» тебе пока закрыты» (08.11; before: «на стриме, за баллы канала»). Enchant
- * materials (star/sphere) are bought for coins through POST /api/buymat {mat, ack?} when the hero has `ef`. Tent looks
+ * materials (star/sphere) are NOT sold since 14.11 (the site dropped POST /api/buymat): their tile reads «Не продаётся»
+ * and «Купить?» explains where they are found (expeditions, bosses, the mine, fishing, daily tasks). Tent looks
  * (booth samples) are bought for coins since 08.11 like any good (item id `look-<booth>-<sample id without #>`, price = the
  * booth's `price`, b-tent.js ask → buyAsk); owned ones are worn with POST /api/wear {field, value}.
  */
@@ -16,7 +17,7 @@ export interface StockItem {
   id: string; name: string; slot: string; rarity: string;
   /** Channel points (stream). */
   price?: number;
-  /** Bronze coins (site, when hero.cs). Absent for materials (their price comes from /api/me .ench.coins). */
+  /** Bronze coins (site, when hero.cs). Absent for materials (not sold since 14.11). */
   coins?: number;
   rank?: string | null; rankMin?: number | null; rankId?: string | null;
   look?: Record<string, unknown> | null;
@@ -122,8 +123,6 @@ export function standsOf(s: ShopStock | null): StockStand[] {
 
 export interface PriceEnv {
   hero: Hero | null;
-  /** /api/me .ench (coins for materials). */
-  ench?: { coins?: { star?: number; sphere?: number }; out?: boolean } | null;
   /** District town price multiplier (city.js foreignK(): a foreign town, or the squad's own «край» before its boss). 1 = no mark-up. */
   foreignK?: number;
   /** The town is the squad's «край» (city.js TOWN.acc.home, homeHere()): dearer, but nothing is locked. */
@@ -133,7 +132,6 @@ export interface PriceEnv {
   /** Ids on the top row of any stand (locked in a foreign town). */
   topIds?: Set<string>;
 }
-export const ENCH_COINS_DEFAULT = { star: 300, sphere: 900 };
 export const LOCK_T = 'Откроется после захвата';
 
 export function topIdsOf(st: CityStock | null | undefined): Set<string> {
@@ -141,18 +139,13 @@ export function topIdsOf(st: CityStock | null | undefined): Set<string> {
   if (st) for (const k of ['forge', 'forgeM', 'magic'] as const) for (const x of (st[k] && st[k]!.stands) || []) for (const it of x.top || []) o.add(it.id);
   return o;
 }
-const matCoins = (it: StockItem, env: PriceEnv) => {
-  const c = (env.ench && env.ench.coins) || ENCH_COINS_DEFAULT;
-  return it.mat ? +((c as any)[it.mat] ?? (ENCH_COINS_DEFAULT as any)[it.mat]) || 0 : 0;
-};
 /** cityshop.js lockedHere (08.11: not in the squad's own «край», `!homeHere()`). */
 export const lockedHere = (it: StockItem, env: PriceEnv) => (env.foreignK || 1) > 1 && !env.home && !!it
   && (!!it.mat || it.rarity === 'epic' || it.rarity === 'legendary' || !!(env.topIds && env.topIds.has(it.id)));
-/** Coin price for this hero (thief mark-up, foreign town ×k); 0 = not sold for coins. */
+/** Coin price for this hero (thief mark-up, foreign town ×k); 0 = not sold for coins (14.11: materials never are). */
 export function coinsFor(it: StockItem, env: PriceEnv): number {
-  const h = env.hero;
-  const b = it.mat ? (h && h.ef ? matCoins(it, env) : 0) : +(it.coins || 0) || 0;
-  return b > 0 ? Math.round(thPrice(h, b) * (it.mat ? 1 : (env.foreignK || 1))) : 0;
+  const b = it.mat ? 0 : +(it.coins || 0) || 0;
+  return b > 0 ? Math.round(thPrice(env.hero, b) * (env.foreignK || 1)) : 0;
 }
 
 /** 08.11: «кабинка» samples of the tent are bought for coins like goods (b-tent.js ask → buyAsk). The good the site builds. */
@@ -160,11 +153,14 @@ export function lookItem(b: Booth, s: BoothSample): StockItem {
   return { id: 'look-' + b.key + '-' + String(s.id).replace(/^#/, ''), name: s.name, coins: +(b.price || 0) || 0, look: true, pos: s.pos } as unknown as StockItem;
 }
 
-/** 'closed': coin purchases are not open for this hero (no `cs`, a material without `ef`) — the site's «сейчас не купить». */
-export type OfferKind = 'coins' | 'mat' | 'closed' | 'locked' | 'wear';
+/**
+ * 'closed': coin purchases are not open for this hero (no `cs`, no coin price) — the site's «сейчас не купить».
+ * 'nosale': an enchant material (14.11: never sold; the card says where they are found). Neither has a request.
+ */
+export type OfferKind = 'coins' | 'nosale' | 'closed' | 'locked' | 'wear';
 export interface Offer {
   kind: OfferKind;
-  /** Coin price (bronze) when kind is coins/mat. */
+  /** Coin price (bronze) when kind is coins. */
   coins: number;
   /** The good's own coin price shown while purchases are closed (cityshop.js cardHtml / popHtml `+it.coins`); 0 = «Пока не продаётся». */
   list: number;
@@ -191,38 +187,35 @@ export interface Offer {
 const PLACE: Record<string, string> = { tent: 'Шатре', shop: 'Торговых рядах', rows: 'Торговых рядах', forge: 'Кузне' };
 export const placeName = (b: string, h: Hero | null) => (b === 'magic' ? (msOn(h) ? String(h!.ms) : 'магической лавке') : PLACE[b] || 'Кузне');
 
-/** Everything the buy card needs for one good (mirror of the site's buyAsk + cardHtml / popHtml price block, 08.11). */
+/** Materials are not sold (cityshop.js buyAsk / popHtml / shopView, 14.11): what the site's dialog says. */
+export const NOSALE_T = 'Не продаётся';
+export const MAT_FIND = 'Звёзды и сферы находят в походе, у боссов, в Шахте, на рыбалке и за ежедневные задания.';
+
+/** Everything the buy card needs for one good (mirror of the site's buyAsk + cardHtml / popHtml price block, 14.11). */
 export function offerOf(it: StockItem, b: string, env: PriceEnv): Offer {
   const h = env.hero, name = it.name, k = thK(h), fk = env.foreignK || 1;
   const base: Offer = { kind: 'closed', coins: 0, list: +(it.coins || 0) > 0 ? +(it.coins || 0) : 0, can: false, why: '', poor: false, req: null, okText: '', note: '', rank: it.rank ? String(it.rank) : '', thief: k, foreign: fk, home: !!env.home, qmax: 1 };
-  // site buyAsk / popHtml (re-checked 03.11): the foreign-town lock comes first, then «закончились»
+  // site buyAsk / popHtml (re-checked 14.11): the foreign-town lock comes first, then a material «не продаётся»
   if (lockedHere(it, env)) {
     return { ...base, kind: 'locked', note: 'Этот округ не принадлежит каналу: лучшие вещи торговец бережёт для своих. Захватите округ на стриме — откроется всё и по обычной цене.' };
   }
-  // site 02.11 (cityshop.js buyAsk): enchant materials can run out (item.out or /api/me .ench.out) — «закончились», no buy
-  if (it.mat && ((it as any).out || (env.ench && env.ench.out))) {
-    return { ...base, kind: 'mat', note: `«${name}» — закончились. Скоро завезут. Звёзды и сферы сейчас можно найти в походе, в шахте и в наградах.`, why: 'Закончились' };
-  }
+  // 14.11 (cityshop.js buyAsk `if (it.mat)`): enchant materials are no longer sold — the dialog says where they are found;
+  // no request at all (POST /api/buymat is gone from the site)
+  if (it.mat) return { ...base, kind: 'nosale', list: 0, note: MAT_FIND };
   const c = coinsFor(it, env);
-  // 08.11: `can` no longer excludes looks (`it.look`) — the tent's samples are bought for coins too
-  const can = !!h && (it.mat ? !!(h.ef && c) : csOn(h) && c > 0);
+  // 14.11: `can = !!h && csOn() && c > 0` (08.11: looks are bought for coins too)
+  const can = !!h && csOn(h) && c > 0;
   if (can) {
     const poor = !h!.ghost && (+h!.money || 0) < c;
     const why = h!.ghost ? 'Призраку не продают.' : poor ? 'Не хватает монет' : '';
-    const qmax = !it.mat && +(h as any).bq > 1 && c > 0 && (b === 'shop' || it.slot === 'food' || it.slot === 'potion')
+    const qmax = +(h as any).bq > 1 && c > 0 && (b === 'shop' || it.slot === 'food' || it.slot === 'potion')
       ? Math.max(1, Math.min(+(h as any).bq, Math.floor((+h!.money || 0) / c))) : 1;
-    const req = it.mat
-      ? { path: '/api/buymat', body: { mat: it.mat, ...(k > 1 ? { ack: 1 } : {}) } }
-      : { path: '/api/cityBuy', body: { item: it.id, price: c, ...(env.town ? { town: env.town } : {}) } };
-    return {
-      ...base, kind: it.mat ? 'mat' : 'coins', coins: c, can: true, why, poor, req, qmax,
-      okText: it.mat ? `Заказано: «${name}» — принесут через пару секунд` : `Куплено: «${name}» — сейчас будет в сумке`,
-    };
+    const req = { path: '/api/cityBuy', body: { item: it.id, price: c, ...(env.town ? { town: env.town } : {}) } };
+    return { ...base, kind: 'coins', coins: c, can: true, why, poor, req, qmax, okText: `Куплено: «${name}» — сейчас будет в сумке` };
   }
   const why = !h ? 'Героя пока нет — он появится, когда ты напишешь в чат на стриме.' : '';
   // 08.11 (cityshop.js buyAsk): no more «на стриме, за баллы канала» — «сейчас не купить»
-  const note = it.mat ? 'За монеты - когда откроется заточка.' : 'Покупки в «Городе» тебе пока закрыты.';
-  return { ...base, why, note };
+  return { ...base, why, note: 'Покупки в «Городе» тебе пока закрыты.' };
 }
 
 /**

@@ -62,7 +62,7 @@ async function shopRoom(id: 'forge' | 'shop' | 'tent', interact: any, posts: any
   let player = { x: 0, z: 3 };
   const room = await createShopRoom({
     building: { id, title: id, hit: [0, 0, 0, 0], door: { x: 0, y: 0 } } as any, styleId: 'cats', quality: 2, store, actions,
-    input: { setGameplay() {} }, interact, scene: null, itemModels: null, toast() {}, exit() {}, player: () => player, ench: { coins: { star: 300, sphere: 900 } },
+    input: { setGameplay() {} }, interact, scene: null, itemModels: null, toast() {}, exit() {}, player: () => player,
   }, { stock: ST });
   return { room, setPlayer: (x: number, z: number) => { player = { x, z }; } };
 }

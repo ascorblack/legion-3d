@@ -47,7 +47,7 @@ async function build(id: string, styleId: string, quality: number) {
   const env: any = {
     building: { id, title: id, hit: [0, 0, 0, 0], door: { x: 0, y: 0 } }, styleId, quality, store, actions: { get: async () => stockJson, post: async () => ({ ok: true }) },
     input: { setGameplay() {} }, interact: { add: () => () => {}, target: null }, scene: null, itemModels: null, toast() {}, exit() {}, showSitePanel() {}, hideSitePanel() {},
-    player: () => ({ x: 0, z: 3 }), ench: { coins: { star: 300, sphere: 900 } },
+    player: () => ({ x: 0, z: 3 }),
   };
   return SHOPS.includes(id) ? createShopRoom(env, { stock: stockJson as any }) : createHybridRoom(env);
 }

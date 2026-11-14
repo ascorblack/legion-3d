@@ -293,6 +293,7 @@ describe('announcements (app.js guAnn, 12.11)', () => {
       GU: { el: hud }, ME: { an: [{ id: 7, t: 'Стрим в 20:00 — приходите!' }, { id: 'g1', t: 'Новый сезон', g: true }, { id: 9, t: 'третье' }] },
       guAnnCity: () => true, localStorage: { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v; } },
       document: { createElement: () => new El() }, JSON, Array, Set, String, console,
+      window: {},   // 14.11: guAnn reads window.LGAnnTick (the ticker; absent here)
     };
     vm.createContext(c);
     vm.runInContext(["const ANN_LS = 'lgAnnX';", /const annClosed = \(\) => [^\n]*/.exec(APP!)![0], fnSource(APP!, 'annClose'), fnSource(APP!, 'guAnn'), 'guAnn();'].join('\n'), c);
