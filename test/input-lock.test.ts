@@ -239,6 +239,21 @@ describe('input: derived gameplay, late grants, focus safety net, key owner', ()
     inp.dispose();
   });
 
+  it('site 15.11: the guild invite plaque focusing its «Принять» by itself is undone; a click into it is the player\'s', async () => {
+    const { createInput } = await import('../src/engine/input');
+    const c = mkCanvas(); const inp = createInput(c);
+    vi.advanceTimersByTime(2000);
+    const btn: any = { tagName: 'BUTTON', closest: (s: string) => (s === '#cy-ginv' ? {} : null) };
+    D.activeElement = btn; fire('d:focusin');   // site-chat.js ginvShow: el.querySelector('button').focus()
+    expect(D.activeElement).toBe(c);
+    expect(inp.gameplay).toBe(true);
+    // the player clicks the plaque: the focus that follows stays
+    fire('w:pointerdown', { target: btn, composedPath: () => [btn] });
+    D.activeElement = btn; fire('d:focusin');
+    expect(D.activeElement).toBe(btn);
+    inp.dispose();
+  });
+
   it('a grant of our request that arrives after a modal opened (or a field took the keyboard) is refused', async () => {
     const { createInput } = await import('../src/engine/input');
     const c = mkCanvas(); const inp = createInput(c);

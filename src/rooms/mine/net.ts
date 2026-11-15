@@ -12,7 +12,7 @@
  * dig / stop / sell / buy / lamp / claim / pick / oreBag only on the player's explicit action; leave on exit.
  */
 import { dayLimit } from './state';
-import { MineModel, TX, blockTitle, mmss, type MinePayload, type MineMe, type Burst, type ChatLine, type LookRec } from './state';
+import { MineModel, TX, WEEK_DONE, blockTitle, mmss, type MinePayload, type MineMe, type Burst, type ChatLine, type LookRec } from './state';
 import { REACH, type Pt } from './geo';
 import { GEO1, type MineGeom } from './geo3';
 import { baseOf, mineKey, deepOf, keyOf, rideFloor, rideHold, RIDE_MS, RIDE_POLL_MS, OreGone } from './fund';
@@ -74,6 +74,8 @@ export type MineEvent =
    *  `failed` = no view in RIDE_MS: back on the previous floor (screen off). */
   | { type: 'ride'; phase: 'start' | 'refused' | 'arrived' | 'failed'; f: number; wait?: number }
   | { type: 'busy' }
+  /** Site 15.11 weekly rebuild (mine.js take0): `done` = it happened — the site toasts and goes back to the City; `soon` = ≤ 1 h. */
+  | { type: 'week'; phase: 'done' | 'soon'; text: string }
   | { type: 'error'; text: string };
 
 /**
@@ -209,7 +211,7 @@ export class MineClient {
     // nothing about the new one); the key the poll went out with (a poll of the previous floor is not applied after the ride)
     const c0 = this.c;
     const st0 = this.riding ? null : M.st, have = !full && st0 ? `&v=${encodeURIComponent(st0.v)}&f=${encodeURIComponent(mineFloorKey(st0))}` : '';
-    const lk = [...M.lkWant].slice(0, 60); M.lkWant.clear(); if (lk.length) this.lkAt = this.now();
+    const lk = [...M.lkWant].slice(0, 60); M.lkWant.clear(); if (lk.length) { this.lkAt = this.now(); for (const l of lk) if (M.looks.has(l)) M.lookAt.set(l, this.lkAt); }   // site 15.11
     const mc = this.chat.on && this.chat.poll && !this.live() ? `&mc=${this.chat.c || 0}` : '';
     const r: MinePayload = await this.o.api('/api/mine/state' + this.q() + have + (this.sid ? `&sid=${this.sid}` : '') + (lk.length ? `&lk=${encodeURIComponent(lk.join(','))}` : '') + mc);
     if (polling) { this.pollFails = r && r.ok ? 0 : this.pollFails + 1; this.pollAt = this.now() + Math.max(minePollWait(this.pollFails, rnd()), this.siteHeld()); }
@@ -236,6 +238,8 @@ export class MineClient {
     if (r.here != null) this.emit({ type: 'here' });
     if (M.presence(r, now, snap)) this.emit({ type: 'presence' });
     const res = M.take(r.st, r.me, r.lk, now, r.me ? null : this.heroMe());
+    if (res.weekDone) { this.emit({ type: 'week', phase: 'done', text: WEEK_DONE }); return; }
+    if (res.weekSoon) this.emit({ type: 'week', phase: 'soon', text: res.weekSoon });
     this.newsHero();
     if (res.needFull && !this.full) {
       // new floor without the layout: ask for the whole view

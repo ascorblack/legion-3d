@@ -10,6 +10,9 @@
  * Over the socket an event is one text frame `{"op":"ev","e":"<name>","d":<json>}` — the same names and payloads as
  * the SSE events. Both transports are tapped here by passive listeners added when the site constructs them, so the
  * bus gets the same 'sse:<name>' whichever one LGLiveLink picks; 'live:kind' says which ('ws' | 'sse').
+ * Site 15.11: over the socket the hero is a full `me` + `mep` patches (version `mv`); the bridge applies them like
+ * site-live.js (MeMirror / meApply) and emits the full hero as 'sse:me' ('live:mep' = the applied version, null = gap).
+ * SSE carries no patches (site-live.js handles `mep` only on the socket; app.js listens to `me` alone).
  * Neither EventSource nor WebSocket is checked by the site's bot telemetry (mine.js tlPi checks fetch and rAF only).
  *
  * window.fetch is NOT replaced by default. The site's anti-bot telemetry (mine.js tlPi) compares window.fetch with the
@@ -21,6 +24,8 @@
  * moment and records whether it was native (LG_FETCH.n). A tee under the site's wrapper could never be taken out and
  * would mark the whole page load, F8 or not. Put on later, on top of the site's wrapper, it comes out exactly.
  */
+import { MeMirror } from './me-patch';
+
 export interface FetchTee {
   /** Put the tee on window.fetch (idempotent). Returns whether window.fetch is ours now. */
   on(): boolean;
@@ -171,17 +176,24 @@ export function liveFrame(t: unknown): [string, string] | 'liveok' | null {
   return t.charCodeAt(0) === 123 && t.length < 200 && /"op"\s*:\s*"liveok"/.test(t) ? 'liveok' : null;
 }
 
-/** Passive listeners on the site's own live socket: the site's handlers (s.onmessage …) are untouched. */
+/** Passive listeners on the site's own live socket: the site's handlers (s.onmessage …) are untouched.
+ *  Site 15.11: over the socket the hero comes as a full `me` (version `mv`) and then as `mep` patches; MeMirror
+ *  keeps the same base the site keeps (site-live.js meBase / meV / meWant) and every applied patch reaches the bus as
+ *  a full 'sse:me' — the shape every consumer already reads. A version gap is the site's business: site-live.js asks
+ *  the server for a full one ({op:'live'} — the site's own send); we only drop patches until that full `me` arrives. */
 function tapLiveWs(s: WebSocket, bus: Bus, tee: ReadonlySet<string>, parse: (d: unknown) => unknown): void {
   let up = false;
+  const me = new MeMirror();
   s.addEventListener('message', (e: MessageEvent) => {
     try {
       const f = liveFrame(e.data);
       if (!f) return;
       if (f === 'liveok') { if (!up) { up = true; bus.emit('live:kind', 'ws'); bus.emit('sse:open', Date.now()); } return; }
       if (!up) { up = true; bus.emit('live:kind', 'ws'); }
+      if (f[0] === 'me') { me.full(f[1]); bus.emit('sse:me', parse(f[1])); return; }
+      if (f[0] === 'mep') { const t = me.patch(f[1]); bus.emit('live:mep', t ? me.v : null); if (t) bus.emit('sse:me', JSON.parse(t)); return; }
       if (tee.has(f[0])) bus.emit('sse:' + f[0], parse(f[1]));
     } catch { /* never break the page */ }
   });
-  s.addEventListener('close', () => { if (up) { up = false; bus.emit('sse:error', Date.now()); } });
+  s.addEventListener('close', () => { me.reset(); if (up) { up = false; bus.emit('sse:error', Date.now()); } });
 }

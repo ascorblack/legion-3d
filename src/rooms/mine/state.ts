@@ -39,6 +39,8 @@ export type Dl = [number, number, string, Record<string, number>, Record<string,
 export interface MineView {
   v: number; at: number; craft?: string; biome?: string; danger?: number; gem?: string | null; id?: string; name?: string; dist?: string;
   n: number; seed: number; entryX?: number; gen?: number; week?: number; reset?: number; rec?: number;
+  /** Site 15.11: the mine is rebuilt weekly (`week` changes at `reset`); with `cr` the site moves everyone out then. */
+  cr?: boolean | number;
   dug: string; bl?: Record<string, Bl>; dg?: Record<string, string[]>; front?: number[];
   log?: { t: string; at: number }[]; top?: [string, number][]; fl?: FloorLayout;
   lampFrom?: number; darkFrom?: number; lampPrice?: number; bp?: Record<string, number>; hist?: unknown[];
@@ -75,6 +77,8 @@ export interface MinePayload {
   ok?: boolean; error?: string; other?: boolean;
   me?: MineMe; st?: MineView; lk?: Record<string, LookRec>;
   a?: PresenceA[]; m?: PresenceM[]; g?: string[]; n?: number; max?: number;
+  /** Site 15.11: looks changed of walkers already here: [[login, { lk, g, gh }]]. */
+  u?: [string, { lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number } | null][];
   sid?: string; c?: string; here?: number; hw?: number; hm?: number;
   mchat?: { chat?: ChatLine[]; c?: number }; chat?: ChatLine[]; chatRoom?: string;
   crafts?: unknown; open?: string[]; town?: string; same?: number;
@@ -273,7 +277,19 @@ export function weekResetTxt(reset: number | undefined, now: number): string {
 
 export interface Other { login: string; v: LookRec | null; x: number; y: number; tx: number; ty: number; t0: number; dt: number; dur: number }
 export interface Burst { i: number; mine: boolean; got: { r: string; q: number; any: number; loot: Record<string, number> | null } | null }
-export interface TakeResult { changed: boolean; newFloor: boolean; bursts: Burst[]; needFull?: boolean }
+export interface TakeResult {
+  changed: boolean; newFloor: boolean; bursts: Burst[]; needFull?: boolean;
+  /** Site 15.11 (mine.js take0): the weekly rebuild happened (st.cr and another `week`) — the site toasts WEEK_DONE and exits. */
+  weekDone?: boolean;
+  /** Site 15.11: ≤ 1 h to the weekly rebuild (once per week) — the toast «Через N мин шахта обновится…». */
+  weekSoon?: string;
+}
+/** mine.js 15.11: after the weekly rebuild the site moves the player back to the City with this toast (bad). */
+export const WEEK_DONE = 'Шахта обновилась: новые жилы и этажи. Добытое - в сумке, возвращаю в город';
+/** mine.js 15.11: the toast ≤ 1 h before the weekly rebuild. */
+export const weekSoonText = (reset: number, now: number): string => `Через ${Math.max(1, Math.ceil((reset - now) / 60000))} мин шахта обновится - кто будет внутри, выйдет в город`;
+/** mine.js 15.11 LOOK_MS: looks of the diggers at the stones are asked again when older than this. */
+export const LOOK_MS = 60000;
 
 /**
  * State of one open mine as the site's client keeps it. Feed it every payload (enter / state / SSE 'mine'), it
@@ -293,6 +309,10 @@ export class MineModel {
   left: { i: number; at: number; sent?: number } | null = null;
   readonly others = new Map<string, Other>();
   readonly looks = new Map<string, LookRec>();
+  /** When each look was last fetched / heard (site 15.11 S.lookAt; LOOK_MS refresh). */
+  readonly lookAt = new Map<string, number>();
+  /** The week whose «rebuild soon» toast was shown (site S.rsWarn). */
+  rsWarn: number | null = null;
   readonly lkWant = new Set<string>();
   nOthers = 0;
   here: number | null = null; hw: number | null = null; hm = 0;
@@ -317,12 +337,15 @@ export class MineModel {
   take(st: MineView | null | undefined, me: MineMe | null | undefined, lk: Record<string, LookRec> | null | undefined, now: number, heroMe?: MineMe | null): TakeResult {
     const res: TakeResult = { changed: false, newFloor: false, bursts: [] };
     if (me) this.me = me; else if (heroMe) this.me = heroMe;
-    if (lk) for (const [l, v] of Object.entries(lk)) this.looks.set(l, v);
+    if (lk) for (const [l, v] of Object.entries(lk)) { this.looks.set(l, v); this.lookAt.set(l, now); }
     // site 31.10 ride: while the lift goes, only the chosen floor's view is taken (the view number v is shared by the floors,
     // so no «late view» check then); another floor's view (the previous one, late) is not drawn
     if (this.rideF) { if (!st || +st.n !== this.rideF) return res; }
     // late view (poll and SSE interleave) — never roll back
     else if (st && this.st && !this.fresh && st.v < this.st.v && st.v > this.st.v - 500 && st.week === this.st.week) st = null;
+    // site 15.11: the weekly rebuild (st.cr) — another week than the one on show: the site says so and goes back to the City
+    if (st && this.st && st.cr && this.st.week != null && st.week !== this.st.week) { res.weekDone = true; return res; }
+    if (st && st.cr && st.reset && st.reset > now && st.reset - now <= 3600e3 && this.rsWarn !== st.week) { this.rsWarn = st.week ?? null; res.weekSoon = weekSoonText(st.reset, now); }
     if (!st) return res;
     if (!st.fl) {
       if (this.st && this.st.fl && !this.fresh && this.st.seed === st.seed && this.st.n === st.n) st = { ...st, fl: this.st.fl };
@@ -358,7 +381,8 @@ export class MineModel {
       if (old || (w.i >= 0 ? this.myI === w.i || st.dug[w.i] === '1' : this.myI < 0)) this.want = null;
       else this.myI = w.i;
     }
-    for (const ls of Object.values(st.dg || {})) for (const l of ls.filter((x) => x !== me_).slice(0, 4)) if (!this.looks.has(l) && !this.others.has(l)) this.lkWant.add(l);
+    // site 15.11: a digger's look is asked again when older than LOOK_MS (it may have changed gear meanwhile)
+    for (const ls of Object.values(st.dg || {})) for (const l of ls.filter((x) => x !== me_).slice(0, 4)) if (!this.others.has(l) && (!this.looks.has(l) || now - (this.lookAt.get(l) || 0) > LOOK_MS)) this.lkWant.add(l);
     if (newFloor) { this.want = null; this.left = null; }
     res.changed = true; res.newFloor = newFloor;
     return res;
@@ -380,6 +404,11 @@ export class MineModel {
       this.others.set(l, { login: l, v: o ? o.v : this.looks.get(l) || null, x, y, tx, ty, t0: now, dt: dt || 0, dur: Math.hypot(tx - x, ty - y) / SPEED * 1000 });
       if (!o && !this.looks.has(l)) this.lkWant.add(l);
       ch = true;
+    }
+    // site 15.11 (mine.js presence): `u` = [[login, {lk, g, gh}]] — a walker here changed looks
+    for (const [l0, v] of d.u || []) {
+      const l = String(l0).toLowerCase(), o = this.others.get(l);
+      if (o && v) { o.v = { ...(o.v || {}), lk: v.lk, g: v.g, gh: v.gh }; ch = true; }
     }
     for (const l of d.g || []) { if (this.others.delete(String(l).toLowerCase())) ch = true; }
     if (d.n != null) this.nOthers = d.n;
@@ -415,7 +444,8 @@ export class MineModel {
   get dark(): boolean { return !!this.st && this.st.n >= (this.st.darkFrom || 5) && !this.lampOn(); }
   /** Own items (hero.items) are needed for the helmet; the client sets this hook. */
   heroItems: () => { id: string; on?: boolean; uid: string; qty?: boolean; q?: number; res?: string; name?: string }[] = () => [];
-  lampOn(): boolean { const it = this.heroItems(); return it.some((x) => x.id === 'miner_helmet' && x.on) || !!(this.me && this.me.lamp && !it.some((x) => x.id === 'miner_helmet' && !x.on)); }
+  /** Site 15.11 (mine.js lampOn): with the hero's items known the helmet decides; only without them `me.lamp`. */
+  lampOn(): boolean { const it = this.heroItems(); return it.length ? it.some((x) => x && x.id === 'miner_helmet' && x.on) : !!(this.me && this.me.lamp); }
   lampHave() { return this.heroItems().find((x) => x.id === 'miner_helmet') || null; }
   fx(k: string): boolean { return !!(this.me && this.me.fx && this.me.fx[k]); }
   /** Feature flags (me.fx): m2 = mine 2.0, b = buyer window, pk = supplier (pickaxe). */

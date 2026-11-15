@@ -231,7 +231,8 @@ describe('LGCity.wall() 13.11: own = own | home | why home / camp — read as th
     expect(new RegExp(c.re).test(readFileSync(resolve(SITE, 'city.js'), 'utf8'))).toBe(true);
   });
   it.skipIf(!HAS)('the live-link contract checks match the 13.11 scripts', () => {
-    for (const [id, f] of [['site-live.js frame', 'site-live.js'], ['app.js live link', 'app.js']]) {
+    // the site-live.js frame check follows the 15.11 hero patches (`const n = …, data = …` before emit) — test/site-1115.test.ts
+    for (const [id, f] of [['app.js live link', 'app.js']]) {
       const c = (contract as any).checks.find((x: any) => x.id.startsWith(id));
       expect(new RegExp(c.re).test(readFileSync(resolve(SITE, f), 'utf8')), id).toBe(true);
     }

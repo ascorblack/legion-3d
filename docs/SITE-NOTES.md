@@ -91,7 +91,10 @@ so the extension must treat every internal API as unstable and degrade gracefull
   `shopView` filters a lv3 district town's goods by building level (`LGTownGen.goodsOk`). city.js: `hm.none` = the channel has no city yet
   (homePick → null), `fairGone` → `homeAway`, `homeBack()` = where a closed town sends you (the channel city or the open camp); with nowhere
   to go the City is shut down: `#tab-city .cy-err.cy-shut` with `NO_CITY`. The old fair is called «Рябинень» («Ярмарочный Край»; picker row
-  only when `T.fair`, reason `T.fw`). Every town's mine door opens the channel's one mine `home` (MINE_FROM brings you back to the town).
+  only when `T.fair`, reason `T.fw`). Every town's mine door opens the channel's one mine `home` (MINE_FROM brings you back to the town); since 15.11 a town whose own mine
+  the server marks `hero.mn[tc].city` opens that one (`tc` = 'edge' for both fairs, else the town id; src/net/site-mine.ts mineDoorOf).
+  15.11 mine.js: the mine is rebuilt weekly — with `st.cr` a view of another `week` toasts «Шахта обновилась…» and exits to the City,
+  ≤ 1 h before `st.reset` a warning; looks of diggers are re-asked after 60 s; presence `u` = looks changed.
   quest.js `hero.q2`: «отступаем» in a corner block `.q-pbc`, say history ↑/↓ (localStorage `lgQSayH:<ch>`), the say box under `.ql-r1`,
   «ты примерно тут» for a hero in reserve. worldmap.js: squads of all channels (`d.sq`), the travel route (`d.route`). Our follow-ups:
   .local/drift1108b/FINDINGS.md.
@@ -180,6 +183,12 @@ Since 13.11 app.js opens it through `/lib/site-live.js` `window.LGLiveLink.open(
 - The bridge taps both (src/bridge/bridge.ts): the bus gets `sse:<name>` either way and `live:kind` = 'ws' | 'sse'. For our account
   `hero.lw` is not set (13.11), so the site uses SSE; since 14.11 it is, and the live contract shows `LIVE transport=ws`.
   `node e2e/contract.mjs` prints `LIVE transport=… bus me=… city=…`. Teed names: me city mine q j sm style jail dm pz.
+- **Hero patches (15.11)** — over the socket only: a full `me` carries a version `mv`; then `mep` frames `{ mv, h?, hx?, it?: { d?,
+  u?, o? }, cr?, r?, fq?, synced?, now? }` patch it (site-live.js `meApply`: hero fields merged / deleted, items by `uid` — removed,
+  upserted, re-ordered; `cr` → creating, `r` → results). A patch is applied only when `p.mv === meV + 1`; otherwise the site re-sends
+  `{op:'live', ch, sm?}` and drops patches until the next full `me`. `LGLiveLink.last.me()` = the site's base, `gap()` forces a full one.
+  The bridge mirrors it per socket (src/bridge/me-patch.ts MeMirror / meApply) and emits the full hero as `sse:me` (`live:mep` = the
+  applied version, null = gap). SSE `/api/live` keeps sending full `me` (site-live.js handles `mep` on the socket only).
 
 Named events:
 - `me` — full `{hero,…}` snapshot like `/api/me`.

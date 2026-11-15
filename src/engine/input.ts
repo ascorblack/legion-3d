@@ -87,6 +87,9 @@ export function inOwnUi(el: Element | null): boolean {
 }
 /** Site elements whose keys are the site's: its chat window (docked by us), its windows / room panels shown over the 3D. */
 const SITE_KEYS_SEL = '.cy-chat, .co-float, .l3d-co-host, .cy-nm, .cy-room, [role="dialog"], [role="alertdialog"], [role="menu"]';
+/** Site pop-ups that focus their own button when they appear (not on the player's action): the guild invite plaque
+ *  (site 15.11, site-chat.js ginvShow `#cy-ginv`, role alertdialog, «Принять» focused). See guardFocus. */
+export const FOCUS_GRAB_SEL = '#cy-ginv';
 /**
  * Whose is a key event with this real target while the 3D is shown: 'game' (the 3D view, <body> / <html> / no target,
  * our UI) or 'site' (an element of the site's own: its chat, its windows, a site field the player types in).
@@ -368,6 +371,13 @@ export function createInput(target: HTMLElement): InputEx {
   }
   function guardFocus(): void {
     const a = deepActive();
+    // a site pop-up that grabs the focus for its own button (site 15.11 site-chat.js ginvShow: the guild invite plaque
+    // focuses «Принять»): while the game owns the input the player's Enter (chat) / Space would press it — undo it; the
+    // plaque stays on screen for the mouse, and a click / Tab into it is the player's own
+    if (a && !isTyping(a) && (a as HTMLElement).closest?.(FOCUS_GRAB_SEL)) {
+      if ((realLocked() || gameplay) && performance.now() - intentAt > FOCUS_INTENT_MS) focusGame();
+      return;
+    }
     if (!isTyping(a)) return;
     releaseAll();
     // a field focused by the page itself while the game owns the input (a site window giving the focus back on close,

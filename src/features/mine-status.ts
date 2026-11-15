@@ -15,6 +15,7 @@
 import type { Unsub } from '../contracts';
 import type { CoreContext } from '../core/context';
 import { coreFeature } from './types';
+import { mineDoorOf } from '../net/site-mine';
 import { registerSettingRow, registerPauseItem, settingValue } from '../ui/settings-ext';
 import { mountMineChip, type ChipView, type MineChip } from '../ui/mine-chip';
 
@@ -64,8 +65,9 @@ export function bagText(o: { pieces: number; shards: number }): string {
   const body = o.pieces && o.shards ? `${o.pieces} шт. + ${o.shards} ${oskW(o.shards)}` : o.pieces ? `${o.pieces} шт.` : `${o.shards} ${oskW(o.shards)}`;
   return 'в сумке ' + body;
 }
-/** The mine id of a city layout, as src/rooms/mine/index.ts mineIdOf: since 08.11 every town's mine door opens 'home'. */
-export const mineIdOfLayout = (layoutId: string | undefined): string => { void layoutId; return 'home'; };
+/** The mine id of a city layout's mine door, as src/rooms/mine/index.ts mineIdOf (site 15.11 city.js mineOpen: the town's own
+ *  mine when hero.mn[tc].city — the fairs: 'edge' — else the channel's 'home'). */
+export const mineIdOfLayout = (layoutId: string | undefined, mn?: Record<string, unknown> | null): string => mineDoorOf(layoutId, mn);
 
 /** A well-formed 'l3d:mine-status' detail, or null. */
 export function parseStatus(d: unknown): StatusDetail | null {
@@ -207,7 +209,7 @@ export function startMineStatus(ctx: CoreContext, deps: Partial<MineStatusDeps> 
       if (r.current !== null || r.busy || ctx.state.classic) return false;
       const lay = ctx.layout();
       if (!lay || !lay.buildings.some((b) => b.id === 'mine')) return false;
-      return model.c == null || mineIdOfLayout(lay.id) === model.c;
+      return model.c == null || mineIdOfLayout(lay.id, (ctx.store.hero as { mn?: Record<string, unknown> } | null)?.mn) === model.c;
     } catch { return false; }
   };
   const go = () => {

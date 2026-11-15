@@ -62,6 +62,7 @@ import announce from './announce';
 import fishing from './fishing';
 import citymon from './citymon';
 import sitepause from './sitepause';
+import guildinvite from './guildinvite';
 
 export const FEATURES: (Feature | CoreFeature)[] = [
   settings, itemModels, menus, camera, crowd, labels, doors, controls, rooms, contentRooms, overlay, classic, quest, photo, debug, whatsnew, seasonal, sound,
@@ -94,6 +95,7 @@ export const FEATURES: (Feature | CoreFeature)[] = [
   fishing,
   citymon,
   sitepause,
+  guildinvite,
 ];
 
 /** Run every feature's setup in order. A failing feature is logged and skipped (the game still starts). */

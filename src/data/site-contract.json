@@ -442,9 +442,23 @@
     {
       "id": "site-live.js frame {\"op\":\"ev\",\"e\":…,\"d\":…} over new WebSocket(url)",
       "file": "site-live.js",
-      "re": "const EV = '\\{\"op\":\"ev\",\"e\":\"', EVD = '\",\"d\":';[\\s\\S]*s = new WS\\(w\\.url\\);[\\s\\S]*s\\.onmessage = \\(e\\) => \\{[\\s\\S]*emit\\(t\\.slice\\(EV\\.length, q\\), t\\.slice\\(q \\+ EVD\\.length, -1\\)\\)[\\s\\S]*s = new ES\\(o\\.sse\\(\\)\\)",
+      "re": "const EV = '\\{\\\"op\\\":\\\"ev\\\",\\\"e\\\":\\\"', EVD = '\\\",\\\"d\\\":';[\\s\\S]*s = new WS\\(w\\.url\\);[\\s\\S]*s\\.onmessage = \\(e\\) => \\{[\\s\\S]*const n = t\\.slice\\(EV\\.length, q\\), data = t\\.slice\\(q \\+ EVD\\.length, -1\\);[\\s\\S]*emit\\(n, data\\);[\\s\\S]*s = new ES\\(o\\.sse\\(\\)\\)",
       "severity": "degrade",
       "why": "the bridge's socket tap (src/bridge/bridge.ts liveFrame) cuts frames exactly like this; a new framing = live events over WebSocket not teed"
+    },
+    {
+      "id": "site-live.js hero patches: full me (mv) + mep when p.mv === meV + 1, else ask for a full one (15.11)",
+      "file": "site-live.js",
+      "re": "if \\(n === 'me'\\) \\{[\\s\\S]{0,300}meBase = d && typeof d === 'object' \\? d : null; meV = meBase && typeof meBase\\.mv === 'number' \\? meBase\\.mv : null; meWant = false;[\\s\\S]{0,120}emit\\('me', data\\);[\\s\\S]{0,120}if \\(n === 'mep'\\) \\{\\s*if \\(meWant\\) return;[\\s\\S]{0,200}if \\(!p \\|\\| !meBase \\|\\| meV === null \\|\\| p\\.mv !== meV \\+ 1\\) \\{\\s*meWant = true;[\\s\\S]{0,400}meBase = meApply\\(meBase, p\\); meV = p\\.mv;\\s*emit\\('me', JSON\\.stringify\\(meBase\\)\\);",
+      "severity": "degrade",
+      "why": "15.11: over the socket the hero comes as patches; the bridge keeps the same base (src/bridge/bridge.ts MeMirror) and emits the full hero as sse:me — a different version rule = stale or wrong hero data in 3D (money, gear, hp, flags)"
+    },
+    {
+      "id": "site-live.js meApply(base, p): h / hx / it {d,u,o} by uid / cr r fq synced now / mv (15.11)",
+      "file": "site-live.js",
+      "re": "function meApply\\(base, p\\) \\{\\s*const key = \\(x\\) => String\\(x && x\\.uid != null \\? x\\.uid : ''\\);\\s*const out = Object\\.assign\\(\\{\\}, base\\), hero = Object\\.assign\\(\\{\\}, base\\.hero\\);\\s*out\\.hero = hero;\\s*if \\(p\\.h\\) Object\\.assign\\(hero, p\\.h\\);\\s*for \\(const k of p\\.hx \\|\\| \\[\\]\\) delete hero\\[k\\];\\s*if \\(p\\.it\\) \\{\\s*const by = new Map\\(\\);\\s*for \\(const x of base\\.hero\\.items \\|\\| \\[\\]\\) by\\.set\\(key\\(x\\), x\\);\\s*for \\(const k of p\\.it\\.d \\|\\| \\[\\]\\) by\\.delete\\(k\\);\\s*let order = \\(base\\.hero\\.items \\|\\| \\[\\]\\)\\.map\\(key\\)\\.filter\\(\\(k\\) => by\\.has\\(k\\)\\);\\s*for \\(const x of p\\.it\\.u \\|\\| \\[\\]\\) \\{ const k = key\\(x\\); if \\(!by\\.has\\(k\\)\\) order\\.push\\(k\\); by\\.set\\(k, x\\); \\}\\s*if \\(p\\.it\\.o\\) order = p\\.it\\.o;\\s*hero\\.items = order\\.map\\(\\(k\\) => by\\.get\\(k\\)\\)\\.filter\\(Boolean\\);\\s*\\}\\s*if \\('cr' in p\\) out\\.creating = p\\.cr;\\s*if \\('r' in p\\) out\\.results = p\\.r;\\s*if \\('fq' in p\\) out\\.fq = p\\.fq;\\s*if \\('synced' in p\\) out\\.synced = p\\.synced;\\s*if \\('now' in p\\) out\\.now = p\\.now;\\s*out\\.mv = p\\.mv;\\s*return out;",
+      "severity": "degrade",
+      "why": "the bridge's meApply (src/bridge/bridge.ts) is a line-by-line port; any change here = our hero drifts from the site's after a patch"
     },
     {
       "id": "app.js live link: LGLiveLink.open({ sse: /api/live, ws: (wss|ws)://host/ws })",
@@ -1149,11 +1163,32 @@
       "why": "08.11: a closed town without a channel city shuts the City down — the 3D yields to that panel (src/net/site.ts overlay 'shut', src/net/town.ts CITY_SHUT)"
     },
     {
-      "id": "city.js one channel mine (c = 'home')",
+      "id": "city.js mine door: the town's own mine when mn[tc].city, else 'home' (15.11)",
       "file": "city.js",
-      "re": "const c = 'home', mn = X\\.hero\\(\\)\\.mn \\|\\| \\{\\};",
+      "re": "const mn = X\\.hero\\(\\)\\.mn \\|\\| \\{\\}, tc = TOWN\\.id === 'fair' \\? 'edge' : TOWN\\.id, c = tc && mn\\[tc\\] && mn\\[tc\\]\\.city \\? tc : 'home';",
       "severity": "degrade",
-      "why": "08.11: every town's mine door opens the channel's mine (src/rooms/mine/index.ts mineIdOf, src/features/mine-status.ts mineIdOfLayout)"
+      "why": "15.11: a town whose own mine is marked city (the fairs: 'edge') opens it, every other door the channel's mine 'home' (src/net/site-mine.ts mineDoorOf → src/rooms/mine/index.ts mineIdOf, src/features/mine-status.ts mineIdOfLayout)"
+    },
+    {
+      "id": "mine.js weekly rebuild: st.cr + another week → toast + exit(); ≤ 1 h → warning (15.11)",
+      "file": "mine.js",
+      "re": "if \\(st && S\\.st && st\\.cr && S\\.st\\.week != null && st\\.week !== S\\.st\\.week\\) \\{ try \\{ if \\(X\\.toast\\) X\\.toast\\('Шахта обновилась: новые жилы и этажи\\. Добытое - в сумке, возвращаю в город', true\\); \\} catch \\(e\\) \\{\\s*\\} exit\\(\\); return; \\}\\s*if \\(st && st\\.cr && st\\.reset > Date\\.now\\(\\) && st\\.reset - Date\\.now\\(\\) <= 3600e3 && S\\.rsWarn !== st\\.week\\)",
+      "severity": "degrade",
+      "why": "15.11: the 3D mine mirrors it (src/rooms/mine/state.ts take weekDone / weekSoon, index.ts toast + exit) — otherwise a player stays in a 3D mine the site has rebuilt"
+    },
+    {
+      "id": "mine.js presence u (looks changed) + LOOK_MS (15.11)",
+      "file": "mine.js",
+      "re": "const LOOK_MS = 60000;[\\s\\S]*for \\(const \\[l, v\\] of d\\.u \\|\\| \\[\\]\\) \\{ const o = S\\.others\\.get\\(l\\); if \\(o && v\\) S\\.others\\.set\\(l, \\{ \\.\\.\\.o, v: \\{ lk: v\\.lk, g: v\\.g, gh: v\\.gh \\}, lk: v\\.lk \\}\\); \\}",
+      "severity": "degrade",
+      "why": "src/rooms/mine/state.ts presence / take mirror both: looks of the miners follow their gear"
+    },
+    {
+      "id": "site-chat.js guild invite plaque #cy-ginv on <body> focuses its button (15.11)",
+      "file": "site-chat.js",
+      "re": "function ginvShow\\(d\\) \\{[\\s\\S]{0,400}el\\.id = 'cy-ginv';[\\s\\S]{0,900}document\\.body\\.appendChild\\(el\\);[\\s\\S]{0,1600}el\\.querySelector\\('button'\\)\\.focus\\(",
+      "severity": "degrade",
+      "why": "the plaque lies under our canvas (z 70) and grabs the focus for «Принять»: src/ui/styles.ts lifts it, src/engine/input.ts FOCUS_GRAB_SEL undoes the grab (Enter / Space would accept it), src/features/guildinvite.ts hints Esc"
     },
     {
       "id": "city.js townPick fairOk = T.fair (Рябинень)",

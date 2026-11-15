@@ -25,6 +25,20 @@ export const MINE_KEY_RE = /^[a-z0-9_-]{1,24}(\.[1-9][0-9]{0,2})?$/;
 /** Mine id without the floor («home.3» → «home»). */
 export const mineBase = (k: string): string => String(k || '').split('.')[0];
 
+/**
+ * The mine a town's mine door opens (city.js mineOpen, site 15.11):
+ * `tc = TOWN.id === 'fair' ? 'edge' : TOWN.id; c = tc && mn[tc] && mn[tc].city ? tc : 'home'`.
+ * The site's TOWN.id is 'fair' for both fairs (our layouts 'fair' / 'fairc'), 'camp' for the camp and the district id for
+ * a district or Town Kit town (= our layout id). So a town whose own mine the server marks `city` opens that mine (the
+ * fairs: 'edge'); every other door opens the channel's mine 'home' (08.11 → 14.11 that was every door).
+ */
+export function mineDoorOf(layoutId: string | null | undefined, mn: Record<string, unknown> | null | undefined): string {
+  const id = String(layoutId || '');
+  const tc = id === 'fair' || id === 'fairc' ? 'edge' : id;
+  const m = mn && typeof mn === 'object' && tc && Object.prototype.hasOwnProperty.call(mn, tc) ? (mn as Record<string, any>)[tc] : null;
+  return tc && m && m.city ? tc : 'home';
+}
+
 /** Is the site's own 2D mine open (shown or held under the 3D mine)? */
 export function siteMineOpen(w: W0 = win(), doc: Document = document): boolean {
   try { if (w.LGMine && typeof w.LGMine.on === 'boolean') return w.LGMine.on; } catch { /* */ }

@@ -39,15 +39,16 @@ import { liftPrompt, drillsOf, drillPrompt, followKey, followOnEnter } from './f
 import { attachMineChat, chatOneOn } from '../../ui/chat';
 import type { Avatar } from '../../contracts/modules';
 import type { RoomCombat, RoomFighter } from '../../combat/room';
-import { siteMineOpen, holdSiteMine, heldSiteKey, exitSiteMine, cityLive, mineBase } from '../../net/site-mine';
+import { siteMineOpen, holdSiteMine, heldSiteKey, exitSiteMine, cityLive, mineBase, mineDoorOf } from '../../net/site-mine';
 
 export { MineClient } from './net';
 export { MineModel } from './state';
 export { MineScene } from './scene';
 
-/** Mine id of the current city. Site 08.11 (city.js mine door: `const c = "home"`): every town's mine door opens the
- *  channel's one mine 'home' (district towns no longer have their own). The layout id is kept for a future change. */
-export function mineIdOf(layoutId: string | undefined): string { void layoutId; return 'home'; }
+/** Mine id of the current city's mine door (city.js mineOpen, src/net/site-mine.ts mineDoorOf). Site 15.11: a town whose
+ *  own mine the server marks `hero.mn[tc].city` opens it (the fairs: 'edge'); every other door opens the channel's mine
+ *  'home' (08.11 → 14.11: every door). */
+export function mineIdOf(layoutId: string | undefined, mn?: Record<string, unknown> | null): string { return mineDoorOf(layoutId, mn); }
 /** city.js (08.11): the mine door while the channel's mine (hero.mn.home) is not open. */
 export const MINE_NO_CITY = 'Шахта канала откроется, когда у канала появится свой город - захватите округ на стриме';
 
@@ -104,7 +105,7 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
   const login = String((store.me && store.me.login) || (hero && hero.login) || '').toLowerCase();
   let c = o.c;
   if (!c) c = takeMineKey() || undefined;
-  if (!c) { try { c = mineIdOf(ctx.layout().id); } catch { c = 'home'; } }
+  if (!c) { try { c = mineIdOf(ctx.layout().id, hero && hero.mn); } catch { c = 'home'; } }
   if (!o.client && hero && hero.mn && !hero.mn[c] && !hero.mn[mineBase(c)]) throw new Error(mineBase(c) === 'home' ? MINE_NO_CITY : 'Эта шахта закрыта');
   // the site's own mine open (F8 in its 2D mine): it stays open, hidden under the 3D one — closing it would leave the mine,
   // and only the live City can open it again (a city enter inside the mine). Our enter takes the presence (one per page
@@ -219,6 +220,8 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     }
     else if (e.type === 'presence' || e.type === 'here' || e.type === 'busy' || e.type === 'other') hud.render();
     else if (e.type === 'tip') hud.tip(e.text, e.bad);
+    // site 15.11: the weekly rebuild moves everyone out to the City (mine.js take0: toast + exit()); ≤ 1 h before it a warning
+    else if (e.type === 'week') { if (e.phase === 'done') { ctx.ui.toast(e.text, true); ctx.exit(); } else hud.tip(e.text); }
     else if (e.type === 'chat') { for (const l of e.lines) { scene.say(String(l.l).toLowerCase(), l.t); } hud.chatIn(e.lines); }
     else if (e.type === 'error') hud.tip(e.text, true);
     else if (e.type === 'burst') {

@@ -72,6 +72,9 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
 - Live link (site 13.11, /lib/site-live.js `LGLiveLink`): app.js opens the live channel as a WebSocket to `/ws` (only with hero `lw`)
   or SSE `/api/live`; the bridge taps both (src/bridge/bridge.ts: frames `{"op":"ev","e":…,"d":…}` → bus `sse:<name>`, `live:kind`).
   `node e2e/contract.mjs` prints `LIVE transport=…`. Notes: docs/SITE-NOTES.md «Live channel», .local/drift1113/FINDINGS.md.
+  Since 15.11 the socket carries the hero as a full `me` + `mep` patches (version `mv`): the bridge keeps the same base
+  (src/bridge/me-patch.ts MeMirror / meApply, a port of site-live.js) and emits the full hero as `sse:me`; the live contract
+  prints `ev frames N: me … mep …` and `meSync=same mv a/b` (our hero vs `LGLiveLink.last.me()`).
 - Site contract: `src/data/site-contract.json` is checked statically (`npm run drift`) and at runtime (boot guard in
   `src/net/site.ts` via `src/net/contract.ts`; `node e2e/contract.mjs` against the live page).
 - Asset models of the new fair / Town Kit (`src/world/fcart/`: registry, civic / shops / houses models) are pinned to the
