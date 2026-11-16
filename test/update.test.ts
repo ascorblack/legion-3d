@@ -50,7 +50,7 @@ describe('manifest', () => {
     expect(manifest.permissions).toEqual(['storage']);
     expect(manifest.background.service_worker).toBe('background.js');
     const notify = manifest.content_scripts.find((c) => c.js.includes('notify.js'))!;
-    expect(notify.matches).toEqual(['https://play.multidonate.ru/c/*']);
+    expect(notify.matches).toEqual(['https://legiongame.gg/c/*', 'https://play.multidonate.ru/c/*']);
     expect((notify as { world?: string }).world).toBeUndefined();   // isolated
     expect(manifest.content_scripts.filter((c) => (c as { world?: string }).world === 'MAIN').length).toBe(2);
   });

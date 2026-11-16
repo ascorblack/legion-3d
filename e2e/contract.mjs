@@ -11,7 +11,7 @@ import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
-const url = args.find((a) => !a.startsWith('--')) || process.env.L3D_URL || 'https://play.multidonate.ru/c/zakvielchannel/';
+const url = args.find((a) => !a.startsWith('--')) || process.env.L3D_URL || 'https://legiongame.gg/c/zakvielchannel/';
 const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => { const i = a.indexOf('='); return i < 0 ? [a.slice(2), '1'] : [a.slice(2, i), a.slice(i + 1)]; }));
 const dist = opt.dist || 'dist';
 const t00 = Date.now();

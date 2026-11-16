@@ -3,7 +3,7 @@
 // support yet. No browser: downloads the channel page and its scripts (public, GET only) and reads them statically.
 //
 //   npm run drift                                  # default channel, compare with src/data/site-snapshot.json
-//   npm run drift -- https://play.multidonate.ru/c/<channel>/
+//   npm run drift -- https://legiongame.gg/c/<channel>/
 //   npm run drift -- --local=.local/site-new       # read already downloaded scripts (offline)
 //   npm run drift -- --write                       # accept the current site as the new snapshot
 //   npm run drift -- --save=.local/site-YYYY-MM-DD   # also keep the downloaded scripts
@@ -28,7 +28,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SNAPSHOT = join(ROOT, 'src/data/site-snapshot.json');
 const SUPPORTED = join(ROOT, 'src/data/supported.json');
 const CONTRACT = join(ROOT, 'src/data/site-contract.json');
-const DEFAULT_URL = 'https://play.multidonate.ru/c/zakvielchannel/';
+const DEFAULT_URL = 'https://legiongame.gg/c/zakvielchannel/';
 // Channel-specific bundles differ by art style (cityfair.js / doodle.js carry the channel's styles: zakvielchannel has
 // «cats» + «legion», most other channels only «legion»). These channels are fingerprinted too (their /c/<channel>/*.js),
 // so a change in another style's bundle is noticed. Public channel ids only.

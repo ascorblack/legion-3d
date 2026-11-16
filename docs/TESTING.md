@@ -1,7 +1,7 @@
 # Testing
 
 Three levels, from fast to real: unit tests (Node), the offline demo (the whole game in a browser with fake
-site data), and the live end-to-end run against play.multidonate.ru with a real account.
+site data), and the live end-to-end run against legiongame.gg with a real account.
 
 All commands run from the repository root. On Node 18 the pinned versions are vitest 2.1.9 and playwright 1.48.2.
 
@@ -125,11 +125,11 @@ after load, exactly like the extension's two MAIN-world content scripts.
 ```bash
 npm run build
 # quick smoke: boot, walk, camera, menus, screenshots
-L3D_COOKIES=~/cookies.txt node e2e/run.mjs https://play.multidonate.ru/c/<channel>/
+L3D_COOKIES=~/cookies.txt node e2e/run.mjs https://legiongame.gg/c/<channel>/
 # scenario runner (see the steps format at the top of the file)
-L3D_COOKIES=~/cookies.txt node e2e/live.mjs https://play.multidonate.ru/c/<channel>/ --steps=my-steps.json
+L3D_COOKIES=~/cookies.txt node e2e/live.mjs https://legiongame.gg/c/<channel>/ --steps=my-steps.json
 # logged-out path (no cookies): the splash must offer «Войти через Twitch»
-node e2e/live.mjs https://play.multidonate.ru/c/<channel>/
+node e2e/live.mjs https://legiongame.gg/c/<channel>/
 ```
 
 Screenshots and logs go to `e2e/.artifacts/` (git-ignored).

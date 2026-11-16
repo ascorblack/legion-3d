@@ -4,7 +4,8 @@ All facts below were observed on `play.multidonate.ru` on 2026-10-26. The site i
 so the extension must treat every internal API as unstable and degrade gracefully.
 
 ## Page
-- Per-channel SPA: `https://play.multidonate.ru/c/<channel>/`. `window.LG_BASE = "/c/<channel>"`.
+- Per-channel SPA: `https://legiongame.gg/c/<channel>/`. `window.LG_BASE = "/c/<channel>"`.
+- 16.11.2026: the site moved to **legiongame.gg**; play.multidonate.ru answers with 301 to it. Sessions did not carry over (old `lsid` → `/api/me` `{user: null}`). The manifest matches both hosts.
   The page wraps `window.fetch` so that `fetch('/api/…')` is prefixed with `LG_BASE`.
 - **Anti-bot telemetry (mine.js `tele()` → `tlPi()`, sent with every «Копать»; 30.10).** Bit 1 of `pi`: `window.fetch` is neither native
   (`Function.prototype.toString` ends with `[native code]`) nor the site's own wrapper — the `<head>` script publishes

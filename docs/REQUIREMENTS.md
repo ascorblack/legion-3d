@@ -1,6 +1,6 @@
 # Requirements (from the product owner, translated from Russian)
 
-Target: the game site **play.multidonate.ru** ("Легион" / "Поход Легиона", a Twitch-stream idle RPG;
+Target: the game site **legiongame.gg** (formerly play.multidonate.ru) ("Легион" / "Поход Легиона", a Twitch-stream idle RPG;
 per-channel URL `/c/<channel>/`). The site has tabs: Персонаж (hero: equipment, inventory, skills,
 achievements, journal, stats, money, social rating), Город (2D side-scroll city where hero
 walkers move, shops, mine), Поход (quest/expedition while the stream runs), Легион (rating),
