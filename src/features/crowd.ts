@@ -3,7 +3,7 @@
  * pick LOD and draw budget nearest-first among those in view (CrowdLod), and set their label anchors.
  * Also re-applies the own appearance when the store replaces it. Hidden while a 3D room is active.
  * The site's «Только друзей» (localStorage lgCityFr + LGFriends, src/net/friends-only.ts) is honoured: while it is on only
- * friends are drawn, as in the site's own City.
+ * friends are drawn, as in the site's own City; so is «Только гильдию» (16.11, lgCityGl + hero.go: only the hero's guild tag).
  */
 import * as THREE from 'three';
 import type { Avatar } from '../contracts/modules';
@@ -25,7 +25,7 @@ export default coreFeature({
     // app: identity of the Appearance object last applied (cheap check first; JSON only when the object was replaced)
     const avs = new Map<string, { av: Avatar; key: string; app: unknown; lod: number; slot: number }>();
     const crowd = new CrowdLod(64);
-    const fo = ctx.dev.friendsOnly = new FriendsOnly(pageFriendsDeps());
+    const fo = ctx.dev.friendsOnly = new FriendsOnly({ ...pageFriendsDeps(), hero: () => store.hero, ownTag: () => store.me?.app.guild });
     let meKey = JSON.stringify(me.app), meApp: unknown = me.app, meTool = false;
     labels.set(me.login, { name: me.app.name, level: me.app.level, me: true, tag: me.app.guild });
 
@@ -76,7 +76,7 @@ export default coreFeature({
       fo.tick(performance.now());
       for (const w of store.walkers.values()) {
         const a = avs.get(w.login); if (!a) continue;
-        if (!fo.allows(w.login)) { a.slot = -1; continue; }   // «Только друзей»: not a friend
+        if (!fo.allows(w.login, w.app.guild)) { a.slot = -1; continue; }   // «Только друзей» / «Только гильдию»
         const p = a.av.root.position;
         p.set(toX(w.x), world.groundAt(w.x, w.y), toZ(w.y));
         a.slot = crowd.add(p.x, p.y, p.z, a.lod);

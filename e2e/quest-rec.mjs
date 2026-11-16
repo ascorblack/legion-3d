@@ -11,7 +11,7 @@ import { readFileSync, mkdirSync, appendFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 
 const opt = Object.fromEntries(process.argv.slice(2).map((a) => { const m = /^--([^=]+)=(.*)$/.exec(a); return m ? [m[1], m[2]] : [a.replace(/^--/, ''), '1']; }));
-const URL0 = opt.url || process.env.L3D_URL || 'https://play.multidonate.ru/c/zakvielchannel/';
+const URL0 = opt.url || process.env.L3D_URL || 'https://legiongame.gg/c/zakvielchannel/';
 const MIN = +(opt.minutes || 180);
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const OUT = resolve(opt.out || join('e2e/.artifacts/quest', stamp));

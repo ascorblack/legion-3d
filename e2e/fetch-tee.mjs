@@ -13,12 +13,12 @@ const b = await chromium.launch({ executablePath: process.env.CHROMIUM || undefi
 const out = [];
 for (const start of ['2d', '3d', 'last']) {
   const c = await b.newContext();
-  await c.route('https://play.multidonate.ru/**', (r) => (r.request().url().includes('/api/')
+  await c.route('https://legiongame.gg/**', (r) => (r.request().url().includes('/api/')
     ? r.fulfill({ contentType: 'application/json', body: '{"ok":true}' }) : r.fulfill({ contentType: 'text/html', body: html })));
   const p = await c.newPage();
   await p.addInitScript(`try { localStorage.setItem('l3d.start', '${start}'); } catch (e) {}`);
   await p.addInitScript({ content: readFileSync('dist/bridge.js', 'utf8') });
-  await p.goto('https://play.multidonate.ru/c/channel/');
+  await p.goto('https://legiongame.gg/c/channel/');
   await p.evaluate(probeSource());
   const q = (js) => p.evaluate(js);
   assert.equal(await q('window.__l3dPi()'), 0, `start=${start}: pi after load`);

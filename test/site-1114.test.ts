@@ -31,6 +31,8 @@ const text = (h: string) => h.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').rep
 const SHOP = siteCopy('cityshop.js', 'Звёзды и сферы находят в походе');
 const BSHOP = siteCopy('b-shop.js', 'cy-matfind');
 const APP = siteCopy('app.js', 'window.LGAnnTick = ');
+// the 14.11 pause countdown (16.11 replaced it: test/site-1116.test.ts)
+const APP14 = siteCopy('app.js', "warnEl = document.createElement('div'); warnEl.className = 'lg-pz-warn';");
 const CHAT = siteCopy('site-chat.js', 'function tabsApply(');
 const SUI = siteCopy('site-ui.js', 'function keepField(');
 const COPY = (() => {
@@ -305,28 +307,28 @@ describe.skipIf(!APP)('app.js 14.11: the announcement ticker (hero ak) holds the
   });
 });
 
-describe('maintenance pause 14.11 (live event `pz`)', () => {
-  it('our countdown is the site\'s pauseWarn text, gone at warnAt and once the pause is on', () => {
+describe('maintenance pause 14.11 (live event `pz`; the words follow 16.11 — test/site-1116.test.ts)', () => {
+  it('our countdown is gone at warnAt and once the pause is on', () => {
     const now = 1_000_000;
     expect(pauseWarnAt({ on: false, warnAt: now + 30_000 })).toBe(now + 30_000);
     expect(pauseWarnAt({ on: true, warnAt: now + 30_000 })).toBe(0);
     expect(pauseWarnAt(null)).toBe(0);
-    expect(pauseWarnText(now + 30_000, now)).toBe('Через 30 с - короткие технические работы (меньше минуты). Ничего не потеряется.');
+    expect(pauseWarnText(now + 30_000, now)).not.toBe('');
     expect(pauseWarnText(now - 1, now)).toBe('');
     expect(pauseWarnText(0, now)).toBe('');
   });
-  it.skipIf(!APP)('the site copy writes the same line (app.js pauseWarn in node:vm)', () => {
+  it.skipIf(!APP14)('the 14.11 site copy wrote its line under our canvas (app.js pauseWarn in node:vm)', () => {
     const els: El[] = [];
     const c: any = { document: { createElement: () => { const e = new El(); els.push(e); return e; }, body: { appendChild: () => {} } }, Date, Math, setTimeout: () => 0 };
     vm.createContext(c);
-    vm.runInContext('let warnEl = null;\n' + fnSource(APP!, 'pauseWarn'), c);
+    vm.runInContext('let warnEl = null;\n' + fnSource(APP14!, 'pauseWarn'), c);
     const at = Date.now() + 42_000;
     vm.runInContext('pauseWarn', c)(at);
     expect(els[0].className).toBe('lg-pz-warn');
-    expect(els[0].textContent).toBe(pauseWarnText(at, Date.now()));
-    expect(APP!).toMatch(/ES\.addEventListener\('pz', \(e\) => \{ try \{ pauseEvent\(JSON\.parse\(e\.data\)\)/);
+    expect(els[0].textContent).toMatch(/^Через 4[12] с - короткие технические работы/);
+    expect(APP14!).toMatch(/ES\.addEventListener\('pz', \(e\) => \{ try \{ pauseEvent\(JSON\.parse\(e\.data\)\)/);
     // the pause itself is the site's full-screen alertdialog (the 3D yields to it as a site dialog)
-    expect(APP!).toMatch(/mtEl\.className = 'lg-maint'; mtEl\.setAttribute\('role', 'alertdialog'\); mtEl\.setAttribute\('aria-modal', 'true'\);/);
+    expect(APP14!).toMatch(/mtEl\.className = 'lg-maint'; mtEl\.setAttribute\('role', 'alertdialog'\); mtEl\.setAttribute\('aria-modal', 'true'\);/);
   });
 });
 

@@ -33,6 +33,7 @@ import { modBody, planCmd, whyTail, muteWhat, Moderator, ModState } from '../src
 import { readAnns, closeAnn, annKey } from '../src/features/announce';
 import { JT, JK, JRK } from '../src/ui/menus';
 import { siteCopy, fnSource, siteBoss, schemeBlock } from './site-quest-fns';
+import { closedCode } from '../src/net/site-code';   // site 16.11 (test/site-1116.test.ts checks it against site-ui.js)
 import FC from './fixtures/faircats-map.json';
 
 const GH = siteCopy('guildhall.js', "root.className = 'gh-root'");
@@ -83,9 +84,9 @@ describe('guild hall (guildhall.js 12.11)', () => {
     expect(lit).not.toMatch(/\bpick\b/);   // 07.11's district pick window is gone (the live contract's degrade)
     // enter(): run the site's own function on the answers it can get
     const src = fnSource(GH!, 'enter')!;
-    for (const r of [{ ok: false, unavailable: true }, { ok: false, closed: true }, { ok: false, error: 'слишком часто - подожди немного' }, { ok: true }, { ok: true, guild: { id: 1 } }]) {
+    for (const r of [{ ok: false, unavailable: true }, { ok: false, closed: true }, { ok: false, closed: true, code: 'G07' }, { ok: false, error: 'слишком часто - подожди немного' }, { ok: true }, { ok: true, guild: { id: 1 } }]) {
       const out: any = { toast: null, noGuild: 0, open: 0 };
-      const ctx: any = { OPEN: false, index: async () => r, toast: (t: string, bad: boolean) => { out.toast = { text: t, bad: !!bad }; }, noGuild: () => { out.noGuild++; }, open: () => { out.open++; } };
+      const ctx: any = { window: { LGSiteUi: { closedCode } }, OPEN: false, index: async () => r, toast: (t: string, bad: boolean) => { out.toast = { text: t, bad: !!bad }; }, noGuild: () => { out.noGuild++; }, open: () => { out.open++; } };
       vm.createContext(ctx);
       await vm.runInContext(`(async ${src.replace(/^function enter/, 'function')})()`, ctx);
       expect(out.toast, JSON.stringify(r)).toEqual(ghRefusal(r));

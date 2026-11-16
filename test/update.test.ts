@@ -183,12 +183,14 @@ describe('message validation (page boundary)', () => {
     expect(sanitizeInfo(null)).toBeNull();
     expect(sanitizeInfo('x')).toBeNull();
   });
-  it('readPageMessage: same window, same origin, marker, valid shape', () => {
-    const win = {}; const o = 'https://play.multidonate.ru';
+  // site 16.11: the game moved to legiongame.gg (play.multidonate.ru answers 301); the page's own origin decides, any host
+  it.each(['https://legiongame.gg', 'https://play.multidonate.ru'])('readPageMessage on %s: same window, same origin, marker, valid shape', (o) => {
+    const win = {};
     const msg = (over: object = {}) => ({ data: { __l3d: 'update', ...good }, source: win, origin: o, ...over });
     expect(readPageMessage(msg(), win, o)).toEqual(good);
     expect(readPageMessage(msg({ source: {} }), win, o)).toBeNull();          // an iframe / other window
     expect(readPageMessage(msg({ origin: 'https://evil.example' }), win, o)).toBeNull();
+    expect(readPageMessage(msg({ origin: o === 'https://legiongame.gg' ? 'https://play.multidonate.ru' : 'https://legiongame.gg' }), win, o)).toBeNull();   // the other host is another origin
     expect(readPageMessage(msg({ data: { ...good } }), win, o)).toBeNull();   // no marker
     expect(readPageMessage(msg({ data: { __l3d: 'update', ...good, url: 'javascript:1' } }), win, o)).toBeNull();
     expect(readPageMessage(msg({ data: 'update' }), win, o)).toBeNull();
@@ -206,7 +208,7 @@ class FakeEl extends EventTarget {
   remove() { this.removed = true; }
 }
 describe('feature: toast once per version, pause row, setting', () => {
-  const origin = 'https://play.multidonate.ru';
+  const origin = 'https://legiongame.gg';
   let ls: Map<string, string>; let win: EventTarget & Record<string, unknown>; let root: FakeEl; let opened: unknown[][];
   const info = { current: '0.4.1', store: false, latest: '0.4.2', url: URL_OK };
   const post = (data: unknown) => { const e = new Event('message') as Event & Record<string, unknown>; Object.assign(e, { data, source: win, origin }); win.dispatchEvent(e); };

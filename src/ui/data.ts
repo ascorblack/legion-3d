@@ -1,6 +1,7 @@
 /** Pure helpers over the hero JSON: labels, rarity, comparison, consumables. Mirrors site app.js logic (see GAME-DESIGN §4). */
 import type { Hero, Item } from '../contracts';
 import type { CoinStyle } from './money';
+import { gameNow } from '../net/game-clock';
 
 export const RARITY: Record<string, { name: string; color: string; rank: number }> = {
   common: { name: 'Обычное', color: '#c9ccd6', rank: 0 },
@@ -118,14 +119,15 @@ export function useCmd(it: Item): string {
   if (it.slot === 'food') return 'съесть' + k;
   return '';
 }
-export function cdUntil(it: Item, h: Hero | null, now = Date.now()): number {
+/** site app.js cdUntil (16.11 evening: at the game's clock, src/net/game-clock.ts). */
+export function cdUntil(it: Item, h: Hero | null, now = gameNow()): number {
   if (!h) return 0;
   const eat = +(h.eatUntil as number) || 0, scr = +(h.scrollUntil as number) || 0;
   if ((it.slot === 'food' || it.slot === 'potion') && eat > now) return eat;
   if (it.effect && (it.effect as any).revive && scr > now) return scr;
   return 0;
 }
-export const mmss = (t: number, now = Date.now()) => { const s = Math.max(0, Math.ceil((t - now) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+export const mmss = (t: number, now = gameNow()) => { const s = Math.max(0, Math.ceil((t - now) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /** Bag category (site catOf). */
 export function catOf(it: Item): string {

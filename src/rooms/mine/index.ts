@@ -338,8 +338,8 @@ export async function createMineRoom(ctx: RoomContext, o: MineRoomOpts = {}): Pr
     if (lab.i === i && lab.snap === M.st.at && lab.my === M.myI && lab.raw === raw && now - lab.at < 2000) return lab.text;
     const on = mineSwitch(PREF_ECON), qList = client.queue(), place = qList.indexOf(i);
     // «получишь: …» is the game's own projection (site 11.11 expectOf): shown with the estimates off too
-    const x = expectOf(M, i, now);
-    const est = on ? promptEcon(withExpect(estimateStone(M.st, cell, now, M.myI), x, M.st.bp)) : x ? `получишь: ${exText(x)}` : '';
+    const sn = M.srvNow(now), x = expectOf(M, i, sn);   // site 16.11: stone timings are server time
+    const est = on ? promptEcon(withExpect(estimateStone(M.st, cell, sn, M.myI), x, M.st.bp)) : x ? `получишь: ${exText(x)}` : '';
     const head = M.myI === i ? `${TX.doing}: ${blockTitle(cell)}` : place >= 0 ? `В очереди №${place + 1}: ${blockTitle(cell)}` : `Копать: ${blockTitle(cell)}`;
     const hint = client.queueOn && M.myI >= 0 && M.myI !== i && place < 0 ? ' · Shift+E — в очередь' : '';
     lab.i = i; lab.at = now; lab.snap = M.st.at; lab.my = M.myI; lab.raw = raw;

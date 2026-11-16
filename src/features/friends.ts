@@ -19,7 +19,7 @@ import { registerPauseItem } from '../ui/settings-ext';
 import { mountFriendsChip, type FriendsChip } from '../ui/friends-chip';
 import { friendsApi, type FriendsApi } from '../ui/dm';
 import { setModal, type ModalInput } from '../core/modal';
-import { FR_KEY, toggleFriendsOnly, pageFrStore } from '../net/friends-only';
+import { FR_KEY, GL_KEY, toggleFriendsOnly, toggleGuildOnly, guildOk, pageFrStore } from '../net/friends-only';
 
 export const FRIENDS_CSS_ID = 'l3d-friends-css';
 /** The site's friends window (z 120) goes above our canvas and UI layer (150), under its own toasts / nick menu (165+). */
@@ -109,6 +109,11 @@ export function startFriends(ctx: CoreContext, deps: Partial<FriendsDeps> = {}):
   const frFn = () => { const F = (D.win as unknown as { LGFriends?: { friends?: unknown } }).LGFriends; return !!F && typeof F.friends === 'function'; };
   offs.push(registerPauseItem({ id: 'friends.only', get label() { return pageFrStore.get(FR_KEY) === '1' ? 'Показать всех игроков' : 'Только друзья'; },
     order: 28, group: 'city', icon: 'eye', enabled: frFn, run: () => { toggleFriendsOnly(pageFrStore); } }));
+  // site 16.11 «Только гильдию» (city.js lgCityGl; offered with a guild tag and hero.go): the 3D crowd honours it too
+  const glDeps = { hero: () => ctx.store?.hero ?? null, ownTag: () => ctx.store?.me?.app.guild ?? null };
+  offs.push(registerPauseItem({ id: 'guild.only',
+    get label() { return pageFrStore.get(GL_KEY) === '1' && pageFrStore.get(FR_KEY) !== '1' ? 'Показать всех игроков' : 'Только гильдия'; },
+    order: 29, group: 'city', icon: 'banner', enabled: () => guildOk(glDeps), run: () => { toggleGuildOnly(pageFrStore); } }));
   refresh();
 
   return () => {

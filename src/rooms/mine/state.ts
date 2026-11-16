@@ -80,6 +80,8 @@ export interface MinePayload {
   /** Site 15.11: looks changed of walkers already here: [[login, { lk, g, gh }]]. */
   u?: [string, { lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number } | null][];
   sid?: string; c?: string; here?: number; hw?: number; hm?: number;
+  /** Site 16.11: the server time of the answer (mine.js clk → srvNow). */
+  now?: number;
   mchat?: { chat?: ChatLine[]; c?: number }; chat?: ChatLine[]; chatRoom?: string;
   crafts?: unknown; open?: string[]; town?: string; same?: number;
 }
@@ -317,6 +319,15 @@ export class MineModel {
   nOthers = 0;
   here: number | null = null; hw: number | null = null; hm = 0;
   stAt = 0;
+  /**
+   * Site 16.11 (mine.js clk / srvNow): the server clock's offset (ms, local − server) from the `now` of an answer (enter,
+   * poll, a live view). The stones' timings (st.at, st.bl) are server time: progress, ETA and «Получишь» are computed at
+   * srvNow(), so a wrong clock on the player's computer no longer runs the bars ahead or behind.
+   */
+  dt = 0;
+  clk(r: { now?: unknown } | null | undefined, now: number): void { const n = r ? +(r.now as number) : NaN; if (Number.isFinite(n) && n > 0) this.dt = now - n; }
+  /** The server's time at local `now`. */
+  srvNow(now: number): number { return now - this.dt; }
   /** Set when a stop must be re-sent (left protection) — the client sends /api/mineStop and clears it. */
   needStop = false;
   constructor(public login: string) { this.login = String(login || '').toLowerCase(); }

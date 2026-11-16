@@ -107,7 +107,7 @@ function titleCard(t: number, a: number, b: number): void {
   h.style.transform = `scale(${0.94 + 0.06 * smooth((t - a) / (b - a))})`;
 }
 function endCard(t: number, a: number, b: number): void {
-  const e = el('end', 'card', `<h1>Legion 3D</h1><p>расширение для Chrome · play.multidonate.ru в 3D</p>
+  const e = el('end', 'card', `<h1>Legion 3D</h1><p>расширение для Chrome · legiongame.gg в 3D</p>
     <div class="keys"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ходить</span><span><kbd>Space</kbd> прыжок</span>
     <span><kbd>V</kbd> вид 1/3 лица</span><span><kbd>E</kbd> войти / взять</span><span><kbd>Tab</kbd> персонаж</span><span><kbd>M</kbd> карта</span></div>`);
   e.style.opacity = String(env(t, a, b, 0.8, 0.01));

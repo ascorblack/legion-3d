@@ -79,12 +79,12 @@ export const myStone = (M: MineModel): number => (M.myI >= 0 && !M.dug[M.myI] ? 
 /** Seconds left on the own stone at `now`; null = unknown (no bl for it yet). */
 export function myEta(M: MineModel, now: number): number | null {
   const i = myStone(M); if (i < 0 || !M.st) return null;
-  const pr = stoneProgress(M.st, i, now); return pr ? Math.max(0, Math.round(pr.eta)) : null;
+  const pr = stoneProgress(M.st, i, M.srvNow(now)); return pr ? Math.max(0, Math.round(pr.eta)) : null;
 }
 /** Progress 0…1 of the own stone (null = not digging / unknown). */
 export function myProgress(M: MineModel, now: number): number | null {
   const i = myStone(M); if (i < 0 || !M.st) return null;
-  const pr = stoneProgress(M.st, i, now); return pr ? pr.p : null;
+  const pr = stoneProgress(M.st, i, M.srvNow(now)); return pr ? pr.p : null;
 }
 export const DONE_TITLE = '✅ Камень выкопан';
 /** Tab title for the mine state, or null = show the site's own title. */

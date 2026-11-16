@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 import { readFileSync, mkdirSync } from 'node:fs';
 
 const args = process.argv.slice(2);
-const url = args.find((a) => !a.startsWith('--')) || process.env.L3D_URL || 'https://play.multidonate.ru/c/zakvielchannel/';
+const url = args.find((a) => !a.startsWith('--')) || process.env.L3D_URL || 'https://legiongame.gg/c/zakvielchannel/';
 const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => { const [k, v] = a.slice(2).split('='); return [k, v ?? '1']; }));
 const out = opt.out || 'e2e/.artifacts';
 mkdirSync(out, { recursive: true });

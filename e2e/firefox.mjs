@@ -37,7 +37,7 @@ const gameHtml = readFileSync('dist-dev/game.html', 'utf8')
   .replace('<script src="game.js">', `<script>localStorage.setItem('l3d.whatsnew.seen', ${JSON.stringify(manifest.version)});window.testErrors=[];const logError=console.error.bind(console);console.error=(...args)=>{testErrors.push(args.map(String).join(' '));logError(...args);};window.addEventListener('error',e=>testErrors.push(e.message));window.addEventListener('unhandledrejection',e=>testErrors.push(String(e.reason)));</script><script src="game.js">`);
 const fixture = `<!doctype html><meta charset="utf-8"><script nonce="fixture">window.bridgeAtStart=!!window.__L3D_BUS;localStorage.setItem('l3d.auto','0');window.updMsgs=[];window.addEventListener('message',e=>{if(e.source===window&&e.data&&e.data.__l3d==='update')window.updMsgs.push(e.data);});</script><body>Extension fixture<iframe src="/c/frame/"></iframe></body>`;
 let requests = 0;
-execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(temp, 'key.pem'), '-out', join(temp, 'cert.pem'), '-days', '1', '-subj', '/CN=play.multidonate.ru'], { stdio: 'ignore' });
+execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(temp, 'key.pem'), '-out', join(temp, 'cert.pem'), '-days', '1', '-subj', '/CN=legiongame.gg'], { stdio: 'ignore' });
 const server = createServer({ key: readFileSync(join(temp, 'key.pem')), cert: readFileSync(join(temp, 'cert.pem')) }, (req, res) => {
   // Every test URL resolves locally. No real game API/account is used.
   if (req.method !== 'GET') { requests++; res.writeHead(405); res.end(); return; }
@@ -93,7 +93,7 @@ try {
     catch (e) { if (i === 100) throw e; await delay(100); }
   }
   const created = await command('POST', '/session', { capabilities: { alwaysMatch: { browserName: 'firefox', acceptInsecureCerts: true,
-    'moz:firefoxOptions': { binary: process.env.FIREFOX || firefox.executablePath(), args: ['-headless'], prefs: { 'network.dns.localDomains': 'play.multidonate.ru', 'network.proxy.type': 0 } },
+    'moz:firefoxOptions': { binary: process.env.FIREFOX || firefox.executablePath(), args: ['-headless'], prefs: { 'network.dns.localDomains': 'legiongame.gg', 'network.proxy.type': 0 } },
   } } });
   session = created.sessionId;
   console.log('Firefox', created.capabilities.browserVersion);
@@ -101,7 +101,7 @@ try {
   const id = await cmd('POST', '/moz/addon/install', { path: archive, temporary: true });
   assert.equal(id, manifest.browser_specific_settings.gecko.id);
   checks.push('packaged extension installed; archive manifest and Firefox installation note validated');
-  await cmd('POST', '/url', { url: `https://play.multidonate.ru:${port}/c/offline-test/` });
+  await cmd('POST', '/url', { url: `https://legiongame.gg:${port}/c/offline-test/` });
   await until("return !!document.getElementById('l3d-launch')");
   assert.equal(await js('return window.bridgeAtStart'), true);
   assert.equal(await js('return frames[0].bridgeAtStart'), false);

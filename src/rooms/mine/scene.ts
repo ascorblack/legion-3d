@@ -1358,7 +1358,7 @@ uniform vec3 uMwSky;`).replace('#include <emissivemap_fragment>', `#include <emi
       const i = +key; if (M.dug[i] || i >= this.G.N) continue;
       if (dark && i !== M.myI) continue;
       if (this.G.v3 && i !== M.myI) { const c = this.G.cellXY(i); if (Math.hypot(this.G.mx(c.cx) - feet.x, this.G.mz(c.cy) - feet.z) > BAR_NEAR) continue; }
-      const pr = stoneProgress(st, i, now); if (!pr) continue;
+      const pr = stoneProgress(st, i, M.srvNow(now)); if (!pr) continue;
       if (k >= BAR_MAX) break;
       const p = this.G.cellXY(i), rem = 1 - pr.p, sc = i === M.myI ? 1.5 : 1.15;
       _p.set(this.G.mx(p.cx), this.stoneHeight(i) + (this.badgeAt(i) ? 1.0 : 0.45), this.G.mz(p.cy));
@@ -1447,7 +1447,7 @@ uniform vec3 uMwSky;`).replace('#include <emissivemap_fragment>', `#include <emi
       this.signQ = this.dugKey;
       this.signI = aimI; this.signSnap = M.st.at; this.signMy = M.myI; this.signAt = now;
       // site 11.11 «Получишь: …» (expectOf over LGMineShares) replaces the share line when the stone's loot is known
-      const e = withExpect(estimateStone(M.st, cell, now, M.myI), expectOf(M, aimI, now), M.st.bp);
+      const sn = M.srvNow(now), e = withExpect(estimateStone(M.st, cell, sn, M.myI), expectOf(M, aimI, sn), M.st.bp);
       const price = M.st.bp?.[cell.r || ''] ?? null;
       this.signOk = !(e.minutes == null && e.share == null && price == null && !e.get);
       if (this.signOk) {

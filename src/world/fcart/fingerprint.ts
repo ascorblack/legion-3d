@@ -125,6 +125,9 @@ const near = (a: number, b: number, d = 2) => Math.abs(a - b) <= d;
 export function layerRef(l: ArtLayer, map: ArtMap): string | null {
   const x1 = l.x + l.w, y1 = l.y + l.h;
   if (l.w === l.h && (l.w === 940 || l.w === 1200)) return null;   // CH = 640 tiles with a 150 / 280 px margin
+  // 16.11 tk-art.js Ground `rows` (pass 7, the trees): one chunk per CH row as wide as its content (x0 − M … x1 + M), the
+  // same 640 + 2 M height at j·CH − M — still the grid, not a map layer
+  if ((l.h === 940 && (l.y + 150) % 640 === 0) || (l.h === 1200 && (l.y + 280) % 640 === 0)) return null;
   // the ground (G.big pass 0) starts 40 px out of the map; since 13.11 the art reaches EDGE.art px further (fc-art.js /
   // tk-art.js EXT) and a fog layer (pass 8) has the same box: its gradients are named fcFog* / tkFog*
   if ((near(l.x, -40) && near(l.y, -40)) || (l.x < -40 && l.y < -40 && near(l.x, l.y) && l.x + l.w > (map.W ?? 0))) return /id="(fc|tk)Fog/.test(l.svg) ? 'fog' : 'terrain';

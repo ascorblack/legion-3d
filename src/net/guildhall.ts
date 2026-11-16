@@ -22,6 +22,7 @@
  * pauses), `.gh-modal` a dialog; the pause entry presses `.gh-entry` where the site shows it. Never a request of ours:
  * on() / index() are the site's cached reads it makes itself (soonB, entryTick).
  */
+import { closedCode } from './site-code';
 
 /** guildhall.js open(): the hall's full-screen root. */
 export const GH_ROOT = '.gh-root';
@@ -41,9 +42,10 @@ export function ghOn(w: any): boolean | null {
 }
 /** city.js soonB for `guild`: «скоро» exactly while ghOn() === false. */
 export const guildSoon = (on: boolean | null): boolean => on === false;
-/** guildhall.js enter(): the toast for a refused index answer (null = no refusal). */
+/** guildhall.js enter(): the toast for a refused index answer (null = no refusal); since 16.11 «скоро откроется» carries the
+ *  support code of a closed answer (« (код X01)», site-ui.js closedCode). */
 export function ghRefusal(r: any): { text: string; bad: boolean } | null {
   if (r && r.ok) return null;
   const soft = !!(r && (r.closed || r.unavailable));
-  return { text: soft ? GH_SOON : (r && r.error) || 'Здание гильдии сейчас недоступно', bad: !soft };
+  return { text: soft ? GH_SOON + closedCode(r) : (r && r.error) || 'Здание гильдии сейчас недоступно', bad: !soft };
 }

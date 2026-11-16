@@ -1,6 +1,6 @@
 # How the site works (reverse-engineering notes)
 
-All facts below were observed on `play.multidonate.ru` on 2026-10-26. The site is updated almost daily,
+All facts below were first observed on `play.multidonate.ru` (since 16.11 `legiongame.gg`) on 2026-10-26. The site is updated almost daily,
 so the extension must treat every internal API as unstable and degrade gracefully.
 
 ## Page
@@ -160,6 +160,22 @@ so the extension must treat every internal API as unstable and degrade gracefull
   src/features/citymon.ts, glade terrain src/world/faircats.ts fcGlade / gladeItems. tk-art.js guildHall lv 3 redrawn (tower + spire,
   portico) → civic.ts buildGuild. Our follow-ups: .local/drift1112b/FINDINGS.md.
 
+- **16.11 — the move to legiongame.gg.** The game lives at `https://legiongame.gg/c/<channel>/` (play.multidonate.ru → 301; old
+  sessions did not carry over). Same day: app.js pause rework (see `pz` below); city.js «Только гильдию» — localStorage `lgCityGl`,
+  offered with a guild tag and hero `go` (glOk = glTag() && hero.go, glTag = hero.gt or the own walker's gt), exclusive with «Только
+  друзей» (S.onlyGl = !frGet() && glGet()), lodPick then culls every walker whose `gt` differs; the «Игра» eye menu gains «Гильдию»
+  (`e-gl`, LGCity.show().gl) — 3D: src/net/friends-only.ts guild mode + pause item. site-ui.js `closedCode` / `withCode`: a
+  closed answer `{ ok:false, closed:true, code:'X01' }` gets « (код X01)» on its Russian error / text in every site fetch wrapper —
+  ours too (src/net/site-code.ts). mine.js `clk` / `srvNow`: stone timings are read at the server's time (S.dt from the `now` of
+  enter / poll / a live view) — MineModel.dt / srvNow. site-chat.js 7TV emotes (hero `e7`, GET /api/emotes → word → id, images
+  from `/api/emote/7tv/<id>/1x.webp`; `LGChat.emoText / emoHtml / emoFill`, the 2D bubbles ≤ 8 emotes), older chat pages
+  (GET /api/chat/feed?before=), own lines shown at once as pending (`cp…` ids, removed when the server's line arrives); site-chatone.js
+  `resync` after a long hidden tab / a cursor going back. app.js craft «Рыбалка» walks the 2D hero to the water first
+  (`LGCity.fishGo()`: the cats fair's pier end / the nearest canal stretch) and opens fish2 on arrival. cityshop.js phone layout of
+  the forge / magic shop (hero `sp`, portrait: shelves of tiles `.cy-pshop`, or strips). tk-art.js Ground `rows` (pass 7, the trees:
+  one chunk per 640 px row as wide as its content) — fingerprint.ts layerRef counts them as grid. Other hero flags: `p2` (forge: focus
+  the first button of a fresh item, html.ph2), `l7` (the legion page by classes). Our follow-ups: .local/drift1116/FINDINGS.md.
+
 ## Auth / user
 - Cookie `lsid` (httpOnly). `GET /api/me` → `{ ok, user:{login,name}, hero, roles, classes, ench, ql, now, … }`.
 - `hero`: `login, name, level, xp, next, prevXp, xpInLevel, xpToNext, money (bronze), hpNow, stats{hp,atk,mag,def},
@@ -199,9 +215,13 @@ Named events:
 - `mine`, `j` (journal entry), `q` (quest view: `{on, dl (stream delay s), late[], now, …}`), `sm` (streamer).
 - `ann` — `{ an, nw? }` announcements; 14.11: with hero `ak` the new ones (`nw`, by `p`) first run once in a ticker line
   (`window.LGAnnTick`: `now()` = `{ p, t, g }`, `held(a)`), their card is held meanwhile (src/features/announce.ts readTicker).
-- `pz` — 14.11 short maintenance pause: `{ on:false, warnAt }` → countdown `.lg-pz-warn` «Через N с - короткие технические
-  работы…»; `{ on:true }` → the full-screen `.lg-maint` alertdialog (polls /api/me every 5 s); `/api/me` `ver` changing → the
-  page reloads within 20 s. 3D: src/features/sitepause.ts shows the countdown.
+- `pz` — short maintenance pause: `{ on:false, warnAt }` → a countdown on <body>; `{ on:true }` → the pause notice (polls /api/me
+  every 5 s, waits while the tab is in the background: `LGSiteUi.bg`); `/api/me` `ver` changing → the page reloads within 20 s.
+  14.11: `.lg-pz-warn` «Через N с - короткие технические работы…» + the `.lg-maint` alertdialog. 16.11: `.lg-pzw` «Пауза игры
+  через <b>m:ss</b>» (seconds rounded up) + the full-screen `.lg-pz` (role alertdialog, aria-modal, focused) that eats pointer
+  events on it and every key on window in the capture phase except Ctrl / Meta chords and F1–F12 (`pzKey`); `.lg-maint` is now
+  only the long «Технические работы» notice. `window.LG_PAUSE_EVENT` = pauseEvent. 3D: src/features/sitepause.ts shows the
+  countdown; the plaque is a site dialog (overlay 'dialog': the 3D hides, gameplay off → held keys released; F8 passes).
 
 ## City API (POST JSON unless noted)
 - `/api/city/enter {x,y,town}` → `{ok, me{x,y}, town, a[], n, max, chat[], c, tr}`

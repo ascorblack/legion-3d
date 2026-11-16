@@ -35,7 +35,8 @@ export class MeMirror {
 }
 
 /** site-live.js meApply (15.11), the same steps: hero fields `h` merged, `hx` deleted; items by uid — `it.d` removed,
- *  `it.u` upserted (new ones at the end), `it.o` = the whole order; `cr` → creating, `r` → results, `fq`, `synced`, `now`;
+ *  `it.u` upserted (new ones at the end), `it.o` = the whole order; `cr` → creating, `r` → results, `fq`, `synced`, `now`, `gnow`
+ *  (16.11 evening: the game clock, app.js gclock);
  *  `mv` set. Shallow copies: the old base is not changed. */
 export function meApply(base: any, p: any): any {
   const key = (x: any) => String(x && x.uid != null ? x.uid : '');
@@ -57,6 +58,7 @@ export function meApply(base: any, p: any): any {
   if ('fq' in p) out.fq = p.fq;
   if ('synced' in p) out.synced = p.synced;
   if ('now' in p) out.now = p.now;
+  if ('gnow' in p) out.gnow = p.gnow;
   out.mv = p.mv;
   return out;
 }

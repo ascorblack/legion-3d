@@ -109,7 +109,7 @@ function siteExpect(): ((c: ExpectCtx, i: number, now: number) => any) | null {
   const src = [fnSource(MINE, 'lootOfCell'), fnSource(MINE, 'expectOf')];
   if (src.some((s) => !s)) return null;
   return (c, i, now) => {
-    const ctx: any = { window: { LGMineShares: SH }, S: { st: c.st, F: c.F, dug: c.dug, me: c.me, myI: c.myI }, X: { login: () => c.login }, Date: { now: () => now }, Object, Math };
+    const ctx: any = { window: { LGMineShares: SH }, S: { st: c.st, F: c.F, dug: c.dug, me: c.me, myI: c.myI }, X: { login: () => c.login }, Date: { now: () => now }, srvNow: () => now, Object, Math };   // 16.11: srvNow (server clock)
     vm.createContext(ctx); vm.runInContext(src.join('\n'), ctx);
     return JSON.parse(JSON.stringify(ctx.expectOf(i)));
   };
@@ -341,9 +341,12 @@ describe('state parsing and client', () => {
       const pkx = { lv: Math.floor(R() * 4), t: T }, mx = { lv: 1 + Math.floor(R() * 9) }, money = Math.floor(R() * 1000);
       const hv: Record<string, number> = {}; for (const r of ['copper', 'iron', 'coal']) if (R() < 0.7) hv[r] = Math.floor(R() * 1200);
       const no = new Set(R() < 0.3 ? ['iron'] : []);
-      const ctx: any = { S: { me: { pkx, mx } }, X: { hero: () => ({ money }), money: (v: number) => String(v) }, PK: { no }, oreHave: () => hv, resName, qPlain: (v: number) => String(v), Object, Math, String, Number };
+      const ctx: any = { S: { me: { pkx, mx } }, X: { hero: () => ({ money }), money: (v: number) => String(v) }, PK: { no }, oreHave: () => hv, resName, qPlain: (v: number) => String(v), qCoins: (v: number) => `<coins ${v}>`, Object, Math, String, Number };   // 16.11: coin markup in rows 4/5
       vm.createContext(ctx); vm.runInContext(`${pkT}\n${pcs}\n${fns.join('\n')}`, ctx);
       const site = JSON.parse(JSON.stringify(ctx.pickNeed())), ours = pickNeed(pkx as any, mx.lv, money, hv, no)!;
+      // 16.11 the site's coins row carries its coin markup (qCoins of have / need) — ours carries the numbers [have, need] (coinsHtml)
+      for (const r of site.rows || []) if (r.length > 4) { expect(r.slice(4)).toEqual([`<coins ${money}>`, `<coins ${pkx.t[pkx.lv + 1][3]}>`]); r.length = 4; }
+      for (const r of ours.rows) if (r[4]) expect(r[4]).toEqual([money, pkx.t[pkx.lv + 1][3]]);
       expect({ ...ours, rows: ours.rows.map((r) => r.slice(0, 4)) }).toEqual({ max: false, ...site });
     }
   });

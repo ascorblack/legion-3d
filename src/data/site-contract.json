@@ -454,9 +454,9 @@
       "why": "15.11: over the socket the hero comes as patches; the bridge keeps the same base (src/bridge/bridge.ts MeMirror) and emits the full hero as sse:me — a different version rule = stale or wrong hero data in 3D (money, gear, hp, flags)"
     },
     {
-      "id": "site-live.js meApply(base, p): h / hx / it {d,u,o} by uid / cr r fq synced now / mv (15.11)",
+      "id": "site-live.js meApply(base, p): h / hx / it {d,u,o} by uid / cr r fq synced now gnow / mv (15.11, gnow 16.11)",
       "file": "site-live.js",
-      "re": "function meApply\\(base, p\\) \\{\\s*const key = \\(x\\) => String\\(x && x\\.uid != null \\? x\\.uid : ''\\);\\s*const out = Object\\.assign\\(\\{\\}, base\\), hero = Object\\.assign\\(\\{\\}, base\\.hero\\);\\s*out\\.hero = hero;\\s*if \\(p\\.h\\) Object\\.assign\\(hero, p\\.h\\);\\s*for \\(const k of p\\.hx \\|\\| \\[\\]\\) delete hero\\[k\\];\\s*if \\(p\\.it\\) \\{\\s*const by = new Map\\(\\);\\s*for \\(const x of base\\.hero\\.items \\|\\| \\[\\]\\) by\\.set\\(key\\(x\\), x\\);\\s*for \\(const k of p\\.it\\.d \\|\\| \\[\\]\\) by\\.delete\\(k\\);\\s*let order = \\(base\\.hero\\.items \\|\\| \\[\\]\\)\\.map\\(key\\)\\.filter\\(\\(k\\) => by\\.has\\(k\\)\\);\\s*for \\(const x of p\\.it\\.u \\|\\| \\[\\]\\) \\{ const k = key\\(x\\); if \\(!by\\.has\\(k\\)\\) order\\.push\\(k\\); by\\.set\\(k, x\\); \\}\\s*if \\(p\\.it\\.o\\) order = p\\.it\\.o;\\s*hero\\.items = order\\.map\\(\\(k\\) => by\\.get\\(k\\)\\)\\.filter\\(Boolean\\);\\s*\\}\\s*if \\('cr' in p\\) out\\.creating = p\\.cr;\\s*if \\('r' in p\\) out\\.results = p\\.r;\\s*if \\('fq' in p\\) out\\.fq = p\\.fq;\\s*if \\('synced' in p\\) out\\.synced = p\\.synced;\\s*if \\('now' in p\\) out\\.now = p\\.now;\\s*out\\.mv = p\\.mv;\\s*return out;",
+      "re": "function meApply\\(base, p\\) \\{\\s*const key = \\(x\\) => String\\(x && x\\.uid != null \\? x\\.uid : ''\\);\\s*const out = Object\\.assign\\(\\{\\}, base\\), hero = Object\\.assign\\(\\{\\}, base\\.hero\\);\\s*out\\.hero = hero;\\s*if \\(p\\.h\\) Object\\.assign\\(hero, p\\.h\\);\\s*for \\(const k of p\\.hx \\|\\| \\[\\]\\) delete hero\\[k\\];\\s*if \\(p\\.it\\) \\{\\s*const by = new Map\\(\\);\\s*for \\(const x of base\\.hero\\.items \\|\\| \\[\\]\\) by\\.set\\(key\\(x\\), x\\);\\s*for \\(const k of p\\.it\\.d \\|\\| \\[\\]\\) by\\.delete\\(k\\);\\s*let order = \\(base\\.hero\\.items \\|\\| \\[\\]\\)\\.map\\(key\\)\\.filter\\(\\(k\\) => by\\.has\\(k\\)\\);\\s*for \\(const x of p\\.it\\.u \\|\\| \\[\\]\\) \\{ const k = key\\(x\\); if \\(!by\\.has\\(k\\)\\) order\\.push\\(k\\); by\\.set\\(k, x\\); \\}\\s*if \\(p\\.it\\.o\\) order = p\\.it\\.o;\\s*hero\\.items = order\\.map\\(\\(k\\) => by\\.get\\(k\\)\\)\\.filter\\(Boolean\\);\\s*\\}\\s*if \\('cr' in p\\) out\\.creating = p\\.cr;\\s*if \\('r' in p\\) out\\.results = p\\.r;\\s*if \\('fq' in p\\) out\\.fq = p\\.fq;\\s*if \\('synced' in p\\) out\\.synced = p\\.synced;\\s*if \\('now' in p\\) out\\.now = p\\.now;\\s*if \\('gnow' in p\\) out\\.gnow = p\\.gnow;\\s*out\\.mv = p\\.mv;\\s*return out;",
       "severity": "degrade",
       "why": "the bridge's meApply (src/bridge/bridge.ts) is a line-by-line port; any change here = our hero drifts from the site's after a patch"
     },
@@ -1316,21 +1316,21 @@
       "id": "LGDailies (daily tasks)",
       "kind": "keys",
       "obj": "LGDailies",
-      "file": "dailies.js",
+      "file": "app.js",
       "keys": [
         "open",
         "sync"
       ],
       "when": "lazy",
       "severity": "degrade",
-      "why": "10.11: «Задания дня» in the pause menu (src/features/site-places.ts dailiesOn: hero `dl`)"
+      "why": "10.11: «Задания дня» in the pause menu (src/features/site-places.ts dailiesOn: hero `dl`); 16.11 evening: LGDailies lives in app.js (the bar), the window is dailies.js LGDailiesWin loaded on open()"
     },
     {
-      "id": "app.js dlSync (hero dl)",
+      "id": "app.js dlOf (hero dl)",
       "file": "app.js",
-      "re": "if \\(!\\(ME && ME\\.user && ME\\.hero && ME\\.hero\\.dl\\)\\)",
+      "re": "const dlOf = \\(\\) => \\(ME && ME\\.user && ME\\.hero && ME\\.hero\\.dl\\) \\|\\| null;[\\s\\S]*giftOn: \\(\\) => !!dlOf\\(\\)",
       "severity": "degrade",
-      "why": "10.11: daily tasks only with hero `dl` (src/features/site-places.ts)"
+      "why": "10.11: daily tasks only with hero `dl` (src/features/site-places.ts); 16.11 evening the check is app.js dlOf"
     },
     {
       "id": "LegionMiniMap (mini-map)",
@@ -1425,11 +1425,18 @@
       "why": "src/features/announce.ts readTicker reads { p, t, g } (head «Объявление» / «Объявление игры», newlines → « · » like antNext)"
     },
     {
-      "id": "app.js live event pz (maintenance pause countdown)",
+      "id": "app.js live event pz (pause countdown «Пауза игры через m:ss», 16.11)",
       "file": "app.js",
-      "re": "function pauseWarn\\(at\\)[\\s\\S]{0,600}`Через \\$\\{left\\} с - короткие технические работы \\(меньше минуты\\)\\. Ничего не потеряется\\.`[\\s\\S]*ES\\.addEventListener\\('pz', \\(e\\) => \\{ try \\{ pauseEvent\\(JSON\\.parse\\(e\\.data\\)\\)",
+      "re": "const pzClock = \\(s\\) => `\\$\\{Math\\.floor\\(s / 60\\)\\}:\\$\\{String\\(s % 60\\)\\.padStart\\(2, '0'\\)\\}`;\\s*function pauseWarn\\(at\\) \\{\\s*warnAt = at > Date\\.now\\(\\) \\? at : 0;[\\s\\S]{0,700}warnEl\\.className = 'lg-pzw';[\\s\\S]{0,200}Пауза игры через <b></b>[\\s\\S]{0,300}textContent = pzClock\\(Math\\.max\\(0, Math\\.ceil\\(\\(warnAt - Date\\.now\\(\\)\\) / 1000\\)\\)\\)[\\s\\S]*function pauseEvent\\(d\\) \\{\\s*if \\(!d\\) return;\\s*pauseWarn\\(d\\.on \\? 0 : d\\.warnAt\\);[\\s\\S]*ES\\.addEventListener\\('pz', \\(e\\) => \\{ try \\{ pauseEvent\\(JSON\\.parse\\(e\\.data\\)\\)",
       "severity": "degrade",
-      "why": "14.11: the bridge tees `pz` (src/bridge/bridge.ts) and src/features/sitepause.ts shows the site's countdown (`.lg-pz-warn` lies under our canvas); the pause itself is the site's .lg-maint dialog"
+      "why": "16.11: the bridge tees `pz` (src/bridge/bridge.ts); src/features/sitepause.ts shows the site's countdown (pauseWarnText = «Пауза игры через m:ss», seconds rounded up; the site's `.lg-pzw` lies under our canvas)"
+    },
+    {
+      "id": "app.js pause plaque .lg-pz (aria-modal, eats keys but Ctrl / Meta / F1–F12, 16.11)",
+      "file": "app.js",
+      "re": "const pzKey = \\(e\\) => \\{ if \\(!pzEl \\|\\| e\\.ctrlKey \\|\\| e\\.metaKey \\|\\| /\\^F\\\\d\\{1,2\\}\\$/\\.test\\(e\\.key\\)\\) return; e\\.preventDefault\\(\\); e\\.stopImmediatePropagation\\(\\); \\};[\\s\\S]{0,400}pzEl\\.className = 'lg-pz'; pzEl\\.setAttribute\\('role', 'alertdialog'\\); pzEl\\.setAttribute\\('aria-modal', 'true'\\);[\\s\\S]{0,900}document\\.body\\.appendChild\\(pzEl\\);[\\s\\S]{0,120}window\\.addEventListener\\(t, pzKey, true\\)",
+      "severity": "degrade",
+      "why": "16.11: the pause itself is the site's full-screen `.lg-pz` on <body> (aria-modal: src/net/site.ts DIALOGS → overlay 'dialog', the 3D hides and gameplay goes off, so held keys are released while their keyups are eaten); keys are swallowed on window in the capture phase except chords and F-keys (F8 still reaches us). src/features/sitepause.ts PAUSE_SEL, test/site-1116.test.ts"
     },
     {
       "id": "site-chat.js tabsApply reorders only [data-tab]",
@@ -1493,6 +1500,34 @@
       "re": "GLADE\\.spots = SPOTS\\.map",
       "severity": "degrade",
       "why": "the glade below the gate in 3D (src/world/faircats.ts fcGlade / gladeItems; test/fixtures/faircats-map.json GLADE)"
+    },
+    {
+      "id": "city.js «Только гильдию» (lgCityGl, glOk = tag && hero.go, lodPick by gt; 16.11)",
+      "file": "city.js",
+      "re": "const glGet = \\(\\) => \\{ try \\{ return localStorage\\.getItem\\('lgCityGl'\\) === '1'; \\}[\\s\\S]*onlyGl: !frGet\\(\\) && glGet\\(\\),[\\s\\S]*\\} else if \\(glOn\\(\\)\\) \\{\\s*const tg = glTag\\(\\);\\s*list = list\\.filter\\(\\(w\\) => \\{ const ok = !!\\(w\\.v && String\\(w\\.v\\.gt \\|\\| ''\\) === tg\\);[\\s\\S]*const glTag = \\(\\) => \\{ const h = X && X\\.hero && X\\.hero\\(\\); return h && h\\.gt \\? String\\(h\\.gt\\) : S && S\\.me && S\\.me\\.v && S\\.me\\.v\\.gt \\? String\\(S\\.me\\.v\\.gt\\) : ''; \\};\\s*const glOk = \\(\\) => !!glTag\\(\\) && !!\\(X && X\\.hero && X\\.hero\\(\\) && X\\.hero\\(\\)\\.go\\);",
+      "severity": "degrade",
+      "why": "16.11: the 3D crowd honours the site's «Только гильдию» like «Только друзей» (src/net/friends-only.ts FriendsOnly guild mode, pause item guild.only in src/features/friends.ts; test/site-1116.test.ts runs this lodPick branch)"
+    },
+    {
+      "id": "site-ui.js closedCode / withCode (« (код X01)» on closed answers, 16.11)",
+      "file": "site-ui.js",
+      "re": "const CODE_RE = /\\^\\[A-Z\\]\\\\d\\{2\\}\\$/;\\s*function closedCode\\(r\\) \\{ return r && r\\.ok === false && r\\.closed === true && typeof r\\.code === 'string' && CODE_RE\\.test\\(r\\.code\\) \\? ` \\(код \\$\\{r\\.code\\}\\)` : ''; \\}",
+      "severity": "degrade",
+      "why": "src/net/site-code.ts ports it for our api() (the page's LGSiteUi.withCode is used when present) and guildhall ghRefusal: our toasts quote the same support code as the site's"
+    },
+    {
+      "id": "mine.js clk / srvNow (stone timings at the server clock, 16.11)",
+      "file": "mine.js",
+      "re": "function clk\\(r\\) \\{ if \\(S && r && Number\\.isFinite\\(\\+r\\.now\\) && \\+r\\.now > 0\\) S\\.dt = Date\\.now\\(\\) - \\+r\\.now; \\}\\s*const srvNow = \\(\\) => Date\\.now\\(\\) - \\(\\(S && S\\.dt\\) \\|\\| 0\\);",
+      "severity": "degrade",
+      "why": "src/rooms/mine/state.ts MineModel.clk / srvNow (net.ts: enter, poll, a live view): the 3D stone bars, ETA and «Получишь» use the server's time like the site"
+    },
+    {
+      "id": "app.js LGGameNow (game clock gnow = server now − GDT, 16.11 evening)",
+      "file": "app.js",
+      "re": "let GDT = 0;\\s*const gnow = \\(\\) => now\\(\\) - GDT;[\\s\\S]{0,300}window\\.LGGameNow = gnow;[\\s\\S]*const cdUntil = \\(it, h\\) => \\{ if \\(!h\\) return 0; const t = gnow\\(\\);",
+      "severity": "degrade",
+      "why": "hero eatUntil / scrollUntil / deadUntil are game time: src/net/game-clock.ts gameNow() reads window.LGGameNow for our cooldowns and the ghost countdown (src/ui/{data,hud,menus}.ts)"
     }
   ]
 }

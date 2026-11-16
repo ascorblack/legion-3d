@@ -24,6 +24,7 @@ import { createJailHub, jailFromMe, jailList, jailSeats, jailGeoOf, type JailHub
 import { questFormFill } from '../quest/model';
 import { gameUiOn, openGuWindow, pickReplayTab } from './gameui';
 import { ghOn, guildSoon, GH_SOON, GH_ROOT, GH_MODAL, GUILD_ID } from './guildhall';
+import { siteWithCode } from './site-code';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
 const W = (typeof window !== 'undefined' ? window : globalThis) as any;   // importable in node tests (pure helpers below)
@@ -46,7 +47,7 @@ async function api<T = any>(path: string, body?: unknown): Promise<T> {
     const r = await fetch(url, body === undefined ? { credentials: 'same-origin' } : {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
-    return await r.json();
+    return siteWithCode(await r.json());
   } catch {
     return { ok: false, error: 'нет связи с сайтом' } as any;
   }
@@ -624,15 +625,7 @@ export async function connectSite(opts: { onStatus?: (s: string) => void } = {})
   const syncTee = () => { const want = !classic && ovVal !== 'mine' && !siteMineOpen(); if (want !== teeOn) { teeOn = want; setFetchTee(want); } };
   const overlay = (): string | null => {
     const t = performance.now(); if (t - ovAt < 250) return ovVal; ovAt = t;
-    ovVal = anyShown('.cy-room') ? 'room' : anyShown('.mn') ? 'mine' : anyShown('.tr-win') ? 'trade'
-      : anyShown('.mn-board-w') ? 'board' : anyShown('.cy-read') ? 'read'
-      // site 12.11: the guild hall (guildhall.js LGGuildHall.enter → open: `.gh-root`, an interior of its own) over the sleeping City
-      : anyShown(GUILD_HALL) ? 'guildhall' : anyShown(GH_MODAL) ? 'dialog'
-      // site 10.11: the fishing screen (fish2.js, `.f2`, z 9000) — a full-screen mini-game of its own; the City sleeps under it
-      : anyShown(FISH) ? 'fish'
-      // site 08.11 (city.js townShut): the town is closed and the channel has no city to fall back to — the City is shut down
-      // and shows only its «… сейчас закрыт» panel with NO_CITY; the 3D yields to it (nothing to walk in)
-      : anyShown('#tab-city ' + CITY_SHUT) ? 'shut' : anyShown(DIALOGS) ? 'dialog' : null;
+    ovVal = overlayKind(anyShown);
     syncTee();
     return ovVal;
   };
@@ -768,10 +761,27 @@ export const DIALOGS = '.su-layer, dialog[open], [role="dialog"], [aria-modal="t
 /** The site's guild hall (12.11, guildhall.js open(): `.gh-root` on <body> / the fullscreen element, html.gh-full; z 900).
  *  It replaced the guild district of 07.11 (`.gd-root`): an interior W 3840 × H 3240 (LGGuildHallMap) with its own WASD / E / Esc. */
 export const GUILD_HALL = GH_ROOT;
+/** The site's maintenance pause (16.11, app.js pauseShow: `.lg-pz` on <body>, role alertdialog, aria-modal, focused; its pzKey
+ *  swallows every key on window in the capture phase except Ctrl / Meta chords and F1–F12). */
+export const SITE_PAUSE = '.lg-pz';
 /** The site's fishing screen (10.11, fish2.js LGFish2.open(): `.f2` role="dialog" on <body>; app.js openFish2 puts the City to sleep). */
 export const FISH = '.f2';
 // .fr-back: the site's friends window (29.10), .cy-jw: the Jail window (30.10) — both lifted over the live 3D (features friends / jail)
 const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view, .fr-back, .cy-jw';
+/** Which site screen covers the game, from «is anything matching this selector on screen» (connectSite overlay(), every 250 ms). */
+export function overlayKind(on: (sel: string) => boolean): string | null {
+  // site 16.11: the pause plaque (app.js pauseShow, aria-modal, eats every key on window) goes before everything — also before a
+  // hybrid room's panel (overlay 'room' keeps the 3D running under it): the 3D yields, gameplay off, no key held under it
+  return on(SITE_PAUSE) ? 'dialog' : on('.cy-room') ? 'room' : on('.mn') ? 'mine' : on('.tr-win') ? 'trade'
+    : on('.mn-board-w') ? 'board' : on('.cy-read') ? 'read'
+    // site 12.11: the guild hall (guildhall.js LGGuildHall.enter → open: `.gh-root`, an interior of its own) over the sleeping City
+    : on(GUILD_HALL) ? 'guildhall' : on(GH_MODAL) ? 'dialog'
+    // site 10.11: the fishing screen (fish2.js, `.f2`, z 9000) — a full-screen mini-game of its own; the City sleeps under it
+    : on(FISH) ? 'fish'
+    // site 08.11 (city.js townShut): the town is closed and the channel has no city to fall back to — the City is shut down
+    // and shows only its «… сейчас закрыт» panel with NO_CITY; the 3D yields to it (nothing to walk in)
+    : on('#tab-city ' + CITY_SHUT) ? 'shut' : on(DIALOGS) ? 'dialog' : null;
+}
 /** Really on screen: connected, not [hidden], rendered, not visibility:hidden (incl. inherited — e.g. our HIDE_CSS), has a box. */
 export function shown(e: Element | null): boolean {
   if (!e || !e.isConnected || (e as HTMLElement).hidden) return false;

@@ -19,6 +19,7 @@ import { bossName } from '../quest/model';
 import { milestones } from '../collect/milestones';
 import type { GameContext } from '../contracts/ext';
 import { setHtml } from '../core/html';
+import { gameNow } from '../net/game-clock';
 
 export const STANDALONE = ['pause', 'settings', 'help'];
 /** Contract/legacy aliases → our ids. */
@@ -377,7 +378,7 @@ export class Menus {
     const cs = coinStyle();
     const money = parts.map(([k, v, t]) => `<span class="mp">${cs && cs.svg ? `<i class="coin svg">${cs.svg(k, 18)}</i>` : `<i class="coin ${k}"></i>`}<b>${v}</b> ${esc(t)}</span>`).join(' ');
     const debt = +(H.debt as number) > 0 ? `<div class="mline debt" style="margin-top:8px">Долг: −${esc(moneyParts(+(H.debt as number), 0, cs).map(([, v, t]) => `${v} ${t}`).join(' '))}</div>` : '';
-    const ghost = H.ghost ? `<p class="note warn">👻 Пал в Походе${+(H.deadUntil || 0) > Date.now() ? ` · до воскрешения <b>${plainCountdown(+(H.deadUntil || 0))}</b>` : ''}. Раньше — свиток воскрешения.</p>` : '';
+    const ghost = H.ghost ? `<p class="note warn">👻 Пал в Походе${+(H.deadUntil || 0) > gameNow() ? ` · до воскрешения <b>${plainCountdown(+(H.deadUntil || 0), gameNow())}</b>` : ''}. Раньше — свиток воскрешения.</p>` : '';
     const s = H.soc;
     const last = this.jList ? this.jList.slice(0, 3) : null;
     const jl = last == null ? `<p class="mut" style="margin:0">Загружаю…</p>` : last.length ? `<ul class="jl">${last.map((e) => this.jRow(e)).join('')}</ul>` : `<p class="mut" style="margin:0">Записей пока нет.</p>`;

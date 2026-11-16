@@ -606,11 +606,11 @@ export class MineHud {
       + `<button type="button" class="l3m-btn ghost sm l3m-jb" data-a="jr" title="Журнал шахты [L]"><span class="l3m-kc">L</span></button></span></div></div></div>`);
     // Сейчас
     const dig = M.myI >= 0 && M.F ? M.F.cells[M.myI] : null;
-    const pr = dig ? stoneProgress(st, M.myI, now) : null, rem = pr ? 1 - pr.p : 1;
+    const pr = dig ? stoneProgress(st, M.myI, M.srvNow(now)) : null, rem = pr ? 1 - pr.p : 1;
     const barCol = rem > 0.5 ? '#8fe39a' : rem > 0.2 ? '#ffcf6a' : '#ff8f6a';
     this.set('mbar', dig ? `<i style="width:${(rem * 100).toFixed(1)}%;background:${barCol}"></i>` : '');
     let nowH: string;
-    const exNow = dig ? exText(expectOf(M, M.myI, now)) : '';   // site 11.11 nowEx
+    const exNow = dig ? exText(expectOf(M, M.myI, M.srvNow(now))) : '';   // site 11.11 nowEx
     if (dig) {
       nowH = `<div><div class="l3m-k">Сейчас<small>${pr && pr.n > 1 ? `копают: ${pr.n}` : ''}</small></div><p class="l3m-t">${TX.doing}: <b>${esc(blockTitle(dig))}</b></p>`
         + `<div class="l3m-bar"><i style="width:${(rem * 100).toFixed(1)}%;background:${barCol}"></i></div>`

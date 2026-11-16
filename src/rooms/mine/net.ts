@@ -185,6 +185,7 @@ export class MineClient {
     if (!again || !this.pos) this.pos = { x: start.x, y: start.y };
     this.sent = { x: Math.round(start.x), y: Math.round(start.y) };
     this.entered = true; this.other = false;
+    this.model.clk(r, this.now());   // site 16.11 enter(): clk(r) before take
     this.apply(r, true);
     // site 31.10: a lift ride enters the floor of the same mine — its chat is shared by the floors and is not entered again
     if (r.mchat && !ride) { this.chat.on = true; this.chat.st = { mod: (r.mchat as any).mod, muted: (r.mchat as any).muted }; this.chatIn(r.mchat); }
@@ -221,6 +222,7 @@ export class MineClient {
     this.setOther(!!r.other);
     // the server forgot us (tab hidden > 3 min): enter again, it re-sends everyone
     if (r.n == null && !r.other && this.now() - this.rejoinAt > 15000 && this.pos) { this.rejoinAt = this.now(); void this.enter(this.pos, true); }
+    this.model.clk(r, this.now());   // site 16.11 poll(): clk(r)
     this.apply(r, false);
   }
   /** Live channel event 'mine': new view (st) and/or presence (a, m, g), counters, chat. */
@@ -230,6 +232,7 @@ export class MineClient {
     if (d.c && d.c !== this.c) return;
     if (d.here != null) { this.model.hereOf(d); this.emit({ type: 'here' }); if (!d.st && !d.a && !d.m && !d.g && d.n == null) return; }
     if (!this.entered) return;
+    if (d.st) this.model.clk(d, this.now());   // site 16.11 live: clk(d) with a view
     this.apply(d, false);
   }
   private apply(r: MinePayload, snap: boolean): void {

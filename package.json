@@ -1,7 +1,7 @@
 {
   "name": "legion-3d",
-  "version": "0.8.4",
-  "description": "Unofficial browser extension that turns the Legion game site (play.multidonate.ru) into a 3D first/third-person game.",
+  "version": "0.8.5",
+  "description": "Unofficial browser extension that turns the Legion game site (legiongame.gg) into a 3D first/third-person game.",
   "private": true,
   "type": "module",
   "license": "MIT",

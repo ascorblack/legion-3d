@@ -3,7 +3,7 @@
 // Injects dist/bridge.js at document_start and dist-dev/net-probe.js after load. Never prints cookie values.
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
-const url = process.argv[2] || process.env.L3D_URL || 'https://play.multidonate.ru/c/zakvielchannel/';
+const url = process.argv[2] || process.env.L3D_URL || 'https://legiongame.gg/c/zakvielchannel/';
 const secs = +(process.argv[3] || 20);
 const cookies = readFileSync(process.env.L3D_COOKIES, 'utf8').split('\n').filter((l) => l.trim() && !l.startsWith('#')).map((l) => {
   const [domain, , path, secure, exp, name, value] = l.split('\t');

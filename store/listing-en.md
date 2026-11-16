@@ -12,6 +12,6 @@ Controls: WASD to move, Shift to run, Space to jump, mouse to look, V to switch 
 
 - Suggested category: Fun.
 - Single purpose: add an optional 3D game mode and interface to the Legion game website.
-- Host match justification: `https://legiongame.gg/c/* (and the old legiongame.gg/c/*)` contains the game's City view. Two packaged content scripts render 3D and read the current page's game state for synchronization. No other websites are accessed.
+- Host match justification: `https://legiongame.gg/c/*` (and the old address `https://play.multidonate.ru/c/*`) contains the game's City view. Two packaged content scripts render 3D and read the current page's game state for synchronization. No other websites are accessed.
 - Remote code: no. All executable code and artwork ship with the extension.
 - Data usage answers: no user data collected, sold or transferred; only preferences remain in the website's localStorage. Game data is processed locally on the page; the site's own client communicates with its game servers.

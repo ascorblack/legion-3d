@@ -22,6 +22,7 @@ import { createStore } from '../store/store';
 import { lookStyle, styleId } from './site';
 import { setFetchTee } from './fetch-tee';
 import { questFormFill } from '../quest/model';
+import { siteWithCode } from './site-code';
 
 const W = window as any;
 const bus = (): Bus | null => W.__L3D_BUS || null;
@@ -43,7 +44,7 @@ async function api<T = any>(path: string, body?: unknown): Promise<T> {
     const r = await fetch(url, body === undefined ? { credentials: 'same-origin' } : {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
-    return await r.json();
+    return siteWithCode(await r.json());
   } catch {
     return { ok: false, error: 'нет связи с сайтом' } as any;
   }

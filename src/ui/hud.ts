@@ -8,6 +8,7 @@ import { statIcon } from './icons';
 import { promptView } from './prompt';
 import { MiniMap } from './map';
 import { setHtml } from '../core/html';
+import { gameNow } from '../net/game-clock';
 
 const TAU = Math.PI * 2;
 const HINTS_S = 20;
@@ -159,9 +160,9 @@ export class Hud {
     const H = this.c.host.store.hero;
     if (H && H.ghost) {
       this.ghost.hidden = false;
-      const du = +(H.deadUntil || 0);
-      setHtml(this.ghost, `👻 Пал в Походе${du > Date.now() ? ` · до воскрешения <b>${plainCountdown(du)}</b>` : ''} · раньше — свиток воскрешения`);
-      if (du > Date.now()) this.hpT.textContent = '👻 ' + plainCountdown(du);
+      const du = +(H.deadUntil || 0), gn = gameNow();   // site 16.11: hero timestamps are game time
+      setHtml(this.ghost, `👻 Пал в Походе${du > gn ? ` · до воскрешения <b>${plainCountdown(du, gn)}</b>` : ''} · раньше — свиток воскрешения`);
+      if (du > gn) this.hpT.textContent = '👻 ' + plainCountdown(du, gn);
     } else this.ghost.hidden = true;
   }
 
