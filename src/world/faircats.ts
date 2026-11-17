@@ -916,6 +916,10 @@ function placeItem(k: Ctx, sc: FairCatsScene, it: FcItem, G: (x: number, y: numb
     }
     case 'blossom': k.inst.add('fc:blossom', X, g, toZ(y - 4), rot, 1.1 * s); break;
     case 'pine': k.inst.add('fc:pine', X, g, toZ(y - 4), rot, 1.05 * s); break;
+    // site 17.11 tk-art.js NATURE2 (a kit town's items / T.nature): no own 3D art yet — the pine-like ones (its pineLike:
+    // snowpine, cactus) stand as a pine, the rest as the leafy tree; their trunk obstacle (tk-map.js itemOb) is drawn at least
+    case 'snowpine': case 'cactus': k.inst.add('fc:pine', X, g, toZ(y - 4), rot, 1.05 * s); break;
+    case 'birch': case 'willow': case 'palm': case 'deadtree': k.inst.add(VK.tree, X, g, toZ(y - 4), rot, 1.1 * s); break;
     case 'bush': k.inst.add(VK.bush, X, g, toZ(y - 10), rot, 0.9); break;
     case 'lamp': k.inst.add('fc:lamp', X, g, toZ(y - 3), 0, 1); lampHeads.push(X, g + lampHead, toZ(y - 3)); break;
     case 'well': k.inst.add('well', X, g, toZ(y - 34), 0, 1.15); break;

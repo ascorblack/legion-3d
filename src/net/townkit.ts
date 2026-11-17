@@ -91,7 +91,9 @@ export function townKitScene(L: any, levelled: readonly any[], o: { building?: R
     const streets: FcStreet[] = list(L.streets).map((s, i) => ({ k: String(s.k || 'street'), id: String(s.id ?? 'st' + i), ...(s.poly ? { poly: pts(s.poly) } : {}), ...(s.rr ? { rr: [num(s.rr[0]), num(s.rr[1]), num(s.rr[2]), num(s.rr[3]), num(s.rr[4]) || 0] as [number, number, number, number, number] } : {}) }));
     const houses: FcHouse[] = list(L.houses).map((h, i) => ({ id: String(h.id ?? 'h' + i), k: String(h.k || 'house'), vis: q4(h.vis), foot: q4(h.foot), door: { x: num(h.door?.x), y: num(h.door?.y) }, roof: String(h.roof || 'red') })).filter((h) => ok4(h.foot));
     const items: FcItem[] = list(L.items).filter((it) => typeof it.k === 'string' && Number.isFinite(+it.x) && Number.isFinite(+it.y)).map((it) => JSON.parse(JSON.stringify(it)));
-    const Wl = L.wall && typeof L.wall === 'object' ? L.wall : null;
+    // site 17.11 tk-map.js: a wall may stand on the east / west side (`side` 'E' | 'W': x0..x1 is its thickness, the gate a
+    // y-range). The 3D draws only the bottom wall: a side wall is left out (its obstacles still come from the site's grid)
+    const Wl = L.wall && typeof L.wall === 'object' && L.wall.side !== 'E' && L.wall.side !== 'W' ? L.wall : null;
     const glade = kitGlade(L.glade);
     // the pier of the fair = the first bridge over water (the solids cut water there; the deck is drawn per bridge)
     const pierR = bridges[0]?.rects ?? [];
@@ -103,7 +105,7 @@ export function townKitScene(L: any, levelled: readonly any[], o: { building?: R
       pier: pierR[0] ? { x0: pierR[0][0], y0: pierR[0][1], x1: pierR[0][2], y1: pierR[0][3], end: pierR[1] ?? NANQ } : { x0: NaN, x1: NaN, y0: NaN, y1: NaN, end: NANQ },
       buildings, houses, items,
       wall: Wl ? { y0: num(Wl.y0), y1: num(Wl.y1), x0: num(Wl.x0), x1: num(Wl.x1), gate: Array.isArray(Wl.gate) ? [num(Wl.gate[0]), num(Wl.gate[1])] : [NaN, NaN],
-        ...(Wl.k === 'palisade' ? { k: 'palisade' as const, towers: (Array.isArray(Wl.towers) ? Wl.towers : []).map(num).filter(Number.isFinite), roof: word(Wl.roof, 'red') } : {}) } : { y0: NaN, y1: NaN, x0: NaN, x1: NaN, gate: [NaN, NaN] },
+        ...(Wl.k === 'palisade' || Wl.k === 'stakes' ? { k: 'palisade' as const, towers: (Array.isArray(Wl.towers) ? Wl.towers : []).map(num).filter(Number.isFinite), roof: word(Wl.roof, 'red') } : {}) } : { y0: NaN, y1: NaN, x0: NaN, x1: NaN, gate: [NaN, NaN] },
       ...(glade ? { glade } : {}),
       jail: { c0: NaN, c1: NaN, ct: NaN, back: NaN, fy: NaN, seats: [], walk: NANQ },
       kit: { id: String(L.id || ''), biome: word(L.biome, 'meadow'), tiers, rocks, water, bridges, lvl, build, vis5, owner: String(o.owner || '').slice(0, 40), nature: natureOf(L.nature) },
@@ -134,7 +136,8 @@ export function natureOf(n: unknown): Record<string, number> | null {
 /** The pine / rowan shares of the forest: T.nature when the town has one, else by biome (the 3D's old rule). */
 export function forestMix(kit: Pick<KitInfo, 'biome' | 'nature'> | null): { pine: number; rowan: number } {
   const n = kit?.nature;
-  if (n) { const sum = Object.values(n).reduce((a, b) => a + b, 0) || 1; return { pine: (n.pine || 0) / sum, rowan: (n.rowan || 0) / sum }; }
+  // 17.11 tk-art.js NATURE2: snowpine / cactus are pine-like (its pineLike), the other new kinds count as the leafy tree
+  if (n) { const sum = Object.values(n).reduce((a, b) => a + b, 0) || 1; return { pine: ((n.pine || 0) + (n.snowpine || 0) + (n.cactus || 0)) / sum, rowan: (n.rowan || 0) / sum }; }
   const biome = kit?.biome ?? 'meadow';
   return { pine: ['ice', 'tundra', 'north', 'snow', 'mountain'].includes(biome) ? 0.8 : biome === 'ash' || biome === 'blight' ? 0.5 : 0.3, rowan: 0 };
 }

@@ -18,7 +18,17 @@ const at = (x, y, mode, yaw, pitch, extra = '') => `js:const g=window.__l3dGame;
 const HIDE = 'g.meAv.root.visible=false;g.labels.root.visible=false;g.interact.setEnabled(false);setTimeout(()=>{g.meAv.root.visible=false;},1500);';
 const FPV = (fov) => `g.vm.root.visible=false;g.labels.root.visible=false;g.interact.setEnabled(false);g.rig.fov=${fov};setTimeout(()=>{g.vm.root.visible=false;g.labels.root.visible=false;},1500);`;
 const CAMX = (fov) => `g.rig.zoom(10);g.rig.setColliders([]);g.rig.setColliderBoxes([]);g.rig.fov=${fov};g.interact.setEnabled(false);`;
-const SHOTS = opt.set === '085' ? [
+// four demo bots in a row with their backs to the camera (dev/game.ts ?capes=1 gives them the 17.11 cape patterns)
+const POSE4 = (x, y) => `const D=window.__demo;D.bots.forEach((b,i)=>{b.x=${x}+i*80;b.y=${y}+(i%2)*14;b.path=null;b.wait=1e9;b.speed=0;b.face=(i-1.5)*0.12;b.bubble=undefined;});`;
+// the labels feature sets labels.root.visible every frame (the «Имена» setting): pin it off for a view with walkers
+const NOTAGS = 'Object.defineProperty(g.labels.root,"visible",{get:()=>false,set(){}});';
+const SHOTS = opt.set === '086' ? [
+  // 0.8.6 (site 17.11): the «Премиум+» cape patterns of the site's looks (doodle.js capePattern, lk.capePat: hem, stars,
+  // dots, runes) on the 3D cape, seen from behind in the kit town «Рябиново» in front of its hall, and the lineup of the four
+  // patterns + a plain cape on the avatar page. d04's own buildings were not redrawn (a meadow town keeps the classic style).
+  ['game', 'tk=d04&magic=1&bots=4&capes=1&hwc=off&tod=12:00', 'cape-patterns-d04', 15000, at(2890, 1985, 'fp', 0, -0.3, POSE4(2770, 1850) + FPV(46) + NOTAGS)],
+  ['avatar', 'capes=1&walk=0&vm=0', 'cape-patterns', 6000],
+] : opt.set === '085' ? [
   // 0.8.5 (site 16.11): the maintenance-pause countdown in the HUD now reads like the site's new line «Пауза игры через m:ss»
   // with its hint under it; the pause menu offers the site's new «Только гильдия» (hero gt + go) next to «Только друзья».
   // Run WITHOUT --hide (the HUD line and the menu are the subject); 960×540 for the review.

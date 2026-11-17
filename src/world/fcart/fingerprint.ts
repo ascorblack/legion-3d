@@ -135,7 +135,9 @@ export function layerRef(l: ArtLayer, map: ArtMap): string | null {
   for (const s of streets) if (s && s.rr && near(l.x, s.rr[0]) && near(l.y, s.rr[1]) && near(x1, s.rr[2]) && near(y1, s.rr[3])) return 'plaza';
   for (const s of map.STAIRS ?? map.stairs ?? []) if (near(l.x, s.x0 - 30) && near(l.y, s.y0 - 30) && near(x1, s.x1 + 30)) return s.k === 'ramp' ? 'ramp' : 'stairs';
   const mine = (map.buildings ?? []).find((b: any) => b && b.id === 'mine');
-  if (mine && near(l.x, mine.door.x - 230) && near(x1, mine.door.x + 230)) return 'mine';
+  // 17.11 tk-art.js: the adit layer is 580 px wide (door.x ± 290, from vis[3] − 320) so the new cave mouth of a peaked
+  // rock fits it — the portal drawn into it (minePortal) is the same as before
+  if (mine && ((near(l.x, mine.door.x - 230) && near(x1, mine.door.x + 230)) || (near(l.x, mine.door.x - 290) && near(x1, mine.door.x + 290)))) return 'mine';
   if (!map.buildings && near(l.x, 4700) && near(x1, 5160) && near(l.y, 660)) return 'mine';   // fc-art.js minePortal at x 4925
   const mb = bboxOf(map.MOUNT) ?? bboxOf((map.rocks ?? [])[0]?.poly);
   if (mb && l.x >= mb[0] - 220 && y1 <= mb[3] + 200 && l.x < mb[2]) return 'mountain';

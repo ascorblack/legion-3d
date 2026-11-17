@@ -161,7 +161,7 @@ describe('site windows in the pause menu (site-places)', () => {
     const opened: string[] = [], calls: string[] = [];
     const guilds = { hidden: false, clicks: 0, click() { this.clicks++; } };
     g.document = fakeDoc({ [GUILDS_ENTRY]: guilds, '.tabs button[data-tab="arena"]': { hidden: false } });
-    const hero: any = { dl: { t: [] } };
+    const hero: any = { dl: { d: 1, n: 0, of: 5 } };   // 17.11: daily tasks only with dl.d (app.js openWin)
     const off = (feature as any).setup({ actions: { openSitePanel: (t: string) => opened.push(t) }, store: { hero }, state: {}, ui: { toast: () => {} } });
     let ids = pauseItems().map((p) => p.id);
     expect(ids).toContain('site.tab.arena');
@@ -199,7 +199,8 @@ describe('site windows in the pause menu (site-places)', () => {
   it.skipIf(!APP)('app.js: LGMail / LegionMiniMap / LGDailies are what we call', () => {
     expect(APP!).toMatch(/window\.LGMail = \{[\s\S]{0,400}async open\(o\)[\s\S]{0,600}unread\(\) \{ return ML\.off \? 0 : ML\.n; \}[\s\S]{0,200}on\(\) \{ return !ML\.off; \}/);
     expect(APP!).toMatch(/window\.LegionMiniMap = \{[\s\S]{0,100}async open\(o\)/);
-    expect(APP!).toMatch(/if \(k === 'quests'\) \{ if \(window\.LGDailies && ME\.hero && ME\.hero\.dl\) \{ window\.LGDailies\.open\(\); return; \}/);
+    // 17.11: the «Игра» HUD's quests button opens the card under itself (open(b)) and only with dl.d
+    expect(APP!).toMatch(/if \(k === 'quests'\) \{ if \(window\.LGDailies && ME\.hero && ME\.hero\.dl( && ME\.hero\.dl\.d)?\) \{ window\.LGDailies\.open\(b?\); return; \}/);
   });
 });
 

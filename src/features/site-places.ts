@@ -16,7 +16,9 @@
  *  - «Почта» (mail.js, window.LGMail: `on()` = GET /api/mail/count said it is on, `unread()`, `open()` → the `.ml-win`
  *    dialog); the label carries the unread count, a new letter is announced once with a toast;
  *  - «Гильдии» (guilds.js, window.LGGuilds): the site's `.cy-hud .gl-entry` button exists once GET /api/guilds is ok — pressed;
- *  - «Задания дня» (dailies.js, window.LGDailies, hero `dl`): its `<dialog>` (showModal: the top layer, over everything);
+ *  - «Задания дня» (app.js window.LGDailies, hero `dl`; 17.11 only with `dl.d`): until 16.11 a `<dialog>` of dailies.js; since
+ *    17.11 the card `#dlCard` (dailies.js LGDailiesWin.toggle: a `role="region"` under the site's bar `#dl-bar`, NOT in the top
+ *    layer) — src/net/site.ts DAILY_CARD makes the 3D yield to it like to a dialog, so the card is seen over the page;
  *  - «Мини-карта и рейтинг» (minimap.js through app.js window.LegionMiniMap, only in the «Игра» mode like the site's HUD):
  *    the `.lmm` dialog (z 900, over our canvas).
  * Every window is the site's own dialog: the 3D yields while it is shown and comes back after (overlay 'dialog').
@@ -47,8 +49,8 @@ export const mailOn = (w: any = W): boolean => { try { return !!(w.LGMail && typ
 export const mailUnread = (w: any = W): number => { try { return Math.max(0, Math.floor(+w.LGMail.unread() || 0)); } catch { return 0; } };
 /** Pause-menu badge of the mail: the unread count like the site's badge («99+»), '' when nothing is new. */
 export const mailBadge = (n: number): string => (n > 0 ? (n > 99 ? '99+' : String(n)) : '');
-/** Daily tasks are on (app.js dlSync: hero `dl`, dailies.js loaded). */
-export const dailiesOn = (hero: any, w: any = W): boolean => !!(hero && hero.dl && w.LGDailies && typeof w.LGDailies.open === 'function');
+/** Daily tasks are on: hero `dl` with the 17.11 flag `d` (app.js openWin: `if (!dl() || !dl().d || !at) return`) and LGDailies.open. */
+export const dailiesOn = (hero: any, w: any = W): boolean => !!(hero && hero.dl && hero.dl.d && w.LGDailies && typeof w.LGDailies.open === 'function');
 /** The mini-map window (app.js window.LegionMiniMap) — the site offers it only in the «Игра» HUD. */
 export const miniMapOn = (w: any = W): boolean => gameUiOn(w) && !!(w.LegionMiniMap && typeof w.LegionMiniMap.open === 'function');
 

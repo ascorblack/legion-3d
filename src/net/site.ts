@@ -766,6 +766,10 @@ export const GUILD_HALL = GH_ROOT;
 export const SITE_PAUSE = '.lg-pz';
 /** The site's fishing screen (10.11, fish2.js LGFish2.open(): `.f2` role="dialog" on <body>; app.js openFish2 puts the City to sleep). */
 export const FISH = '.f2';
+/** The daily tasks card (17.11, dailies.js LGDailiesWin.toggle: `div#dlCard.dlc` role="region" on <body>, placed under the site's
+ *  bar `#dl-bar` or the pressed button; [hidden] when closed; closes on Esc / a press outside). Not a dialog any more: without
+ *  this the 3D canvas would cover it — the 3D yields to it as to a dialog. */
+export const DAILY_CARD = '#dlCard';
 // .fr-back: the site's friends window (29.10), .cy-jw: the Jail window (30.10) — both lifted over the live 3D (features friends / jail)
 const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view, .fr-back, .cy-jw';
 /** Which site screen covers the game, from «is anything matching this selector on screen» (connectSite overlay(), every 250 ms). */
@@ -780,7 +784,7 @@ export function overlayKind(on: (sel: string) => boolean): string | null {
     : on(FISH) ? 'fish'
     // site 08.11 (city.js townShut): the town is closed and the channel has no city to fall back to — the City is shut down
     // and shows only its «… сейчас закрыт» panel with NO_CITY; the 3D yields to it (nothing to walk in)
-    : on('#tab-city ' + CITY_SHUT) ? 'shut' : on(DIALOGS) ? 'dialog' : null;
+    : on('#tab-city ' + CITY_SHUT) ? 'shut' : on(DIALOGS) || on(DAILY_CARD) ? 'dialog' : null;
 }
 /** Really on screen: connected, not [hidden], rendered, not visibility:hidden (incl. inherited — e.g. our HIDE_CSS), has a box. */
 export function shown(e: Element | null): boolean {

@@ -129,6 +129,10 @@ export type DefaultsFn = (login: string) => Partial<Record<keyof NickDefaults, u
 
 const RARS = new Set<string>(CATALOG.rarities);
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+/** Cape patterns the site draws (17.11 doodle.js capePattern: any other id draws nothing). */
+export const CAPE_PATS = ['hem', 'stars', 'dots', 'runes'] as const;
+export type CapePat = (typeof CAPE_PATS)[number];
+export const capePatOf = (v: unknown): CapePat | null => ((CAPE_PATS as readonly string[]).includes(v as string) ? (v as CapePat) : null);
 
 function cleanGear(g: any): Gear {
   const out: Gear = {};
@@ -177,6 +181,9 @@ export function appearanceFrom(login: string, raw: any, styleId: StyleId = 'legi
   };
   const aura = str(lk.aura) || str(def('aura'));
   if (aura && aura !== 'none') look.aura = aura;
+  // site 17.11 (doodle.js capePattern; app.js «Узор плаща», a «Премиум+» look option): only the site's own patterns
+  const cp = capePatOf(lk.capePat);
+  if (cp) look.capePat = cp;
 
   const gear = cleanGear(raw.g || raw.gear);
   const ghost = !!(raw.gh ?? raw.ghost);

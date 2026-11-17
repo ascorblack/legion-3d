@@ -25,6 +25,8 @@ export interface Look {
   acc?: string[];      // 'bowtie' | 'tie' | 'scarf' | 'glasses' | 'shades' | 'monocle' | 'mustache' | 'cape' | 'pioneer' | …
   accColor?: string;
   capeColor?: string;
+  /** Site 17.11 (doodle.js capePattern): a pattern on the cape — 'hem' | 'stars' | 'dots' | 'runes'. */
+  capePat?: string;
   aura?: string;       // 'gold' | 'sparks' | 'halo' | 'shadow' | 'frost' | …
 }
 

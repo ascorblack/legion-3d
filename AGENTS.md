@@ -60,6 +60,9 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   builder (`src/world/faircats.ts`, terrain `src/world/townkit.ts`, ground `fcground.ts townKitGround`); levels shrink plots,
   a running construction is closed with scaffolding. Fixture `test/fixtures/townkit-map.json` (`node scripts/fixture-townkit.mjs
   <site copy> [--kit=<towns file>]`), dev `dist-dev/game.html?tk=<id>[&biome=ice]`. Old LGTownGen towns are unchanged.
+  Not mirrored yet (site 17.11, tk-art.js): the biome building styles (`STYLE_OF`: log / adobe / nordic / dark — the 3D draws every
+  kit building in the classic look), peaked rocks / cave mouth / flat mine head, side and ring walls (a side wall is left out),
+  lava water, the new trees' own shapes. Our kit town d04 is a meadow town: none of it shows there (.local/drift1117/FINDINGS.md).
 - Guild hall (site 12.11, guildhall.js; it replaced the 07.11 guild district): an interior of the site over the sleeping City
   (`.gh-root`, overlay 'guildhall'). The cats fair has its building «Здание гильдий» (`src/world/fcart/civic.ts buildGuild`, room 'site':
   E → LGCity.panel('guild') → LGGuildHall.enter; «скоро» live from LGGuildHall.on(), `src/features/site-places.ts syncGuildSoon`);

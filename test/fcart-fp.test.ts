@@ -96,9 +96,13 @@ describe.skipIf(!SITE)('asset fingerprints of the real fc-art.js (local site cop
     const { assetDrift, assetLines } = (await import('../scripts/drift.mjs' as string)) as any;
     const files: Record<string, string> = {};
     for (const f of ['fc-art.js', 'fc-map.js', 'tk-art.js', 'tk-map.js']) files['/site/' + f] = readFileSync(resolve(SITE!, f), 'utf8');
+    // the pinned copy may be older than src/data/fcart-fp.json (17.11: every tk:* building differs from 13.11): only what the
+    // edit adds counts
+    const base = new Set<string>((await assetDrift({ ...files })).changed);
     files['/site/fc-art.js'] = files['/site/fc-art.js'].replace(`let s = '<g data-ol="jail">';`, `let s = '<g data-ol="jail"><circle cx="3860" cy="2000" r="20" fill="#f00"/>';`);
     const as = await assetDrift(files);
-    expect(as.changed).toEqual(['jail']);
+    expect(base.has('jail')).toBe(false);
+    expect(as.changed.filter((r: string) => !base.has(r))).toEqual(['jail']);
     expect(assetLines(as)[0]).toMatch(/^assets changed: jail/);
   }, 30000);
 });

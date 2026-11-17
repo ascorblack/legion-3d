@@ -99,6 +99,11 @@ if (q.get('acc') === '1') {
   const rows = ACC_SETS.length;
   if (cam === 'back') camera.position.set(0, 1.4 + rows * 0.5, -(3.2 + rows * 1.6)); else camera.position.set(0, 1.4 + rows * 0.5, 3.2 + rows * 1.6);
   controls.target.set(0, 0.6, 0); controls.update();
+} else if (q.get('capes')) {
+  // ?capes=1 — the cape patterns (site 17.11 doodle.js capePattern, lk.capePat), seen from behind: none, hem, stars, dots, runes
+  const P = ['', 'hem', 'stars', 'dots', 'runes'], C = ['#c0182b', '#2a4a9a', '#5b2a8a', '#1f6a4a', '#3a3a5a'];
+  ENTRIES = P.map((pat, i) => ({ raw: W('cape_' + (pat || 'none'), pat || 'без узора', 1, { shape: (['bean', 'box', 'ball', 'tall', 'egg'] as const)[i], color: COLORS[i], acc: ['cape'], capeColor: C[i], ...(pat ? { capePat: pat } : {}), hat: 'none' }, {}), pos: new THREE.Vector3((i - 2) * 1.1, 0, 0) }));
+  camera.position.set(0.4, 1.5, -5.4); controls.target.set(0, 0.7, 0); controls.update();
 } else if (q.get('faces')) {
   // ?faces=1 — ONE login in several eyes / mouths (a shared model): every figure must show its own face
   const F: [string, string][] = [['dots', 'open'], ['stars', 'tongue'], ['happy', 'grin'], ['cyclops', 'open'], ['big', 'grin'], ['jack', 'tongue']];

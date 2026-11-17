@@ -6,7 +6,7 @@
  */
 import * as THREE from 'three';
 import type { Appearance } from '../contracts';
-import { RARITY_COLOR, nickExtras, jhash } from './appearance';
+import { RARITY_COLOR, nickExtras, jhash, capePatOf, type CapePat } from './appearance';
 import { chTraits, chDims, chHatDims, chBodyColor, addHorns, addWings, addTail, addHoof, addBatEars, addGoatee, addWispFlames, addShell, addBodyMarks, addChertsHat, CH_INK, type ChDims } from './cherts';
 import { setDetail, Parts, T, mul, bodyDims, bodyShell, radiusAt, sectionXZ, col, sphere, cyl, cone, capsule, torus, star, slab, tube, INK, type BodyDims, type Skin } from './geom';
 import { addHat, addAccessories } from './hats';
@@ -75,7 +75,7 @@ export function modelKey(app: Appearance): string {
   const chk = app.styleId === 'cherts' ? (() => { const t = chTraits(jhash(app.login)); return [Math.floor(ex.w01 * 120), t.horn, t.hornCol, t.tip, t.tshape, +t.belly, +t.goatee].join(','); })() : '';
   // eyes shape geometry too (glasses frames round the eyes, the low mesh's eye dots: one for the cyclops)
   return [app.styleId, l.shape, Math.round(ex.w01 * 4), chk, ex.pat, l.eyes || '', l.color, l.color2, hat.id, hat.rar || '', (l.acc || []).slice().sort().join('+'),
-    l.accColor, l.capeColor, g.a || '', g.ar || '', g.am || '', g.w || '', g.wr || '', g.s || '', g.sr || '', g.t || '', g.tr || '', app.ghost ? 1 : 0].join('|');
+    l.accColor, l.capeColor, l.capePat || '', g.a || '', g.ar || '', g.am || '', g.w || '', g.wr || '', g.s || '', g.sr || '', g.t || '', g.tr || '', app.ghost ? 1 : 0].join('|');
 }
 
 const cache = new Map<string, ModelData>();
@@ -359,6 +359,11 @@ function buildModel(app: Appearance, key: string): ModelData {
     p.add(inner, innerC, undefined, skin);
     p.add(edge, rimC, undefined, skin);
     p.add(edge2, rimC, undefined, skin);
+    // site 17.11 (doodle.js capePattern, the «Премиум+» look option lk.capePat): a pattern on the outer cloth of a real cape
+    // (acc 'cape', not the vampire / pioneer ones). The site paints it on the cape's sides seen in its side view; here it
+    // covers the back the camera sees. Every piece is lifted off the cloth and skinned like it (it flutters with the cape).
+    const pat = acc.includes('cape') ? capePatOf(l.capePat) : null;
+    if (pat) addCapePattern(p, pat, outerC, skin, (u, t, lift, out) => capePt(u * segs, t * rings, -lift, out), segs);
     // collar: a rolled edge along the top of the cape, wrapping to the front, with clasps
     const cpts: [number, number, number][] = [];
     const rc = radiusAt(d, yTop) + 0.02 + armorOff;
@@ -411,6 +416,50 @@ function buildModel(app: Appearance, key: string): ModelData {
     key, geo, mid: geo, low, rig: { rest, handL, handR }, dims: d, headTop: Math.max(d.top + Math.max(0, hatH) + (cat && hatH < 0.12 ? 0.1 : 0), hornTop),
     faceKey, hasLegs, hasTail, hasCape, wings: ch, radius: Math.max(0.9, geo.boundingSphere!.radius + 0.4), refs: 0, blade, bow,
   };
+}
+
+/**
+ * The cape pattern (site 17.11 doodle.js capePattern): `at(u, t, lift, out)` = the point of the outer cloth at u (0..1 across
+ * the back), t (0 neck .. 1 hem), lifted `lift` m off it. Colours as the site's: the gold hem with a dashed line above it,
+ * pale gold stars, white dots at 60 %, light blue runes.
+ */
+function addCapePattern(p: Parts, pat: CapePat, cloth: THREE.Color, skin: Skin, at: (u: number, t: number, lift: number, out: number[]) => void, segs: number): void {
+  const o: number[] = [];
+  const put = (u: number, t: number, lift: number) => { o.length = 0; at(u, t, lift, o); return { x: o[0], y: o[1], z: o[2], yaw: Math.atan2(o[0], o[2]) }; };
+  /** a band of the cloth between t0 and t1 over u0..u1, both windings (no orientation guesswork, like the rim) */
+  const band = (t0: number, t1: number, u0: number, u1: number, lift: number, c: string | THREE.Color) => {
+    const n = Math.max(1, Math.round((u1 - u0) * segs)), pos: number[] = [], idx: number[] = [];
+    for (let i = 0; i <= n; i++) { const u = u0 + ((u1 - u0) * i) / n; at(u, t0, lift, pos); at(u, t1, lift, pos); }
+    for (let k = 0; k < n; k++) { const a = k * 2, b = a + 1, c2 = a + 2, e = a + 3; idx.push(a, c2, b, c2, e, b, a, b, c2, c2, b, e); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+    p.add(geo, c, undefined, skin);
+  };
+  if (pat === 'hem') {
+    band(0.89, 0.985, 0, 1, 0.004, '#ffd23f');
+    for (let i = 0; i < segs; i += 2) band(0.825, 0.85, i / segs, (i + 1) / segs, 0.004, '#ffd23f');
+    return;
+  }
+  if (pat === 'stars') {
+    const S: [number, number, number][] = [[0.26, 0.3, 0.042], [0.74, 0.3, 0.042], [0.5, 0.46, 0.034], [0.3, 0.64, 0.038], [0.7, 0.64, 0.038], [0.5, 0.82, 0.04]];
+    for (const [u, t, r] of S) { const q = put(u, t, 0.006); p.add(star(r, 0.006, 0.42), '#ffe9a8', T(q.x, q.y, q.z, 0, q.yaw, 0), skin); }
+    return;
+  }
+  if (pat === 'dots') {
+    const c = new THREE.Color().copy(cloth).lerp(new THREE.Color('#ffffff'), 0.6);
+    const D: [number, number][] = [[0.2, 0.24], [0.5, 0.3], [0.8, 0.24], [0.34, 0.48], [0.66, 0.48], [0.2, 0.7], [0.5, 0.76], [0.8, 0.7], [0.35, 0.9], [0.65, 0.9]];
+    for (const [u, t] of D) { const q = put(u, t, 0.005); p.add(sphere(0.016, 8, 5), c, T(q.x, q.y, q.z, 0, q.yaw, 0, [1, 1, 0.3]), skin); }
+    return;
+  }
+  // runes: a stave with two twigs (ᚠ) above a «v» on a stem, on both sides of the back like the site's two sides
+  for (const u of [0.28, 0.72]) for (const [t, kind] of [[0.4, 0], [0.68, 1]] as [number, number][]) {
+    const q = put(u, t, 0.005), bar = (dx: number, dy: number, len: number, rz: number) => {
+      const cs = Math.cos(q.yaw), sn = Math.sin(q.yaw);
+      p.add(new THREE.BoxGeometry(0.013, len, 0.004), '#bfe3ff', T(q.x + dx * cs, q.y + dy, q.z - dx * sn, 0, q.yaw, rz), skin);
+    };
+    if (kind === 0) { bar(0, 0, 0.11, 0); bar(0.022, 0.028, 0.05, -0.9); bar(0.022, -0.006, 0.05, -0.9); }
+    else { bar(-0.014, 0.016, 0.05, 0.45); bar(0.014, 0.016, 0.05, -0.45); bar(0, -0.026, 0.042, 0); }
+  }
 }
 
 export function clearModelCache() { for (const m of cache.values()) { m.geo.dispose(); m.mid.dispose(); m.low.dispose(); } cache.clear(); }

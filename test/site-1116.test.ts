@@ -33,6 +33,7 @@ const APP = siteCopy('app.js', 'const pzKey = (e) =>');
 const CITY = siteCopy('city.js', 'const glOn = () =>');
 const SUI = siteCopy('site-ui.js', 'function withCode(r)');
 const APP_EVE = siteCopy('app.js', 'window.LGGameNow = gnow;');
+const APP_DLOF = siteCopy('app.js', 'const dlOf = () =>');
 const TKART_NEEDLE = 'const ROWS = new Set(o.rows || [7]);';
 
 /* ------------------------------------------------------------------ a tiny DOM with real capture / bubble order */
@@ -295,7 +296,8 @@ const tkCopies = (() => {
   if (!existsSync(base)) return [] as string[];
   return readdirSync(base).filter((d) => /^site-\d{4}-\d{4}$/.test(d) && existsSync(join(base, d, 'tk-art.js')) && existsSync(join(base, d, 'tk-map.js'))).sort().reverse().map((d) => join(base, d));
 })();
-const newTk = tkCopies.find((d) => readFileSync(join(d, 'tk-art.js'), 'utf8').includes(TKART_NEEDLE)) ?? null;
+// the 16.11 art: the row chunks, but not yet the 17.11 biome building styles (STYLE_OF; test/site-1117.test.ts)
+const newTk = tkCopies.find((d) => { const t = readFileSync(join(d, 'tk-art.js'), 'utf8'); return t.includes(TKART_NEEDLE) && !t.includes('const STYLE_OF = {'); }) ?? null;
 const oldTk = tkCopies.find((d) => !readFileSync(join(d, 'tk-art.js'), 'utf8').includes(TKART_NEEDLE)) ?? null;
 describe('tk-art.js Ground rows (16.11) and fingerprint.ts layerRef', () => {
   it('row chunks (640 + 2 M high at j·CH − M, any width) are grid, not map layers', () => {
@@ -398,11 +400,12 @@ describe('app.js game clock 16.11 evening (gnow / LGGameNow → src/net/game-clo
     A.gclock(5_002_000, 5_001_500);   // |GDT| ≤ 1 s counts as none
     expect(A.gnow()).toBe(5_002_000);
   });
-  it.skipIf(!APP_EVE)('daily tasks: LGDailies (open / sync) is app.js\'s own now, and still only with hero dl', () => {
-    expect(APP_EVE!).toMatch(/if \(!window\.LGDailies\) window\.LGDailies = \{[\s\S]{0,200}sync\(\) \{[\s\S]{0,100}open\(\) \{ if \(!dlOf\(\)\) return;/);
-    expect(APP_EVE!).toMatch(/const dlOf = \(\) => \(ME && ME\.user && ME\.hero && ME\.hero\.dl\) \|\| null;/);
+  // history since 17.11 (app.js dl() / openWin, dl.d; test/site-1117.test.ts): checked on the copy that still has dlOf
+  it.skipIf(!APP_DLOF)('daily tasks: LGDailies (open / sync) is app.js\'s own now, and still only with hero dl', () => {
+    expect(APP_DLOF!).toMatch(/if \(!window\.LGDailies\) window\.LGDailies = \{[\s\S]{0,200}sync\(\) \{[\s\S]{0,100}open\(\) \{ if \(!dlOf\(\)\) return;/);
+    expect(APP_DLOF!).toMatch(/const dlOf = \(\) => \(ME && ME\.user && ME\.hero && ME\.hero\.dl\) \|\| null;/);
     const w = { LGDailies: { open() {}, sync() {} } };
-    expect(dailiesOn({ dl: { n: 1, of: 3 } }, w)).toBe(true);
+    expect(dailiesOn({ dl: { d: 1, n: 1, of: 3 } }, w)).toBe(true);
     expect(dailiesOn({}, w)).toBe(false);
   });
 });

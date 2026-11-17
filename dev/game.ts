@@ -67,13 +67,17 @@ const bots: Bot[] = [];
 const GT = new URLSearchParams(location.search).get('gt') === '1';
 const GTAGS = ['MEOW', 'PAWS', 'TAIL', 'ЛАПКИ', 'MEOW', 'USY'];
 if (GT) (hero as any).gt = 'PAWS';
+const CAPES = new URLSearchParams(location.search).get('capes') === '1', CAPE_COLS = ['#2a4a9a', '#5b2a8a', '#1f6a4a', '#3a3a5a', '#c0182b'];
 const raw = (session as any).enter.a as any[];
 const N = +(new URLSearchParams(location.search).get('bots') || 24);
 for (let i = 0; i < N; i++) {
   const r = raw[i % raw.length];
   const login = `bot${i + 1}`;
   const [x, y] = layout.nearest(layout.QW + 200 + Math.random() * Math.min(2600, layout.W - layout.QW - 400), 850 + Math.random() * Math.min(600, layout.area.y1 - 860));
-  const braw = { ...r, l: login, n: `Котик${i + 1}`, ...(GT ? { gt: GTAGS[i % GTAGS.length] } : {}) };   // `raw`: the game re-derives looks from it (content/game.ts)
+  const braw0 = { ...r, l: login, n: `Котик${i + 1}`, ...(GT ? { gt: GTAGS[i % GTAGS.length] } : {}) };   // `raw`: the game re-derives looks from it (content/game.ts)
+  // ?capes=1: every bot wears a cape with one of the site's 17.11 patterns (doodle.js capePattern, lk.capePat), cycling
+  const braw = CAPES ? { ...braw0, lk: { ...(braw0.lk || {}), acc: ['cape'], capeColor: CAPE_COLS[i % CAPE_COLS.length], capePat: ['hem', 'stars', 'dots', 'runes'][i % 4] },
+    g: { w: braw0.g?.w, wr: braw0.g?.wr, h: braw0.g?.h, hr: braw0.g?.hr } } : braw0;   // no shield / armour over the cape
   const b: Bot = { login, raw: braw, app: appearanceFrom(login, braw, STYLE), x, y, face: Math.random() * 6.28, speed: 0, alpha: 1, path: null, wait: Math.random() * 3 };
   bots.push(b); store.upsertWalker(b);
 }

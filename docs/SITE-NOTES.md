@@ -176,6 +176,33 @@ so the extension must treat every internal API as unstable and degrade gracefull
   one chunk per 640 px row as wide as its content) — fingerprint.ts layerRef counts them as grid. Other hero flags: `p2` (forge: focus
   the first button of a fresh item, html.ph2), `l7` (the legion page by classes). Our follow-ups: .local/drift1116/FINDINGS.md.
 
+- **17.11 (morning).** tk-art.js: Town Kit buildings and houses are drawn in a style per biome (`STYLE_OF`: forest / taiga / swamp
+  'log', desert 'adobe', ice / mount 'nordic', ash / blight 'dark'; meadow and the rest 'classic' = as before; `T.style` overrides),
+  rocks may carry `peaks` (a mountain range with `mountFoot`, the mine in it gets a `caveMouth`), a building `mine` with `flat` is a
+  `mineHead` prop on open ground, walls `k` palisade / stone / adobe / stakes / iron, `side` 'E' / 'W' and `ring` pieces
+  (tk-map.js `ringPieces`, their obstacles too), lava water (`w.lava`), new trees `NATURE2` (palm, cactus, snowpine, deadtree, willow,
+  birch; `pineLike` = pine / snowpine / cactus) as items and in T.nature, `mark` items drawn by the town's art hooks, `T.thin`, a fixed
+  `T.tsar` box (king of the hill) where the forest stays dense. The adit layer is 580 px wide now (door ± 290, from vis[3] − 320).
+  Our kit town d04 «Рябиново» (meadow) draws exactly as before; its town file only gained `tsar`. 3D: fingerprint.ts layerRef
+  knows the wider adit; the new trees stand as a pine / the leafy tree; a side wall is left out (walls along the bottom only).
+  app.js daily tasks: a module with `dl()` (hero `dl` {d, n, of, mk: [[p%, state 0/1/2, item?]], s, gf}), the bar `#dl-bar` after
+  `header.top`, rewards claimed on the scale (POST /api/dailies/act {op:'claim', i}), GET /api/dailies; open(at) toggles the card
+  `#dlCard` (dailies.js, role region, NOT a dialog) under `at` or the bar — only with `dl.d`. 3D: dailiesOn needs `dl.d`, the 3D
+  yields to the card (src/net/site.ts DAILY_CARD). Premium (app.js `LGPremium`: hero `pm` {t 1/2, u, p}, `pf` = the perk letters,
+  POST /api/premium/prefs; nick colour / chat frame (`m.pn`, `m.pm`), stickers `m.st` (`:st-<id>:`) and premium emotes `:smile:` in
+  site-chat.js, a live avatar in the header, saved looks (`wardrobe.sl`, POST /api/lookSlot), look colours `wardrobe.pl.c` and cape
+  patterns `wardrobe.pl.p` → look `capePat` (doodle.js capePattern: hem / stars / dots / runes) — 3D: src/avatar/model.ts
+  addCapePattern; frames for nicks (doodle.js FRAMES / frameOf, not used by any script yet). citymon.js: an elite fight is a chain of
+  duels (`F.duels`, chainDlg in the same dialog); placement unchanged. /lib/err.js: window error / unhandledrejection reports to
+  POST /api/err (sampled, only errors whose first stack frame is the site's own origin — never ours) and page timings to /api/perf.
+  Again at ~10:45 UTC: city.js `showSync` tells the server the crowd filter — POST `/api/city/show {only: 'fr' | 'gl' | '', fr:
+  [sorted friend logins]}` at the end of lodPick, only when it changed, never while the City's others are hidden (S.hidden: under the
+  3D, LGCity.hideOthers) — so a filter set in 2D before F8 stays on the server under the 3D; mine.js W A S D / arrows walk the 2D
+  mine hero (hero `kw`, document keydown → walkTo → POST /api/mine/go) unless `kwBusy()` (`.mn-board-w` in the page: our hold of
+  the site's mine under the 3D one is exactly such an element); app.js forge failure → `LGCity.forgeCancel()` (our anvil follows
+  LGCity.anvil.ani()); guildhall.js other players' looks (`op:'looks'`) and LGChatOne.dock('guildhall'); citymon.js lobbies refresh
+  live; fish2.js sell-all asks twice; mine quest `qc` shares (`st.qc`). Our follow-ups: .local/drift1117/FINDINGS.md.
+
 ## Auth / user
 - Cookie `lsid` (httpOnly). `GET /api/me` → `{ ok, user:{login,name}, hero, roles, classes, ench, ql, now, … }`.
 - `hero`: `login, name, level, xp, next, prevXp, xpInLevel, xpToNext, money (bronze), hpNow, stats{hp,atk,mag,def},

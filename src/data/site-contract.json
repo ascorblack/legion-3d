@@ -1326,11 +1326,25 @@
       "why": "10.11: «Задания дня» in the pause menu (src/features/site-places.ts dailiesOn: hero `dl`); 16.11 evening: LGDailies lives in app.js (the bar), the window is dailies.js LGDailiesWin loaded on open()"
     },
     {
-      "id": "app.js dlOf (hero dl)",
+      "id": "app.js dl (hero dl.d)",
       "file": "app.js",
-      "re": "const dlOf = \\(\\) => \\(ME && ME\\.user && ME\\.hero && ME\\.hero\\.dl\\) \\|\\| null;[\\s\\S]*giftOn: \\(\\) => !!dlOf\\(\\)",
+      "re": "const dl = \\(\\) => \\(ME && ME\\.user && ME\\.hero && ME\\.hero\\.dl\\) \\|\\| null;[\\s\\S]*function openWin\\(at\\) \\{ if \\(!dl\\(\\) \\|\\| !dl\\(\\)\\.d \\|\\| !at\\) return;[\\s\\S]*open: \\(at\\) => openWin\\(at && at\\.nodeType === 1 \\? at : bar\\)",
       "severity": "degrade",
-      "why": "10.11: daily tasks only with hero `dl` (src/features/site-places.ts); 16.11 evening the check is app.js dlOf"
+      "why": "10.11: daily tasks only with hero `dl` (src/features/site-places.ts dailiesOn); 17.11 app.js dl() + openWin: only with dl.d, open() with no element anchors at the bar #dl-bar"
+    },
+    {
+      "id": "dailies.js card #dlCard",
+      "file": "dailies.js",
+      "re": "card = document\\.createElement\\('div'\\); card\\.className = 'dlc'; card\\.id = 'dlCard'; card\\.hidden = true;",
+      "severity": "degrade",
+      "why": "17.11: the daily tasks window is a card (role region, not a dialog) — src/net/site.ts DAILY_CARD makes the 3D yield to it; if it is renamed the card opens under the canvas"
+    },
+    {
+      "id": "mine.js kwBusy (WASD in the mine)",
+      "file": "mine.js",
+      "re": "const kwBusy = \\(\\) => !!\\(S && \\([\\s\\S]{0,200}document\\.querySelector\\('\\.mn-board-w,",
+      "severity": "degrade",
+      "why": "17.11: the site's 2D mine walks with W A S D / arrows (hero `kw`, document keydown) unless kwBusy(); under the 3D mine the site's mine stays open, held by our hidden `.mn-board-w` (src/net/site-mine.ts holdSiteMine) — without it a key would walk the 2D hero too (POST /api/mine/go)"
     },
     {
       "id": "LegionMiniMap (mini-map)",
