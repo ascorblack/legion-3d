@@ -63,6 +63,8 @@ describe('runtime site contract (boot guard)', () => {
       LGCityMap: { make() {}, makeFrom() {}, follow() {}, stepAlong() {}, lowJail() {}, JAIL_OBST: [], QW: 1800, LOW: {}, BUILDINGS: [] },
       LGCityArt: { quarter() {}, lower() {} }, MDDoodle: { defaultsFor() {}, location() {}, active: 'cats' },
       LGGameData: { baseCmd() {} }, LGInventory: { art() {} },
+      // 17.11 evening: /lib/guard.js is a page script of every channel page
+      LGGuard: { install() {}, kind() {}, open() {}, under() {}, passed() {}, wait() {} },
     },
     doc: { querySelector: (s: string) => (dom.includes(s) ? {} : null) },
   });

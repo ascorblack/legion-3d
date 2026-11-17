@@ -14,7 +14,7 @@ import { addClaws } from './cherts';
 import type { Appearance } from '../contracts';
 import type { ViewModel } from '../contracts/modules';
 import { Parts, T, mul, sphere, tube, torus, box, cyl, cone, capsule } from './geom';
-import { addWeapon, addShield, weaponHold, bladeSpan } from './gear';
+import { addWeapon, addShield, addOffhand, isOffhand, OFFHAND_WEAPON, weaponHold, bladeSpan } from './gear';
 import { toonMat, outlineMat } from './materials';
 import { RARITY_COLOR } from './appearance';
 import { easeK } from './attacks';
@@ -273,7 +273,8 @@ class ViewModelImpl implements ViewModel {
     const kind: Kind = g.w ? KIND[g.w] || 'blade' : 'none';
     this.kind = kind;
     // mirrors the third-person body: the weapon (any kind, the bow too) in the right paw, the shield on the left forearm
-    this.hasShield = !!g.s;
+    // site 17.11 evening: an off-hand blade (gear.ts isOffhand) sits in the shield slot but is a blade in the left paw
+    this.hasShield = !!g.s && !isOffhand(g.s);
     this.shieldDrop = SH_DROP[g.s || ''] ?? 0;
 
     /** Paw at the origin + forearm coming from below/outside the screen. s = +1 right, −1 left; fist = holds something. */
@@ -371,6 +372,12 @@ class ViewModelImpl implements ViewModel {
       addShield(ps, g.s!, g.sr, sm);
       addShieldBack(ps, g.s!, sm);
       this.mk(ps.build(), this.left, 'vm-shield');
+    } else if (g.s && isOffhand(g.s)) {
+      // off-hand blade: a fist round its grip, the blade up like the right paw's dagger (mirrored roll)
+      paw(pl, -1, true);
+      const po = new Parts(), base = OFFHAND_WEAPON[g.s];
+      addOffhand(po, g.s, g.sr, mul(T(0, -0.005, -0.005, 0, 0, 0, WSCALE[base] ?? 0.6), weaponHold(base)));
+      this.mk(po.build(), this.left, 'vm-offhand');
     } else paw(pl, -1, false);
     this.mk(pl.build(), this.left, 'vm-left');
     if (!first) this.raise = 0;           // re-equip: bring the new gear up from below

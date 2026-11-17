@@ -196,8 +196,21 @@ export function xpInfo(h: Hero): { xin: number; xneed: number | null; pct: numbe
   const pct = xneed == null ? 1 : xneed > 0 ? Math.max(0, Math.min(1, xin / xneed)) : 0;
   return { xin, xneed, pct };
 }
-export function hpInfo(h: Hero): { now: number; max: number; pct: number } {
-  const max = Math.max(1, +h.stats.hp || 1), now = Math.max(0, h.hpNow == null ? max : +h.hpNow);
+/**
+ * Site 17.11 evening (app.js hpTick, every second): with `hp` (HP at `hpAt`, game time), `hpMax` and `hpRegen` (HP per hour)
+ * the site's page counts the hero's HP up by itself between hero updates — cur = min(max, floor(hp + (now − hpAt) / 1 h ×
+ * regen)); a ghost, a missing field or no regen leaves the server's `hpNow`. Pure; null = nothing to count.
+ */
+export function hpRegenNow(h: Partial<Hero> & Record<string, unknown>, now = gameNow()): number | null {
+  if (!h || h.hpMax == null || h.hp == null || h.ghost) return null;
+  const r = Math.max(0, +(h.hpRegen as number) || 0), max = Math.max(0, +(h.hpMax as number) || 0);
+  if (!(r > 0)) return null;
+  const at = +(h.hpAt as number) || now;
+  return Math.min(max, Math.floor(+(h.hp as number) + Math.max(0, now - at) / 36e5 * r));
+}
+export function hpInfo(h: Hero, t = gameNow()): { now: number; max: number; pct: number } {
+  const x = h as Hero & Record<string, unknown>, rg = hpRegenNow(x, t);
+  const max = Math.max(1, +((x.hpMax as number | undefined) ?? h.stats.hp) || 1), now = Math.max(0, rg != null ? rg : h.hpNow == null ? max : +h.hpNow);
   return { now, max, pct: Math.max(0, Math.min(1, now / max)) };
 }
 

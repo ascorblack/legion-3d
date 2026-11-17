@@ -78,6 +78,10 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   Since 15.11 the socket carries the hero as a full `me` + `mep` patches (version `mv`): the bridge keeps the same base
   (src/bridge/me-patch.ts MeMirror / meApply, a port of site-live.js) and emits the full hero as `sse:me`; the live contract
   prints `ev frames N: me … mep …` and `meSync=same mv a/b` (our hero vs `LGLiveLink.last.me()`).
+- Anti-bot guard (site 17.11 evening, /lib/guard.js `LGGuard`): sits on window.fetch under the site's <head> LG_BASE wrapper; a
+  captcha holds and replays every request (ours too), a ban shows the site's window. Our requests always go through the page's
+  fetch; the tee goes on top only in 3D; `[data-lg-guard]` is overlay 'guard' (the 3D steps aside); a flagged answer is
+  `{ ok: false, guard }` (src/net/site-guard.ts, docs/SITE-NOTES.md «Anti-bot guard», test/site-1117b.test.ts). Never trigger it live.
 - Site contract: `src/data/site-contract.json` is checked statically (`npm run drift`) and at runtime (boot guard in
   `src/net/site.ts` via `src/net/contract.ts`; `node e2e/contract.mjs` against the live page).
 - Asset models of the new fair / Town Kit (`src/world/fcart/`: registry, civic / shops / houses models) are pinned to the

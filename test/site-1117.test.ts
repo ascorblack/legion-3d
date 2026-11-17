@@ -56,6 +56,7 @@ describe('tk-art.js 17.11: the mine layer, d04 unchanged, biome styles', () => {
     expect(out[1].fp['tk:mine']).toBeTruthy();   // named again (it fell into 'relief' with the old rule)
     for (const ref of Object.keys(out[0].fp)) {
       if (/^tk:(terrain|fog|relief|forest|mine|wall|tower)$/.test(ref)) continue;
+      if (ref === 'tk:i:mailbox') continue;   // redrawn in the evening of 17.11 (a pole for the flag): test/site-1117b.test.ts
       expect(out[1].fp[ref], ref).toEqual(out[0].fp[ref]);
     }
     // the three refs whose fingerprint moved: the very same SVG drawn into a taller / wider box

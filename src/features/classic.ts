@@ -50,7 +50,7 @@ export default coreFeature({
       }
       spAt = null;
       hostEl.style.display = ''; uiRoot.style.display = '';
-      const blocking = !!state.overlay && !state.overlayOver3d;
+      const blocking = !!state.overlay && !(state.overlayOver3d && state.overlay === 'room');   // as src/features/overlay.ts
       // setGameplay is the WISH (src/engine/input.ts derives effective gameplay: no modal, no hold, no text focus). A text
       // field that kept the keyboard over the switch (the site's chat input, our chat in the UI's shadow root) additionally
       // holds gameplay off until it loses focus — F8 back never hands WASD to the game from under a focused chat (QA r3)

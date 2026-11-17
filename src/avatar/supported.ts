@@ -20,6 +20,7 @@ export const ITEM_FOODS = ['apple', 'pear', 'bread', 'pretzel', 'cheese', 'pie',
 export const SUPPORTED_ITEM_MODEL_KEYS: readonly string[] = [
   ...CATALOG.weapons.map((k) => 'weapon:' + k),
   ...CATALOG.shields.map((k) => 'shield:' + k),
+  ...CATALOG.offhands.map((k) => 'shield:' + k),   // site 17.11: off-hand blades are `look.shield` ids too
   ...CATALOG.armors.map((k) => 'armor:' + k),
   ...ITEM_HATS.map((k) => 'hat:' + k),
   ...ITEM_CHARMS.map((k) => 'charm:' + k),
@@ -30,6 +31,6 @@ export const SUPPORTED_ITEM_MODEL_KEYS: readonly string[] = [
 
 /** The same, grouped (drop-in for src/data/supported.json → "itemModels"). */
 export const SUPPORTED_ITEM_MODELS = {
-  weapons: [...CATALOG.weapons], shields: [...CATALOG.shields], armors: [...CATALOG.armors],
+  weapons: [...CATALOG.weapons], shields: [...CATALOG.shields], offhands: [...CATALOG.offhands], armors: [...CATALOG.armors],
   hats: [...ITEM_HATS], charms: [...ITEM_CHARMS], slots: [...ITEM_SLOTS], foods: [...ITEM_FOODS],
 };

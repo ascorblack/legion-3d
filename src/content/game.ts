@@ -307,7 +307,9 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
       kit, labels, anchors: new Map(), me, meAv, vm,
       controller: () => ctl,
       feet,
-      gameplay: () => !state.classic && !state.menu && (!state.overlay || state.overlayOver3d),
+      // a hybrid room's own panel ('room') keeps the 3D running under it; any other site screen over it (the anti-bot guard,
+      // the pause plaque, a buy card) does not — the overlay watcher hides the 3D then (src/features/overlay.ts)
+      gameplay: () => !state.classic && !state.menu && (!state.overlay || (state.overlayOver3d && state.overlay === 'room')),
       applyCamera: () => { /* camera feature */ },
       onMenu(fn) { menuFns.add(fn); return () => { menuFns.delete(fn); }; },
       setSpace,
@@ -384,7 +386,7 @@ export async function startGame(site: SiteSession, status: (s: string) => void, 
       rig.update(dt);
       const fpNow = rig.distance < 0.9 && !rooms.stage;   // scene mode: the hero is always shown
       if (fpNow !== fpShown) { fpShown = fpNow; meAv.setFirstPerson(fpNow); }
-      const vmOn = fpNow && !state.menu && !state.toolInHand && (!state.overlay || state.overlayOver3d);
+      const vmOn = fpNow && !state.menu && !state.toolInHand && (!state.overlay || (state.overlayOver3d && state.overlay === 'room'));
       if (vmOn !== vmShown) { vmShown = vmOn; vm.setVisible(vmOn); }
       // 6. features
       for (let i = 0; i < frameFns.length; i++) frameFns[i](dt, t);

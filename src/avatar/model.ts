@@ -10,7 +10,7 @@ import { RARITY_COLOR, nickExtras, jhash, capePatOf, type CapePat } from './appe
 import { chTraits, chDims, chHatDims, chBodyColor, addHorns, addWings, addTail, addHoof, addBatEars, addGoatee, addWispFlames, addShell, addBodyMarks, addChertsHat, CH_INK, type ChDims } from './cherts';
 import { setDetail, Parts, T, mul, bodyDims, bodyShell, radiusAt, sectionXZ, col, sphere, cyl, cone, capsule, torus, star, slab, tube, INK, type BodyDims, type Skin } from './geom';
 import { addHat, addAccessories } from './hats';
-import { addWeapon, addShield, weaponHold, bladeSpan, BOW_STRING } from './gear';
+import { addWeapon, addShield, addOffhand, isOffhand, OFFHAND_WEAPON, weaponHold, bladeSpan, BOW_STRING } from './gear';
 
 /** Third-person forward tilt of the weapon hand (rx; default −0.65 = tip up-forward). */
 const TP_TILT: Record<string, number> = { censer: 0, bow: -0.12, staff: -0.25, crook: -0.25, skullstaff: -0.25, spear: -0.9, pitchfork: -0.9, grimoire: -0.2 };
@@ -232,7 +232,13 @@ function buildModel(app: Appearance, key: string): ModelData {
     const hand = new THREE.Vector3().copy(r).add(handR);
     blade = { bone: B.armR, a: hand.clone().addScaledVector(dir, -0.05), b: hand.clone().addScaledVector(dir, 0.07) };
   }
-  if (g.s) {
+  if (g.s && isOffhand(g.s)) {
+    // site 17.11 evening: an off-hand blade in the shield slot — held in the LEFT paw like the weapon in the right one
+    // (mirrored roll), not strapped to the forearm (doodle.js: the dagger / kris art in the shield hand, + st.hand)
+    const r = rest[B.armL], base = OFFHAND_WEAPON[g.s];
+    p.bone = B.armL;
+    addOffhand(p, g.s, g.sr, new THREE.Matrix4().multiplyMatrices(T(r.x + handL.x, r.y + handL.y, r.z + handL.z, TP_TILT[base] ?? -0.65, 0, 0.15), weaponHold(base)));
+  } else if (g.s) {
     const r = rest[B.armL];
     p.bone = B.armL;
     // held on the forearm, facing front-left; kept forward of the body sides so it never cuts through a cape

@@ -89,7 +89,9 @@ describe.skipIf(!SITE)('asset fingerprints of the real fc-art.js (local site cop
     expect(items(moved)).toEqual(items(fair));
     // the pinned json matches this copy (re-run `node scripts/fcart-fp.mjs` after a new site copy)
     const P = PINNED as unknown as Record<string, { fp: string }>;
-    expect(Object.keys(fair).filter((r) => P[r]?.fp !== fair[r].fp)).toEqual([]);
+    // refs the site redrew after this copy (pinned to the newer drawing): 17.11 evening the mailbox's flag pole (test/site-1117b)
+    const LATER = new Set(['i:mailbox']);
+    expect(Object.keys(fair).filter((r) => P[r]?.fp !== fair[r].fp && !LATER.has(r))).toEqual([]);
   });
   it('drift.mjs names a changed asset under «assets changed»', async () => {
     const { readFileSync } = await import('node:fs');
@@ -103,7 +105,7 @@ describe.skipIf(!SITE)('asset fingerprints of the real fc-art.js (local site cop
     const as = await assetDrift(files);
     expect(base.has('jail')).toBe(false);
     expect(as.changed.filter((r: string) => !base.has(r))).toEqual(['jail']);
-    expect(assetLines(as)[0]).toMatch(/^assets changed: jail/);
+    expect(assetLines(as)[0]).toMatch(/^assets changed: (.*, )?jail\b/);
   }, 30000);
 });
 

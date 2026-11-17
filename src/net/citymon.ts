@@ -128,6 +128,25 @@ export function cityMonWall(w: any = Wn): CmWall | null {
 export function cityMonView(w: any = Wn): CmView | null {
   try { const v = w.LGCityMon && typeof w.LGCityMon.view === 'function' ? w.LGCityMon.view() : null; return v && typeof v === 'object' ? v : null; } catch { return null; }
 }
+/**
+ * Site 17.11 evening: the view is per town — citymon.js load() asks GET /api/citymon?town=<LGCity.wall().town> and keeps the
+ * town it asked for (S.vt); a town switch reloads it (tick: S.vt !== W.town). Until that reload lands, view() still returns
+ * the previous town's view. The gate drops a view that was already there when the town changed, so the 3D never draws
+ * one town's monsters at another town's wall; the next view object (the new town's) passes.
+ */
+export class CmTownGate {
+  private town: string | null = null;
+  private stale: CmView | null = null;
+  pick(W: CmWall | null, V: CmView | null): CmView | null {
+    if (!W) return V;
+    const t = String(W.town || '');
+    if (this.town !== null && t !== this.town) this.stale = V;
+    this.town = t;
+    if (V && V === this.stale) return null;
+    this.stale = null;
+    return V;
+  }
+}
 /** CSS.escape for an attribute value (node tests have no CSS global). */
 const cssEsc = (s: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : s.replace(/["\\]/g, '\\$&'));
 /**

@@ -21,7 +21,7 @@ import { toX, toZ } from '../world/coords';
 import { cityMonGeo, cityMonScale, cityMonTop } from '../world/citymon-art';
 import { toonMat, outlineMat } from '../avatar/materials';
 import { hullGeo } from '../expedition/art';
-import { cityMonWall, cityMonView, cityMonGroups, cityMonKey, cityMonAct, cityMonLabel, type CmGroup, type CmWall, type CmView } from '../net/citymon';
+import { cityMonWall, cityMonView, cityMonGroups, cityMonKey, cityMonAct, cityMonLabel, type CmGroup, type CmWall, type CmView, CmTownGate } from '../net/citymon';
 import { coreFeature } from './types';
 
 /** How long a beaten pack lies in the dead pose (s). */
@@ -133,9 +133,11 @@ export default coreFeature({
         else { dropGroup(G); groups.delete(k); }
       }
     };
+    const gate = new CmTownGate();
     const poll = () => {
       const dev = ctx.dev.citymonFake as { wall?: () => CmWall | null; view?: () => CmView | null } | undefined;
-      const w = dev?.wall ? dev.wall() : cityMonWall(), v = w ? (dev?.view ? dev.view() : cityMonView()) : null;
+      // site 17.11 evening: the view is per town — never draw the previous town's view at this town's wall (CmTownGate)
+      const w = dev?.wall ? dev.wall() : cityMonWall(), v = gate.pick(w, w ? (dev?.view ? dev.view() : cityMonView()) : null);
       const k = w && v ? cityMonKey(w, v) : '';
       wall = w; view = v;
       if (v && Number.isFinite(v.now) && v.now !== vNow) { vNow = v.now!; vAt = Date.now(); }

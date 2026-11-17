@@ -22,6 +22,7 @@ import CONTRACT from '../data/site-contract.json';
 import { mountTravel, type TravelPanelDeps } from '../ui/travel';
 import { registerPauseItem, registerSettingRow, settingValue } from '../ui/settings-ext';
 import { coreFeature } from './types';
+import { readSiteAnswer } from '../net/site-guard';
 
 export const TRAVEL_KEY = 'l3d.travel';
 export const TRAVEL_HOTKEY = 'KeyL';
@@ -56,7 +57,7 @@ export default coreFeature({
     };
     const fetchFind = async (q: string, signal: AbortSignal | null) => {
       const r = await fetch(base() + '/api/find?q=' + encodeURIComponent(q), { credentials: 'same-origin', ...(signal ? { signal } : {}) });
-      let data: unknown = null; try { data = await r.json(); } catch { /* not JSON */ }
+      let data: unknown = null; try { data = await readSiteAnswer(r); } catch { /* not JSON */ }   // site 17.11: a guard-flagged answer → { ok: false, guard }
       return { status: r.status, data };
     };
     const townName = (id: string) => {

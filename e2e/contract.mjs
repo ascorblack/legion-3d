@@ -111,6 +111,19 @@ report.live = await p.evaluate(() => ({ linkLib: typeof window.LGLiveLink, live:
   meSync: (() => { try { const s = window.LGLiveLink && window.LGLiveLink.last && window.LGLiveLink.last.me ? window.LGLiveLink.last.me() : null, b = window.__L3D_BUS ? window.__L3D_BUS.last['sse:me'] : null;
     if (!s || !b) return { site: !!s, bus: !!b }; return { site: s.mv ?? null, bus: b.mv ?? null, same: JSON.stringify(s) === JSON.stringify(b) }; } catch (e) { return String(e); } })() }));
 report.live.wire = wire;
+// site 17.11 evening, the anti-bot guard (/lib/guard.js LGGuard, under the <head> LG_BASE wrapper): the page must stay «honest»
+// (window.fetch === LG_FETCH.w && LG_FETCH.n) with our bridge in it, and our tee must go on top of it and come off exactly.
+// No request is sent here; a guard window (captcha / ban) that the site showed by itself is only counted.
+report.guard = await p.evaluate(() => {
+  try {
+    const G = window.LGGuard, F = window.LG_FETCH, T = window.__L3D_BUS && window.__L3D_BUS.fetchTee;
+    const own0 = !!F && window.fetch === F.w;
+    let teeOn = null, teeOff = null;
+    if (T && own0 && !T.installed()) { T.on(); teeOn = window.fetch !== F.w; T.off(); teeOff = window.fetch === F.w; }
+    return { guard: typeof G, api: G ? ['install', 'kind', 'open', 'under', 'passed', 'wait'].filter((k) => typeof G[k] === 'function').length : 0,
+      own: own0, n: !!(F && F.n), teeOn, teeOff, windows: document.querySelectorAll('[data-lg-guard]').length, passed: G && G.passed ? G.passed() : null };
+  } catch (e) { return { error: String(e) }; }
+});
 
 const breaks = [...(report.page?.breaks || []), ...(report.city?.breaks || [])];
 const degrades = [...(report.page?.degrades || []), ...(report.city?.degrades || [])];
@@ -123,6 +136,9 @@ if (logged && lv.live && !(seen['sse:me'] || seen['sse:city'] || seen['sse:q']))
 const ms = lv.meSync;
 if (logged && ms && typeof ms === 'object' && ms.site != null && ms.bus != null && ms.same === false) degrades.push({ id: 'hero patches (mep) mirrored: bus sse:me = LGLiveLink.me()', severity: 'degrade', missing: [`bus mv ${ms.bus} vs site mv ${ms.site}`] });
 console.log(`LIVE transport=${lv.kind || 'none'} wire ws=${wire.ws} (ev frames ${wire.wsEv}: me ${wire.me} mep ${wire.mep}) sse=${wire.sse} bus me=${seen['sse:me'] || 0} (mep ${seen.mep || 0} gap ${seen.mepGap || 0}) city=${seen['sse:city'] || 0} cityChat=${seen.cityChat || 0} q=${seen['sse:q'] || 0} meSync=${ms && typeof ms === 'object' ? (ms.same === undefined ? 'n/a' : (ms.same ? 'same' : 'DIFF') + ' mv ' + ms.bus + '/' + ms.site) : ms}`);
+const gd = report.guard || {};
+if (gd.guard === 'object' && !(gd.own && gd.n && gd.teeOff !== false)) degrades.push({ id: 'anti-bot guard: honest fetch chain with our bridge (17.11)', severity: 'degrade', missing: [JSON.stringify(gd)] });
+console.log(`GUARD LGGuard=${gd.guard} api=${gd.api}/6 fetch=LG_FETCH.w:${gd.own} n=${gd.n} tee on/off=${gd.teeOn}/${gd.teeOff} windows=${gd.windows} passed=${gd.passed}${gd.error ? ' error=' + gd.error : ''}`);
 console.log(`RESULT breaks=${breaks.length} degrades=${degrades.length} town=${report.town ? report.town.id + ' via ' + report.town.via : 'n/a'}`);
 await b.close();
 process.exit(breaks.length ? 3 : opt.strict && degrades.length ? 2 : 0);

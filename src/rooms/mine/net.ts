@@ -12,6 +12,7 @@
  * dig / stop / sell / buy / lamp / claim / pick / oreBag only on the player's explicit action; leave on exit.
  */
 import { dayLimit } from './state';
+import { guardShown } from '../../net/site-guard';
 import { MineModel, TX, WEEK_DONE, blockTitle, mmss, type MinePayload, type MineMe, type Burst, type ChatLine, type LookRec } from './state';
 import { REACH, type Pt } from './geo';
 import { GEO1, type MineGeom } from './geo3';
@@ -52,7 +53,8 @@ export interface MineClientOpts {
   /** Site 13.11 (app.js window.LGPollOk): may a client poll now — the live link is down for good (3 failures / > 20 s).
    *  Default: the page's own; without it, true. */
   pollOk?: () => boolean;
-  /** Site 13.11 (site-ui.js LGSiteUi.hold.left()): ms every poll waits after a 503 / 429 (Retry-After). Default: the page's. */
+  /** Site 13.11 (site-ui.js LGSiteUi.hold.left()): ms every poll waits after a 503 / 429 (Retry-After). Default: the page's
+   *  (17.11: also while the anti-bot guard's window is shown, src/net/site-guard.ts). */
   held?: () => number;
   rnd?: () => number;
 }
@@ -155,7 +157,12 @@ export class MineClient {
     try { const f = this.o.pollOk ?? (typeof window !== 'undefined' ? (window as unknown as { LGPollOk?: () => boolean }).LGPollOk : undefined); return typeof f === 'function' ? !!f() : true; } catch { return true; }
   }
   private siteHeld(): number {
-    try { const v = this.o.held ? this.o.held() : typeof window !== 'undefined' ? (window as any).LGSiteUi?.hold?.left?.() : 0; return Number.isFinite(+v) ? Math.max(0, +v) : 0; } catch { return 0; }
+    try {
+      // site 17.11: while the anti-bot guard's window is up every request waits in it (held, replayed once solved) — idle
+      // polls wait too instead of piling up behind the captcha
+      const v = this.o.held ? this.o.held() : typeof window !== 'undefined' ? ((window as any).LGSiteUi?.hold?.left?.() || (guardShown() ? 3000 : 0)) : 0;
+      return Number.isFinite(+v) ? Math.max(0, +v) : 0;
+    } catch { return 0; }
   }
   private hidden(): boolean { if (this.held) return true; try { return !!(this.o.hidden && this.o.hidden()); } catch { return false; } }
   /** The 3D mine is held behind the classic site (F8): no polls, pings or live-event work until hold(false). */

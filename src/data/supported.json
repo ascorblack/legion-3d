@@ -158,6 +158,12 @@
       "buckler",
       "barrel"
     ],
+    "offhands": [
+      "oknife",
+      "oparry",
+      "okris",
+      "ofang"
+    ],
     "armors": [
       "lorica",
       "robe",
@@ -221,6 +227,12 @@
       "round",
       "buckler",
       "barrel"
+    ],
+    "offhands": [
+      "oknife",
+      "oparry",
+      "okris",
+      "ofang"
     ],
     "armors": [
       "lorica",

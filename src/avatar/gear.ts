@@ -187,6 +187,26 @@ export function weaponHold(kind: string): THREE.Matrix4 {
   return new THREE.Matrix4();
 }
 
+/**
+ * Off-hand blades (site 17.11 evening, doodle.js CATALOG.offhands / OFFHAND; game-data.js isOffhand: a `shield`-slot item
+ * with a class `role` that is not cloth). They take the shield's place (`gear.s`) but the site draws a blade in the LEFT
+ * hand: the doll's weapon art of a dagger (oknife, oparry) or a kris (okris, ofang), mirrored and tilted. Here: the same
+ * base blade (addWeapon) plus the item's own touch — the knife's pink pommel, the parrying dagger's two side prongs, the
+ * kris's pink grip ball, the fang's green tip.
+ */
+export const OFFHAND_WEAPON: Readonly<Record<string, 'dagger' | 'kris'>> = { oknife: 'dagger', oparry: 'dagger', okris: 'kris', ofang: 'kris' };
+/** Is this `gear.s` / `look.shield` id an off-hand blade (drawn in the left hand, not on the forearm)? */
+export const isOffhand = (kind: string | undefined | null): boolean => !!kind && Object.prototype.hasOwnProperty.call(OFFHAND_WEAPON, kind);
+/** An off-hand blade in WEAPON space (grip at the origin, +Y = the blade), like addWeapon. */
+export function addOffhand(p: Parts, kind: string, rar: string | undefined, m: THREE.Matrix4, lowDetail = false): void {
+  const base = OFFHAND_WEAPON[kind] || 'dagger', metal = METAL[rar || 'common'] || METAL.common, seg = lowDetail ? 6 : 10;
+  const M = (x: THREE.Matrix4) => new THREE.Matrix4().multiplyMatrices(m, x);
+  addWeapon(p, base, rar, m, lowDetail);
+  if (kind === 'oknife' || kind === 'okris') p.add(sphere(0.022, seg, 6), '#ff8fa3', M(T(0, base === 'kris' ? -0.105 : -0.085, 0)));
+  else if (kind === 'oparry') for (const s of [-1, 1]) p.add(cyl(0.007, 0.007, 0.06, 5), metal, M(T(s * 0.052, 0.03, 0, 0, 0, -s * 0.35)));
+  else if (kind === 'ofang') p.add(sphere(0.017, seg, 6), '#6fdc6f', M(T(0, 0.31, 0)));
+}
+
 /** Shield parts (face towards −Z). */
 export function addShield(p: Parts, kind: string, rar: string | undefined, m: THREE.Matrix4, lowDetail = false): void {
   const acc = accent(rar), M = (x: THREE.Matrix4) => new THREE.Matrix4().multiplyMatrices(m, x), seg = lowDetail ? 10 : 20;

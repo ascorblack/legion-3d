@@ -43,6 +43,8 @@ const FP: Record<string, string> = {
   'i:flowers': '0a08653073bb1e',
   'i:garden': '14b2dd90fb81ae',
   'i:lamp': '11c0c1a606a65f',
+  // 17.11 evening (tk-art.js ITEM.mailbox): the flag got its own metal pole standing on the fish's back (it floated before)
+  'i:mailbox': '103cd46c79f667',
   // 12.11: the 150 px line by h3 went away with the house; the remaining 160 px line is drawn as before
   'i:laundry': '1df20797ef7905',
   'i:minesign': '0701dcb7f01c90',
@@ -566,6 +568,27 @@ function benchParts(): THREE.BufferGeometry {
   return mg(gs);
 }
 
+/**
+ * Mailbox (tk-art.js ITEM.mailbox, 17.11 evening): a wooden post (8 × 70 px), the blue fish lying on it (scale .75, head
+ * to −x, eye, tail fin to +x) and, since 17.11, a dark metal pole on the fish's back (x + 6, y − 82 … − 112) carrying the
+ * red flag at its top (x + 7 … + 19, 8 px tall). Uniform 0.013 m / px: the post comes out at the old 0.9 m.
+ */
+export const MAILBOX = { s: 0.013, post: 70, fishY: 80, poleX: 6, pole: [82, 112] as const, flag: [7, 19, 104, 112] as const };
+function mailboxParts(): THREE.BufferGeometry {
+  const S = MAILBOX.s, gs: THREE.BufferGeometry[] = [], INK0 = '#2b1d18', FISH = '#4ab0ff', fy = MAILBOX.fishY * S;
+  gs.push(B(SP.wood, 0, (MAILBOX.post * S + 0.07) / 2, 0, 0.08, MAILBOX.post * S + 0.07, 0.08));   // into the fish's belly
+  // fish body: the site's curve spans −26 … 20 (× .75) around x − 2.25 px, ± 8 px tall; a mailbox has some depth
+  gs.push(part(ico1, FISH, -2.25 * S, fy, 0, 34.5 * S, 16 * S, 0.2));
+  gs.push(prism([[13.5 * S, fy], [24 * S, fy - 8.25 * S], [24 * S, fy + 8.25 * S]], 0.06, FISH));   // tail fin
+  for (const z of [-1, 1]) gs.push(part(ico0, INK0, -11.25 * S, fy + 2.25 * S, z * 0.083, 0.036, 0.036, 0.02));   // eyes
+  // the flag pole (17.11): from inside the fish's back up to the flag
+  const [p0, p1] = MAILBOX.pole, px = MAILBOX.poleX * S;
+  gs.push(Cy6(SP.metal, px, (p0 + p1) / 2 * S, -0.03, 0.045, (p1 - p0) * S));   // the site's 2.4 px stroke in a 5 px ink line
+  const [fx0, fx1, fyb, fyt] = MAILBOX.flag;
+  gs.push(B('#e8455c', (fx0 - 0.6 + fx1) / 2 * S, (fyb + fyt) / 2 * S, -0.03, (fx1 - fx0 + 0.6) * S, (fyt - fyb) * S, 0.02));
+  return mg(gs);
+}
+
 /** Lamp post (same head height as the established fair lamp, so the light pools stay): wide foot, post, a lit lantern with a cap, a cat on top. */
 function lampParts(): [THREE.BufferGeometry, THREE.BufferGeometry] {
   const LH = LAMP_HEAD_Y, M0 = SP.metal, mt: THREE.BufferGeometry[] = [], em: THREE.BufferGeometry[] = [];
@@ -584,7 +607,7 @@ function lampParts(): [THREE.BufferGeometry, THREE.BufferGeometry] {
 /**
  * Registers the instanced decor kinds (call once after registerFairCatsKinds, which defines a plainer 'fc:lamp' this one
  * replaces). Parts per kind: bed ×3 1 · well 2 · cart ×4 2 · garden 1 · laundry 1 · tables 2 · picnic 1 · telescope 2 ·
- * wagon 1 / ore 2 · bench 1 · lamp 2 (the signs register themselves while placed: 'fc:signs', 2 parts for the whole town).
+ * wagon 1 / ore 2 · bench 1 · lamp 2 · mailbox 1 (the signs register themselves while placed: 'fc:signs', 2 parts for the whole town).
  */
 export function registerFcItemKinds(k: Ctx): void {
   const I = k.inst;
@@ -598,6 +621,7 @@ export function registerFcItemKinds(k: Ctx): void {
   I.registerKind('fc:telescope', [{ mat: 'flat', geo: telescopeParts() }]);
   for (const ore of [false, true]) { const [mt, fl] = wagonParts(ore); I.registerKind(ore ? 'fc:wagon:ore' : 'fc:wagon', [{ mat: 'flat', castShadow: true, geo: fl ? mg([mt, fl]) : mt }]); }
   I.registerKind('fc:bench', [{ mat: 'wood', castShadow: true, geo: benchParts() }]);
+  I.registerKind('fc:mailbox', [{ mat: 'flat', castShadow: true, geo: mailboxParts() }]);
   { const [mt, em] = lampParts(); I.registerKind('fc:lamp', [{ mat: 'metal', castShadow: true, geo: mt }, { mat: 'emit', geo: em }]); }
 }
 
@@ -628,18 +652,20 @@ function placeItemModel(k: Ctx, it: Item, g: number): void {
     case 'signpost': addSignItem(k, signpostLocal(k, Array.isArray(it.to) ? it.to : [['', 'E']]), X, g, toZ(y - 3), -0.15 + hash(x, 1) * 0.3); break;
     case 'minesign': addSignItem(k, mineSignLocal(k), X, g, toZ(y - 3), -0.15 + hash(x, 1) * 0.3); break;
     case 'lamp': I.add('fc:lamp', X, g, toZ(y - 3), 0, 1); break;
+    case 'mailbox': I.add('fc:mailbox', X, g, toZ(y - 3), 0, 1); break;
     default: void s; break;
   }
 }
 
 /** Item kinds this module models (site item `k`). */
-export const FC_ITEM_KINDS = ['flowers', 'well', 'bench', 'cart', 'garden', 'laundry', 'tables', 'picnic', 'telescope', 'wagon', 'signpost', 'minesign', 'lamp'] as const;
+export const FC_ITEM_KINDS = ['flowers', 'well', 'bench', 'cart', 'garden', 'laundry', 'tables', 'picnic', 'telescope', 'wagon', 'signpost', 'minesign', 'lamp', 'mailbox'] as const;
 const NOTE: Record<string, string> = {
   flowers: 'round bed: ring of grey-mauve stones round brown soil, a cluster of blooms (6 palettes)', well: 'plaza well: stone ring, water, two posts, windlass + bucket, red tiled gable roof with pink cat ears',
   bench: 'park bench: backrest + seat planks on black iron legs', cart: 'market cart: plank box on gold-hub wheels, striped canopy, goods (milk / fish / yarn)', garden: 'garden bed: planks round brown soil, cabbages + carrots, a little sign',
   laundry: 'two posts and a cord with shirts / socks / fish on pegs', tables: 'café: two tables with benches and one red-cream umbrella', picnic: 'red blanket with cream stripes, basket, bottle, sleeping cat',
   telescope: 'wooden tripod, gold tube tilted up', wagon: 'ore wagon on rails: steel hopper on four dark wheels (+ coloured ore)', signpost: 'post with plank arrows + a pink paw on top', minesign: 'yellow warning triangle over a «ВАГОНЕТКИ!» board',
   lamp: 'dark post, lit glass lantern with a cap, a cat silhouette on top',
+  mailbox: 'wooden post, a blue fish mailbox lying on it, a red flag on a dark metal pole on its back',
 };
 for (const kind of FC_ITEM_KINDS) {
   registerFcModel({

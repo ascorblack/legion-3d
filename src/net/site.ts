@@ -25,6 +25,7 @@ import { questFormFill } from '../quest/model';
 import { gameUiOn, openGuWindow, pickReplayTab } from './gameui';
 import { ghOn, guildSoon, GH_SOON, GH_ROOT, GH_MODAL, GUILD_ID } from './guildhall';
 import { siteWithCode } from './site-code';
+import { readSiteAnswer, GUARD_SEL } from './site-guard';
 
 /* ------------------------------------------------------------------ site globals (untyped) */
 const W = (typeof window !== 'undefined' ? window : globalThis) as any;   // importable in node tests (pure helpers below)
@@ -40,18 +41,23 @@ async function waitFor<T>(fn: () => T | null | undefined | false, ms: number, st
   }
 }
 
-/** fetch() relative to the channel. Uses the page's fetch (already wrapped by the site to add LG_BASE). */
+/** fetch() relative to the channel, through the page's own window.fetch at call time (the site's LG_BASE wrapper over the
+ *  anti-bot guard, site 17.11: a captcha holds the request and replays it once solved). A guard-flagged answer comes back
+ *  as `{ ok: false, guard, error }` (src/net/site-guard.ts) — a ban is never turned into «нет связи». */
 async function api<T = any>(path: string, body?: unknown): Promise<T> {
   const url = path.startsWith('/api/') && !base() ? path : path.startsWith('/api/') ? base() + path : path;
   try {
     const r = await fetch(url, body === undefined ? { credentials: 'same-origin' } : {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
-    return siteWithCode(await r.json());
+    return siteWithCode(await readSiteAnswer(r));
   } catch {
     return { ok: false, error: 'нет связи с сайтом' } as any;
   }
 }
+
+/** The api() every request of the live session goes through (exported for the guard tests, test/site-1117b.test.ts). */
+export const siteApi = api;
 
 /* ------------------------------------------------------------------ appearance hook */
 export type AppearanceFn = (login: string, raw: any, styleId: string) => Appearance;
@@ -770,13 +776,19 @@ export const FISH = '.f2';
  *  bar `#dl-bar` or the pressed button; [hidden] when closed; closes on Esc / a press outside). Not a dialog any more: without
  *  this the 3D canvas would cover it — the 3D yields to it as to a dialog. */
 export const DAILY_CARD = '#dlCard';
+/** The site's anti-bot guard window (17.11 evening, /lib/guard.js LGGuard show(): `<dialog data-lg-guard="captcha|ban">` on
+ *  <body>, showModal → the top layer; without showModal a role=dialog div that makes the rest of <body> inert). It holds the
+ *  page's requests (ours too) until the captcha in its iframe is solved, or shows a ban. src/net/site-guard.ts */
+export const SITE_GUARD = GUARD_SEL;
 // .fr-back: the site's friends window (29.10), .cy-jw: the Jail window (30.10) — both lifted over the live 3D (features friends / jail)
 const OWN = '#l3d-host, #l3d-ui, #l3d-splash, .cy-view, .fr-back, .cy-jw';
 /** Which site screen covers the game, from «is anything matching this selector on screen» (connectSite overlay(), every 250 ms). */
 export function overlayKind(on: (sel: string) => boolean): string | null {
   // site 16.11: the pause plaque (app.js pauseShow, aria-modal, eats every key on window) goes before everything — also before a
   // hybrid room's panel (overlay 'room' keeps the 3D running under it): the 3D yields, gameplay off, no key held under it
-  return on(SITE_PAUSE) ? 'dialog' : on('.cy-room') ? 'room' : on('.mn') ? 'mine' : on('.tr-win') ? 'trade'
+  // site 17.11 evening: the anti-bot guard's captcha / ban window goes before everything (also the pause plaque and a hybrid
+  // room's panel): the 3D steps aside — pointer lock released, held keys dropped, canvas hidden — so the player can solve it
+  return on(SITE_GUARD) ? 'guard' : on(SITE_PAUSE) ? 'dialog' : on('.cy-room') ? 'room' : on('.mn') ? 'mine' : on('.tr-win') ? 'trade'
     : on('.mn-board-w') ? 'board' : on('.cy-read') ? 'read'
     // site 12.11: the guild hall (guildhall.js LGGuildHall.enter → open: `.gh-root`, an interior of its own) over the sleeping City
     : on(GUILD_HALL) ? 'guildhall' : on(GH_MODAL) ? 'dialog'

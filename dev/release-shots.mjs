@@ -22,7 +22,13 @@ const CAMX = (fov) => `g.rig.zoom(10);g.rig.setColliders([]);g.rig.setColliderBo
 const POSE4 = (x, y) => `const D=window.__demo;D.bots.forEach((b,i)=>{b.x=${x}+i*80;b.y=${y}+(i%2)*14;b.path=null;b.wait=1e9;b.speed=0;b.face=(i-1.5)*0.12;b.bubble=undefined;});`;
 // the labels feature sets labels.root.visible every frame (the «Имена» setting): pin it off for a view with walkers
 const NOTAGS = 'Object.defineProperty(g.labels.root,"visible",{get:()=>false,set(){}});';
-const SHOTS = opt.set === '086' ? [
+const SHOTS = opt.set === '087' ? [
+  // 0.8.7 (site 17.11 evening): the off-hand blades (doodle.js CATALOG.offhands — the knife, the parrying dagger, the kris and
+  // the fang) are held in the left paw instead of being drawn as a round shield; a round shield first for comparison. The
+  // mailbox of the fairs (tk-art.js ITEM.mailbox) got its flag on its own dark pole on the fish's back.
+  ['avatar', 'offhands=1&walk=0&vm=0', 'offhand-blades', 6000],
+  ['game', 'fc=1&magic=1&bots=0&hwc=off&tod=12:00', 'mailbox-fair', 14000, at(3400, 2640, 'fp', 1.5708, 0.0, HIDE + FPV(36) + NOTAGS)],
+] : opt.set === '086' ? [
   // 0.8.6 (site 17.11): the «Премиум+» cape patterns of the site's looks (doodle.js capePattern, lk.capePat: hem, stars,
   // dots, runes) on the 3D cape, seen from behind in the kit town «Рябиново» in front of its hall, and the lineup of the four
   // patterns + a plain cape on the avatar page. d04's own buildings were not redrawn (a meadow town keeps the classic style).

@@ -23,6 +23,7 @@ import { lookStyle, styleId } from './site';
 import { setFetchTee } from './fetch-tee';
 import { questFormFill } from '../quest/model';
 import { siteWithCode } from './site-code';
+import { readSiteAnswer, guardShown } from './site-guard';
 
 const W = window as any;
 const bus = (): Bus | null => W.__L3D_BUS || null;
@@ -44,7 +45,7 @@ async function api<T = any>(path: string, body?: unknown): Promise<T> {
     const r = await fetch(url, body === undefined ? { credentials: 'same-origin' } : {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
-    return siteWithCode(await r.json());
+    return siteWithCode(await readSiteAnswer(r));
   } catch {
     return { ok: false, error: 'нет связи с сайтом' } as any;
   }
@@ -138,7 +139,7 @@ export async function connectExpedition(meData?: any): Promise<ExpSiteSession | 
     setClassic,
     tick: () => { /* no walkers */ },
     selfPos: () => null,
-    overlay: () => null,
+    overlay: () => (guardShown() ? 'guard' : null),   // site 17.11: the anti-bot guard's window — the 3D steps aside
     closeOverlay: () => { /* */ },
     dispose() {
       for (const u of unsubs) u();

@@ -104,6 +104,12 @@ if (q.get('acc') === '1') {
   const P = ['', 'hem', 'stars', 'dots', 'runes'], C = ['#c0182b', '#2a4a9a', '#5b2a8a', '#1f6a4a', '#3a3a5a'];
   ENTRIES = P.map((pat, i) => ({ raw: W('cape_' + (pat || 'none'), pat || 'без узора', 1, { shape: (['bean', 'box', 'ball', 'tall', 'egg'] as const)[i], color: COLORS[i], acc: ['cape'], capeColor: C[i], ...(pat ? { capePat: pat } : {}), hat: 'none' }, {}), pos: new THREE.Vector3((i - 2) * 1.1, 0, 0) }));
   camera.position.set(0.4, 1.5, -5.4); controls.target.set(0, 0.7, 0); controls.update();
+} else if (q.get('offhands')) {
+  // ?offhands=1 — the off-hand blades of the site's 17.11 evening looks (doodle.js CATALOG.offhands: oknife, oparry, okris,
+  // ofang) in the left paw, a sword in the right; a round shield first for comparison. Seen from the front-left.
+  const S = ['round', 'oknife', 'oparry', 'okris', 'ofang'], R = ['rare', 'common', 'uncommon', 'epic', 'legendary'];
+  ENTRIES = S.map((s, i) => ({ raw: W('offhand_' + s, s, 10, { shape: (['bean', 'box', 'ball', 'tall', 'egg'] as const)[i], color: COLORS[i], hat: 'none' }, { w: 'sword', wr: 'rare', s, sr: R[i] }), pos: new THREE.Vector3((i - 2) * 1.1, 0, 0) }));
+  camera.position.set(-1.6, 1.25, 3.6); controls.target.set(0, 0.6, 0); controls.update();
 } else if (q.get('faces')) {
   // ?faces=1 — ONE login in several eyes / mouths (a shared model): every figure must show its own face
   const F: [string, string][] = [['dots', 'open'], ['stars', 'tongue'], ['happy', 'grin'], ['cyclops', 'open'], ['big', 'grin'], ['jack', 'tongue']];

@@ -2,7 +2,7 @@
 import type { Hero } from '../contracts';
 import { toX, toZ } from '../world/coords';
 import { type Ctx, h, extras } from './ctx';
-import { esc, hpInfo, xpInfo, plainCountdown, coinStyle, roleTitle } from './data';
+import { esc, hpInfo, hpRegenNow, xpInfo, plainCountdown, coinStyle, roleTitle } from './data';
 import { moneyCompact } from './money';
 import { statIcon } from './icons';
 import { promptView } from './prompt';
@@ -156,6 +156,18 @@ export class Hud {
     this.el.appendChild(t); setTimeout(() => t.remove(), 2500);
   }
 
+  /** Site 17.11: HP regenerates on the page between hero updates (data.ts hpRegenNow) — repaint the bar when it moved. */
+  private tickHp() {
+    const H = this.c.host.store.hero;
+    if (!H || H.ghost || hpRegenNow(H as Hero & Record<string, unknown>) == null) return;
+    const hp = hpInfo(H);
+    if (hp.now === this.lastHp) return;
+    const w = `calc(${(hp.pct * 100).toFixed(1)}% - 4px)`;
+    this.hpBar.classList.toggle('low', hp.pct < 0.3);
+    this.hpGhost.style.width = w; this.hpFill.style.width = w; this.lastHp = hp.now;
+    this.hpT.textContent = `${hp.now} / ${hp.max}`;
+  }
+
   private tickGhost() {
     const H = this.c.host.store.hero;
     if (H && H.ghost) {
@@ -174,7 +186,7 @@ export class Hud {
     const host = this.c.host, menu = this.c.opened();
     this.playT += dt; this.secT += dt;
     if (!this.hintsHidden && this.playT > HINTS_S) { this.hintsHidden = true; this.hints.classList.add('off'); }
-    if (this.secT >= 1) { this.secT = 0; this.tickGhost(); }
+    if (this.secT >= 1) { this.secT = 0; this.tickGhost(); this.tickHp(); }
     if (this.perfOn) {
       this.perfT += dt;
       if (this.perfT > 0.5) {

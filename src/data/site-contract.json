@@ -1542,6 +1542,38 @@
       "re": "let GDT = 0;\\s*const gnow = \\(\\) => now\\(\\) - GDT;[\\s\\S]{0,300}window\\.LGGameNow = gnow;[\\s\\S]*const cdUntil = \\(it, h\\) => \\{ if \\(!h\\) return 0; const t = gnow\\(\\);",
       "severity": "degrade",
       "why": "hero eatUntil / scrollUntil / deadUntil are game time: src/net/game-clock.ts gameNow() reads window.LGGameNow for our cooldowns and the ghost countdown (src/ui/{data,hud,menus}.ts)"
+    },
+    {
+      "id": "LGGuard (anti-bot guard, guard.js 17.11)",
+      "kind": "global",
+      "name": "LGGuard",
+      "file": "guard.js",
+      "keys": [
+        "install",
+        "kind",
+        "open",
+        "under",
+        "passed",
+        "wait"
+      ],
+      "type": "function",
+      "when": "page",
+      "severity": "degrade",
+      "why": "17.11 evening: the site's anti-bot guard sits on window.fetch under the <head> LG_BASE wrapper (src/net/site-guard.ts); our api() reads its verdict through LGGuard.kind (our port otherwise), tests run it with our bridge (test/site-1117b.test.ts)"
+    },
+    {
+      "id": "guard.js install: window.fetch = guarded over the native fetch (captcha → hold + replay, ban → window)",
+      "file": "guard.js",
+      "re": "function install\\(win\\) \\{\\s*if \\(!win \\|\\| typeof win\\.fetch !== 'function' \\|\\| under\\.has\\(win\\.fetch\\)\\) return;\\s*const base = win\\.fetch;[\\s\\S]{0,300}const guarded = function fetch\\(input, init\\) \\{[\\s\\S]{0,200}return base\\.call\\(win, input, init\\)\\.then\\(\\(res\\) => \\{\\s*const k = kind\\(res\\);\\s*if \\(!k\\) return res;\\s*if \\(k === 'ban'\\) \\{ open\\('ban', win\\); return res; \\}\\s*if \\(!reusable\\(input, init\\)\\) return res;[\\s\\S]{0,600}under\\.set\\(guarded, base\\);\\s*win\\.fetch = guarded;",
+      "severity": "degrade",
+      "why": "17.11 evening: the order on the page is [our tee, 3D only] → LG_FETCH.w → guarded → native; our tee goes on top and comes off exactly, a ban answer is returned as it is and turned into { ok: false, guard: 'ban' } by our api() (src/net/site-guard.ts readSiteAnswer); if the guard starts wrapping differently, re-check src/bridge/bridge.ts and the telemetry (test/site-1117b.test.ts)"
+    },
+    {
+      "id": "guard.js window [data-lg-guard] (header X-Legion-Guard ban / captcha)",
+      "file": "guard.js",
+      "re": "const HDR = 'X-Legion-Guard';[\\s\\S]*if \\(p\\[0\\] === 'ban'\\) return 'ban';\\s*if \\(p\\[0\\] === 'captcha' && p\\[1\\] !== 'solved'\\) return 'captcha';[\\s\\S]*el\\.setAttribute\\('data-lg-guard', k\\);",
+      "severity": "degrade",
+      "why": "17.11 evening: src/net/site.ts overlayKind puts SITE_GUARD ([data-lg-guard]) first → overlay 'guard': the 3D steps aside (pointer lock, keys, canvas) so the player can solve the captcha / sees the ban; src/net/site-guard.ts guardKindOf ports kind()"
     }
   ]
 }

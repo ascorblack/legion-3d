@@ -19,6 +19,26 @@ so the extension must treat every internal API as unstable and degrade gracefull
   `EventSource` and `WebSocket` are replaced by the bridge (the live feed has no other source without a second connection); the telemetry
   does not look at them (13.11 `tlPi` still checks `fetch` and `requestAnimationFrame` only).
   Test: `test/fetch-telemetry.test.ts`, `e2e/fetch-tee.mjs`; refresh `test/fixtures/site-telemetry.js` when `tlPi` changes.
+- **Anti-bot guard (17.11 evening, `/lib/guard.js`, `window.LGGuard` {install, kind, open, wait, passed, under}).** A plain
+  `<script src>` in `<head>` right after err.js and BEFORE the inline LG_BASE wrapper. Its UMD tail runs `install(window)`:
+  window.fetch = `guarded` over the native fetch (`LGGuard.under(guarded)` = native). The inline wrapper then wraps that and
+  reads `LG_FETCH.n` from `LGGuard.under(o) || o`, so an honest page still passes tlPi. Live chain: [our tee, 3D only] →
+  `LG_FETCH.w` → `guarded` → native. `guarded` reads the response header `X-Legion-Guard`: `ban…` → the ban window, the
+  response is returned as it is; `captcha` (not `captcha:solved`) → a request that can be sent again (no body or a string /
+  FormData / Blob / URLSearchParams / ArrayBuffer body) is HELD, the captcha window opens, and after the solve (an iframe
+  message `{lgGuard: 'ok'}`) the same request is sent again; its answer resolves the original promise. A non-timeout abort
+  rejects the held request; a timeout abort retries with a fresh 20 s timeout. The window: `<dialog data-lg-guard="captcha|ban">`
+  on `<body>` (showModal → the top layer; z 2147483647; `<iframe src="/guard">` «Проверка»), or, without showModal, a
+  role=dialog div that makes the rest of `<body>` inert. It eats Escape (window, capture) and pulls the focus back into the
+  iframe. A ban turns an open captcha window into the ban window. In an iframe the guard defers to the parent's. app.js does
+  not use LGGuard; nothing calls install() again. 3D (src/net/site-guard.ts): every request of ours goes through the page's
+  fetch at call time (src/net/site.ts api, src/net/expedition-site.ts api, the travel search), so a captcha holds and replays
+  ours like the site's own; the bridge's tee goes on top later and comes off exactly, and skips a guard-flagged answer; our
+  api() returns `{ ok: false, guard, error }` for a flagged answer (the server's text, else «Сайт закрыл доступ…» /
+  «Сайт просит пройти проверку…») — a ban is never «нет связи»; `[data-lg-guard]` is the first overlay (overlay 'guard': the
+  3D hides, pointer lock and held keys released, engine paused, also over a hybrid room's panel); the 3D mine's idle polls
+  wait while the window is up. Never trigger a captcha live. Tests: test/site-1117b.test.ts (the site's guard.js in node:vm
+  with our bridge bundle, the <head> wrapper fixture and the tlPi probe); `node e2e/contract.mjs` prints `GUARD …`.
 - **F8 inside the mine (31.10, src/net/site-mine.ts, src/features/mine-hold.ts).** Opening the site's mine puts the City to sleep
   (`LGCity.sleep()`: city leave, `LGCity.debug()` = null); its «В город» (`LGMine.exit()`) leaves the mine and wakes the City (city
   enter); a City tab click while the mine is open wakes the City under it. One mine presence per page tab key: the client that entered
@@ -202,6 +222,19 @@ so the extension must treat every internal API as unstable and degrade gracefull
   the site's mine under the 3D one is exactly such an element); app.js forge failure → `LGCity.forgeCancel()` (our anvil follows
   LGCity.anvil.ani()); guildhall.js other players' looks (`op:'looks'`) and LGChatOne.dock('guildhall'); citymon.js lobbies refresh
   live; fish2.js sell-all asks twice; mine quest `qc` shares (`st.qc`). Our follow-ups: .local/drift1117/FINDINGS.md.
+
+- **17.11 (evening).** `/lib/guard.js` — the anti-bot guard (see «Anti-bot guard» under «Page»). tk-art.js ITEM.mailbox: the
+  red flag now stands on its own dark pole on the fish's back (x + 6, y − 82 … − 112) — src/world/fcart/houses.ts mailbox model
+  (fp 103cd46c79f667); the owner's pennant on kit buildings (`o.owner`) sits by building style now (`pennantSeat`) and skips the
+  `guild` building (the 3D draws no owner pennants). doodle.js off-hand blades: `CATALOG.offhands` oknife / oparry / okris / ofang in the shield slot (game-data.js
+  `isOffhand` = shield slot + class `role` + not cloth, `holdsShield`), drawn as a dagger / kris in the shield hand — 3D:
+  src/avatar/gear.ts addOffhand (left paw, view-model too), item icons `shield:<id>`. app.js `hpTick`: with hero `hp` / `hpAt`
+  / `hpMax` / `hpRegen` (HP per hour) the page counts HP up every second — src/ui/data.ts hpRegenNow (HUD bar). citymon.js: the
+  view is per town (GET `/api/citymon?town=<wall().town>`, S.vt; attack / ecreate carry `town`; `daily.tot`; the daily limit is
+  per town) — src/net/citymon.ts CmTownGate; elite chains: the whole group fights squads 1, 2, 3 in turn. arena.js is served to
+  our account now (the «Арена» tab / GU window, `/api/arena*`): a window inside `#tab-arena`, no walkers, no building. mail.js
+  elite chain letters; site-ui.js `morph` (the hero tab is patched instead of re-rendered), city.js `rerenderUi(id, soft)`;
+  fish2.js `html.f2-on`, selection blocked while fishing. Our follow-ups: .local/drift1117b/FINDINGS.md.
 
 ## Auth / user
 - Cookie `lsid` (httpOnly). `GET /api/me` → `{ ok, user:{login,name}, hero, roles, classes, ench, ql, now, … }`.

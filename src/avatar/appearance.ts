@@ -33,6 +33,8 @@ export const CATALOG = {
   colors: ['#ff9fb2', '#ffb27a', '#ffe27a', '#9fe39a', '#7fd6e6', '#8fb6ff', '#b9a2ff', '#e6e6ee', '#ffc94d', '#5a5470'],
   weapons: ['sword', 'gladius', 'dagger', 'axe', 'club', 'mace', 'hammer', 'spear', 'pitchfork', 'bow', 'staff', 'crook', 'censer', 'kris', 'skullstaff', 'grimoire', 'holymace'],
   shields: ['scutum', 'round', 'buckler', 'barrel'],
+  /** Off-hand blades in the shield slot (site 17.11 evening, doodle.js CATALOG.offhands): gear.ts addOffhand draws them in the left hand. */
+  offhands: ['oknife', 'oparry', 'okris', 'ofang'],
   armors: ['lorica', 'robe', 'leather', 'shroud', 'plate', 'hwbarrow', 'hwthicket', 'hwchapel', 'hwshadow', 'hwgrave', 'hwmidnight'],
   rarities: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
 } as const;

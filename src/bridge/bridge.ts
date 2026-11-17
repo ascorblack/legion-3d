@@ -23,8 +23,16 @@
  * Why never at document_start, even for start mode 3D: the site's <head> script wraps whatever window.fetch is at that
  * moment and records whether it was native (LG_FETCH.n). A tee under the site's wrapper could never be taken out and
  * would mark the whole page load, F8 or not. Put on later, on top of the site's wrapper, it comes out exactly.
+ *
+ * Site 17.11 evening — the anti-bot guard (/lib/guard.js, window.LGGuard; src/net/site-guard.ts): guard.js runs before the
+ * <head> wrapper and puts its own `guarded` fetch on window.fetch (install(window)); the <head> wrapper wraps that and reads
+ * LG_FETCH.n through LGGuard.under(), so the page stays «honest». This bridge runs before both and does not touch fetch, so
+ * the order on the live page is: [our tee, only in 3D] → LG_FETCH.w (LG_BASE) → guarded → native. Every request of ours
+ * passes the guard (a captcha holds it and replays it after the player solves it); the tee only sees the final answer and
+ * skips one the guard flagged (ban / captcha). The guard is never under our tee, never bypassed, never re-installed by us.
  */
 import { MeMirror } from './me-patch';
+import { guardKindOf } from '../net/site-guard';
 
 export interface FetchTee {
   /** Put the tee on window.fetch (idempotent). Returns whether window.fetch is ours now. */
@@ -127,7 +135,7 @@ declare global {
       const hit = WATCH.find(([re]) => re.test(url));
       if (hit) {
         p.then((r) => {
-          if (!r.ok) return;
+          if (!r.ok || guardKindOf(r)) return;   // site 17.11: a ban / unsolved captcha answer of the anti-bot guard is not data
           r.clone().json().then((j) => bus.emit(hit[1], j), () => {});
         }, () => {});
       }
