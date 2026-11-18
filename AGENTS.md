@@ -78,6 +78,8 @@ L3D_COOKIES=cookies.txt node e2e/live.mjs   # real site (see docs/TESTING.md)
   Since 15.11 the socket carries the hero as a full `me` + `mep` patches (version `mv`): the bridge keeps the same base
   (src/bridge/me-patch.ts MeMirror / meApply, a port of site-live.js) and emits the full hero as `sse:me`; the live contract
   prints `ev frames N: me … mep …` and `meSync=same mv a/b` (our hero vs `LGLiveLink.last.me()`).
+  Since 18.11 the EventSource carries `mep` too (app.js `/api/live…mep=1`; a gap reconnects it): one MeMirror per source
+  (bridge.ts tapLiveMe). The 3D mine recomputes its numbers from the record's dig record `dr` (src/rooms/mine/dig.ts, mine.js LGMineDig).
 - Anti-bot guard (site 17.11 evening, /lib/guard.js `LGGuard`): sits on window.fetch under the site's <head> LG_BASE wrapper; a
   captcha holds and replays every request (ours too), a ban shows the site's window. Our requests always go through the page's
   fetch; the tee goes on top only in 3D; `[data-lg-guard]` is overlay 'guard' (the 3D steps aside); a flagged answer is

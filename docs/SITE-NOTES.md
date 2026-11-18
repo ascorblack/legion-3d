@@ -79,6 +79,12 @@ so the extension must treat every internal API as unstable and degrade gracefull
   31.10 he walks on the cage floor (`walk`: click → jailGo, WASD → kwStep) only on his own screen — the steps are not sent (the
   server answers 403 jailed; the others see him seated), reseated only when off that floor;
   always on the fair. 3D: src/world/jail.ts, src/net/jail.ts, src/features/jail.ts.
+- **Dig record (18.11, mine.js `LGMineDig`).** The mine record (`/api/mine/*` `me`, hero `mn[c]`) may carry `dr` { t, e, rates r s k c
+  x h, flags w q, cap cp, base b { d c m u n? cm? qp? } }: the site recomputes minutes today (`day`), bag coins, mine XP, week work
+  `wk`, «Пока тебя не было» coins and quest progress at the server clock on every take0 and every 3 s (`meTick`, which also takes the
+  hero's `mn[c]` when its `dr.t` is newer). Ours: src/rooms/mine/dig.ts `digView` (port), MineModel.meNow / meTick, MineClient's 3 s tick.
+  The 2D mine's W A S D walk became a continuous rAF walk (POST /api/mine/go {x, y, fx, fy}); it still waits for `kwBusy()`, so the
+  3D mine's hidden `.mn-board-w` keeps it still.
 - **31.10 afternoon.** mine.js `take()` runs `follow3` before the floor is stored and drawn (entering from the City showed the
   deepest floor for a moment, then the hero's own floor) — ours: `followOnEnter` in src/rooms/mine/fund.ts right after the enter.
   mine3.js: the sack on the «СКУПКА» counter is smaller and the plaque moved right of it (our 3D buyer has its sign on the
@@ -168,7 +174,8 @@ so the extension must treat every internal API as unstable and degrade gracefull
   power, reward }], `elites` [{ eid, epid, tier, slot, idx, n, lvl, name }], `soon` / `eSoon` [{ line, tier, at, slot, idx, n }],
   `daily` { n, max 10, left, next (05:00 МСК) }, `biome`, `hero` { level, busy, hp, max }, `myPower`, `respawnMin`, `now`. No SSE.
   draw(): placeAll() puts packs on the spots of their tier (sorted by distance from the glade centre; `idx` when the tier has as many
-  spots as packs, else `slot`), elites on the 'e' spots, returning packs as paw trails «Вернутся через m:ss»; members at FORM offsets
+  spots as packs, else `slot`; 18.11: a strong pack (tier 2) on its own tier takes spot `L.length − n + idx`, and packs whose tier is
+  full are placed after all the others, on tier 1 / 2 / 0; a returning pack falls back to tier 1 / 2), elites on the 'e' spots, returning packs as paw trails «Вернутся через m:ss»; members at FORM offsets
   as `<button class="cmw" data-cm="pack" data-pid>` (elites `.cmw.el data-cm="elite" data-eid`) in `.cm-wall` inside the City camera,
   wandering in walkBox; `.cm-badge` «Монстры: N» in `.cy-hud` centres the camera on the nearest pack. A click → `.cm-dlg` (role dialog,
   aria-modal) «Напасть на монстров у стен?» → «Напасть» = POST `/api/citymon/act {op:'attack', pid}` → fightDlg: arena-field.js
@@ -265,7 +272,12 @@ Since 13.11 app.js opens it through `/lib/site-live.js` `window.LGLiveLink.open(
   upserted, re-ordered; `cr` → creating, `r` → results). A patch is applied only when `p.mv === meV + 1`; otherwise the site re-sends
   `{op:'live', ch, sm?}` and drops patches until the next full `me`. `LGLiveLink.last.me()` = the site's base, `gap()` forces a full one.
   The bridge mirrors it per socket (src/bridge/me-patch.ts MeMirror / meApply) and emits the full hero as `sse:me` (`live:mep` = the
-  applied version, null = gap). SSE `/api/live` keeps sending full `me` (site-live.js handles `mep` on the socket only).
+  applied version, null = gap). Until 17.11 SSE `/api/live` sent full `me` only.
+- **Hero patches on SSE too (18.11)** — the rule moved into site-live.js `meIn` / `mepIn`, shared by both transports. app.js opens
+  the EventSource as `/api/live…mep=1` (not for the streamer dock); `sseOn` adds a `mep` listener beside `me`. On SSE a gap (or a
+  patch before any full `me`) is answered by `down('mep')`: the source is closed and a new one opened (its first `me` is the new
+  base). The bridge keeps one MeMirror per EventSource as well (src/bridge/bridge.ts tapLiveMe); `e2e/contract.mjs` prints
+  `sse=N (mep=1 M)`. Tests: test/site-1118.test.ts (the site's site-live.js over our tapped EventSource).
 
 Named events:
 - `me` — full `{hero,…}` snapshot like `/api/me`.

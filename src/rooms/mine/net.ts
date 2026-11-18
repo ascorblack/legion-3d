@@ -179,6 +179,8 @@ export class MineClient {
     if (reenter && this.pos) void this.enter(this.pos, true);
     else if (this.entered) void this.poll(true);
   }
+  /** Site 18.11 meTick: my record recomputed from its dig record (and the hero's newer one taken) — not while hidden. */
+  meTick(): boolean { if (this.closed || !this.entered || this.hidden()) return false; return this.model.meTick(this.now(), this.heroMe()); }
   private heroMe(): MineMe | null { try { const h = this.o.hero && this.o.hero(); return (h && h.mn && (h.mn[this.c] || h.mn[this.cb])) || null; } catch { return null; } }
 
   /* ---------------------------------------------------------------- presence */
@@ -197,7 +199,7 @@ export class MineClient {
     // site 31.10: a lift ride enters the floor of the same mine — its chat is shared by the floors and is not entered again
     if (r.mchat && !ride) { this.chat.on = true; this.chat.st = { mod: (r.mchat as any).mod, muted: (r.mchat as any).muted }; this.chatIn(r.mchat); }
     this.T.clearInterval(this.pollT); this.T.clearInterval(this.pingT); this.T.clearInterval(this.goneT);
-    this.pollT = this.T.setInterval(() => { void this.poll(); }, 3000);
+    this.pollT = this.T.setInterval(() => { this.meTick(); void this.poll(); }, 3000);   // site 18.11: meTick(); poll()
     this.pingT = this.T.setInterval(() => { if (!this.hidden()) void this.o.api('/api/mine/ping' + this.q(), {}); }, 60000);
     this.goneT = this.T.setInterval(() => { if (this.model.expire(this.now())) this.emit({ type: 'presence' }); }, 20000);
     return true;

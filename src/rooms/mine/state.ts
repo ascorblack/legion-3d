@@ -6,6 +6,7 @@
 import { GH, N_CELLS, SPEED, type Pt } from './geo';
 import { GEO1, OPEN3, geomOf, type MineGeom } from './geo3';
 import type { LgEntry } from './loot';
+import { digView, type DigRec } from './dig';
 
 /* ============================================================ payload types (see docs/MINE.md) */
 
@@ -69,6 +70,8 @@ export interface MineMe {
   ex?: [number, number, Record<string, number>];
   /** 11.11: the hero's own mine log, newest first (site «Твой журнал в шахте», loot toasts). */
   lg?: LgEntry[];
+  /** 18.11: the dig record (base + per-minute rates) the numbers are recomputed from at the server clock (src/rooms/mine/dig.ts). */
+  dr?: DigRec | null;
 }
 export interface LookRec { n?: string; lv?: number; lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number; pk?: number }
 export interface PresenceA { l: string; n?: string; lv?: number; lk?: Record<string, unknown>; g?: Record<string, unknown>; gh?: number; x: number; y: number; tx: number; ty: number; dt?: number }
@@ -328,6 +331,17 @@ export class MineModel {
   clk(r: { now?: unknown } | null | undefined, now: number): void { const n = r ? +(r.now as number) : NaN; if (Number.isFinite(n) && n > 0) this.dt = now - n; }
   /** The server's time at local `now`. */
   srvNow(now: number): number { return now - this.dt; }
+  /** Site 18.11 mine.js meNow(): with a dig record `dr`, my record recomputed at the server clock (LGMineDig.view).
+   *  True when there was one (the site re-renders its panel then). */
+  meNow(now: number): boolean { if (!this.me || !this.me.dr) return false; this.me = digView(this.me, this.srvNow(now)); return true; }
+  /** Site 18.11 mine.js meTick() (every 3 s with the poll, not while the tab is hidden, only with a view): the hero's own
+   *  `mn[c]` record replaces mine when its `dr.t` is newer (my stone queue `qq` kept when it has none), then meNow. */
+  meTick(now: number, heroMe?: MineMe | null): boolean {
+    if (!this.st) return false;
+    const m = heroMe;
+    if (m && m.dr && (!this.me || !this.me.dr || +(m.dr.t as number) > +(this.me.dr.t as number))) this.me = this.me && this.me.qq && !m.qq ? { ...m, qq: this.me.qq } : m;
+    return this.meNow(now);
+  }
   /** Set when a stop must be re-sent (left protection) — the client sends /api/mineStop and clears it. */
   needStop = false;
   constructor(public login: string) { this.login = String(login || '').toLowerCase(); }
@@ -348,6 +362,7 @@ export class MineModel {
   take(st: MineView | null | undefined, me: MineMe | null | undefined, lk: Record<string, LookRec> | null | undefined, now: number, heroMe?: MineMe | null): TakeResult {
     const res: TakeResult = { changed: false, newFloor: false, bursts: [] };
     if (me) this.me = me; else if (heroMe) this.me = heroMe;
+    this.meNow(now);   // site 18.11 take0: meNow() right after the record
     if (lk) for (const [l, v] of Object.entries(lk)) { this.looks.set(l, v); this.lookAt.set(l, now); }
     // site 31.10 ride: while the lift goes, only the chosen floor's view is taken (the view number v is shared by the floors,
     // so no «late view» check then); another floor's view (the previous one, late) is not drawn

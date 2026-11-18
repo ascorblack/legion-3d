@@ -49,18 +49,23 @@ export function spotsBy(W: CmWall): { SP: CmSpot[]; by: Record<string, [CmSpot, 
 }
 export interface CmPlaced { p: { x: number; y: number; gate?: boolean | number; rx?: number; ry?: number }; k: number }
 export interface CmPlan { packs: (CmPlaced & { D: CmPack })[]; elites: (CmPlaced & { E: CmElite })[]; soon: (CmPlaced & { D: CmSoon })[]; free: CmPlaced[] }
-/** citymon.js placeAll (without the `__cmAllSpots` debug switch). */
+/** citymon.js placeAll (without the `__cmAllSpots` debug switch); 18.11: two passes, tier-2 idx from the far end. */
 export function placeAll(W: CmWall, packs: readonly CmPack[], elites: readonly CmElite[], soon: readonly CmSoon[] = [], eSoon: readonly CmSoon[] = []): CmPlan {
   const { SP, by } = spotsBy(W), used = new Set<number>(), out: CmPlan = { packs: [], elites: [], soon: [], free: [] };
-  const pick = (t: number | 'e', D: { n?: number; idx?: number; slot?: number }): CmPlaced | null => {
+  const pick = (t: number | 'e' | undefined, D: { n?: number; idx?: number; slot?: number; tier?: number }): CmPlaced | null => {
     const L = by[String(t)] || []; if (!L.length) return null;
-    const s0 = (D.n || 1) >= L.length && D.idx != null ? D.idx : D.slot || 0;
+    // site 18.11: a strong pack (tier 2) on its own tier counts its idx from the far end of the list
+    const n = D.n || 1, own = String(t) === String(D.tier);
+    const s0 = n >= L.length && D.idx != null ? D.idx : own && D.tier === 2 && D.idx != null ? L.length - n + D.idx : D.slot || 0;
     for (let j = 0; j < L.length; j++) { const [p, k] = L[(s0 + j) % L.length]; if (!used.has(k)) { used.add(k); return { p, k }; } }
     return null;
   };
-  packs.forEach((D, i) => { const q = pick(D.tier, D) || pick(1, D) || { p: { x: W.x + 40 + (i - (packs.length - 1) / 2) * 340, y: W.y + 170 }, k: -1 }; out.packs.push({ D, ...q }); });
+  // site 18.11: first every pack on its own tier, then the rest on tier 1 / 2 / 0 (else the row below the gate door)
+  const rest: [CmPack, number][] = [];
+  packs.forEach((D, i) => { const q = pick(D.tier, D); if (q) out.packs.push({ D, ...q }); else rest.push([D, i]); });
+  rest.forEach(([D, i]) => { const q = pick(1, D) || pick(2, D) || pick(0, D) || { p: { x: W.x + 40 + (i - (packs.length - 1) / 2) * 340, y: W.y + 170 }, k: -1 }; out.packs.push({ D, ...q }); });
   elites.forEach((E, i) => { const q = pick('e', { slot: i, ...E }) || { p: { x: W.x - 300 - i * 190, y: W.y + 196 }, k: -1 }; out.elites.push({ E, ...q }); });
-  soon.forEach((D) => { const q = pick(D.tier ?? 1, D); if (q) out.soon.push({ D, ...q }); });
+  soon.forEach((D) => { const q = pick(D.tier, D) || pick(1, D) || pick(2, D); if (q) out.soon.push({ D, ...q }); });
   eSoon.forEach((D, i) => { const q = pick('e', { slot: i, ...D }); if (q) out.soon.push({ D: { ...D, el: 1 }, ...q }); });
   SP.forEach((p, k) => { if (!used.has(k)) out.free.push({ p, k }); });
   return out;

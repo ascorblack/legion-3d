@@ -47,9 +47,9 @@ await p.addInitScript({ content: `(() => { const B = window.__L3D_BUS; if (!B) r
   for (const t of ['sse:me', 'sse:city', 'sse:mine', 'sse:q', 'sse:j', 'sse:jail', 'sse:dm', 'sse:open', 'sse:error']) B.on(t, () => { n[t] = (n[t] || 0) + 1; });
   B.on('live:mep', (v) => { if (v == null) n.mepGap = (n.mepGap || 0) + 1; else n.mep = (n.mep || 0) + 1; });   // site 15.11 hero patches
   B.on('sse:city', (d) => { if (d && (d.chat || d.chatDel)) n.cityChat = (n.cityChat || 0) + 1; }); })();` });
-const wire = { ws: 0, wsEv: 0, me: 0, mep: 0, sse: 0 };   // transport seen on the wire (counts / event names only; never payloads)
+const wire = { ws: 0, wsEv: 0, me: 0, mep: 0, sse: 0, sseMep: 0 };   // sseMep: SSE opens asking for hero patches (site 18.11 mep=1)   // transport seen on the wire (counts / event names only; never payloads)
 p.on('websocket', (ws) => { if (/\/ws$/.test(new URL(ws.url()).pathname)) { wire.ws++; ws.on('framereceived', (f) => { const t = String(f.payload || ''); if (t.startsWith('{"op":"ev"')) { wire.wsEv++; if (t.startsWith('{"op":"ev","e":"me","d":')) wire.me++; else if (t.startsWith('{"op":"ev","e":"mep","d":')) wire.mep++; } }); } });
-p.on('request', (r) => { if (/\/api\/live(\?|$)/.test(r.url())) wire.sse++; });
+p.on('request', (r) => { const u = r.url(); if (/\/api\/live(\?|$)/.test(u)) { wire.sse++; if (/[?&]mep=1(&|$)/.test(u)) wire.sseMep++; } });
 await p.goto(url, { waitUntil: 'load' });
 await p.evaluate(readFileSync(dist + '/game.js', 'utf8'));
 await p.waitForTimeout(1500);
@@ -132,10 +132,10 @@ console.log(JSON.stringify({ ...report, blocked, pageErrors: errors.slice(0, 5) 
 const lv = report.live || {}, seen = lv.seen || {};
 // a logged-in page whose live link carried nothing to the bus: the bridge does not see the transport the site picked
 if (logged && lv.live && !(seen['sse:me'] || seen['sse:city'] || seen['sse:q'])) degrades.push({ id: 'live link teed (bridge sees the site\'s transport)', severity: 'degrade', missing: ['sse:* on __L3D_BUS over ' + (wire.ws ? 'WebSocket' : 'SSE')] });
-// site 15.11: over the socket the hero comes as `mep` patches — the bridge's full hero must equal the site's base
+// site 15.11: over the socket the hero comes as `mep` patches (18.11: over SSE too, mep=1) — the bridge's full hero must equal the site's base
 const ms = lv.meSync;
 if (logged && ms && typeof ms === 'object' && ms.site != null && ms.bus != null && ms.same === false) degrades.push({ id: 'hero patches (mep) mirrored: bus sse:me = LGLiveLink.me()', severity: 'degrade', missing: [`bus mv ${ms.bus} vs site mv ${ms.site}`] });
-console.log(`LIVE transport=${lv.kind || 'none'} wire ws=${wire.ws} (ev frames ${wire.wsEv}: me ${wire.me} mep ${wire.mep}) sse=${wire.sse} bus me=${seen['sse:me'] || 0} (mep ${seen.mep || 0} gap ${seen.mepGap || 0}) city=${seen['sse:city'] || 0} cityChat=${seen.cityChat || 0} q=${seen['sse:q'] || 0} meSync=${ms && typeof ms === 'object' ? (ms.same === undefined ? 'n/a' : (ms.same ? 'same' : 'DIFF') + ' mv ' + ms.bus + '/' + ms.site) : ms}`);
+console.log(`LIVE transport=${lv.kind || 'none'} wire ws=${wire.ws} (ev frames ${wire.wsEv}: me ${wire.me} mep ${wire.mep}) sse=${wire.sse}${wire.sse ? ` (mep=1 ${wire.sseMep})` : ''} bus me=${seen['sse:me'] || 0} (mep ${seen.mep || 0} gap ${seen.mepGap || 0}) city=${seen['sse:city'] || 0} cityChat=${seen.cityChat || 0} q=${seen['sse:q'] || 0} meSync=${ms && typeof ms === 'object' ? (ms.same === undefined ? 'n/a' : (ms.same ? 'same' : 'DIFF') + ' mv ' + ms.bus + '/' + ms.site) : ms}`);
 const gd = report.guard || {};
 if (gd.guard === 'object' && !(gd.own && gd.n && gd.teeOff !== false)) degrades.push({ id: 'anti-bot guard: honest fetch chain with our bridge (17.11)', severity: 'degrade', missing: [JSON.stringify(gd)] });
 console.log(`GUARD LGGuard=${gd.guard} api=${gd.api}/6 fetch=LG_FETCH.w:${gd.own} n=${gd.n} tee on/off=${gd.teeOn}/${gd.teeOff} windows=${gd.windows} passed=${gd.passed}${gd.error ? ' error=' + gd.error : ''}`);

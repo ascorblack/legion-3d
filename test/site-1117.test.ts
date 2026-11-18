@@ -208,7 +208,7 @@ describe('daily tasks 17.11: app.js dl() / openWin (dl.d), the card #dlCard the 
 });
 
 /* ------------------------------------------------------------------ 4. citymon.js: elite chain fights, placement unchanged */
-const CM = siteCopy('citymon.js', 'function chainDlg(F, hpX');
+const CM = siteCopy('citymon.js', 'const s0 = (D.n || 1) >= L.length');   // the 17.11 copy (18.11 changed placeAll: test/site-1118)
 const CM12 = existsSync(join(BASE, 'site-1112-1439', 'citymon.js')) ? readFileSync(join(BASE, 'site-1112-1439', 'citymon.js'), 'utf8') : null;
 describe('citymon.js 17.11: an elite fight is a chain of duels in the site\'s dialog; placement / FORM as our port', () => {
   it.skipIf(!CM || !CM12)('placeAll and FORM are the 12.11 text our port (src/net/citymon.ts, test/site-1112b) was checked against', () => {
@@ -251,7 +251,7 @@ describe('doodle.js 17.11 capePattern (lk.capePat) on the 3D cape', () => {
 
 /* ------------------------------------------------------------------ 6. 17.11 ~10:45: WASD in the site's mine vs our hold */
 import { holdSiteMine } from '../src/net/site-mine';
-const MINE = siteCopy('mine.js', 'function kwBind()');
+const MINE = siteCopy('mine.js', 'const KW_FAR = 260');   // the 17.11 walk (18.11 rAF walk: test/site-1118)
 describe('mine.js 17.11 ~10:45: W A S D walk the site\'s 2D mine hero (hero kw) — never while the 3D mine holds it', () => {
   /** The site's kw block (KW_FAR … kwBind) run on stubs: a keydown either walks the 2D hero (walkTo → POST /api/mine/go) or not. */
   const run = (held: boolean) => {

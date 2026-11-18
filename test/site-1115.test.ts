@@ -26,6 +26,7 @@ import contract from '../src/data/site-contract.json';
 import enter from './fixtures/mine-enter.json';
 
 const LIVE = siteCopy('site-live.js', "if (n === 'mep')");
+const LIVE15 = siteCopy('site-live.js', "if (n === 'me') {\n            let d = null;");   // the 15.11 … 17.11 shape
 const CITY = siteCopy('city.js', "tc = TOWN.id === 'fair' ? 'edge' : TOWN.id");
 const MINE = siteCopy('mine.js', 'const LOOK_MS = 60000;');
 const CHAT = siteCopy('site-chat.js', 'function ginvShow(');
@@ -186,15 +187,11 @@ describe.skipIf(!LIVE)('site-live.js 15.11: `me` + `mep` patches over the WebSoc
     }
   });
 
-  it('SSE: the site handles `mep` only on the socket — an EventSource carries full `me` events, teed as before', () => {
-    expect(LIVE!.slice(LIVE!.indexOf('function sseOpen'), LIVE!.indexOf('connect();', LIVE!.indexOf('function sseOpen')))).not.toContain('mep');
-    const B = g.__L3D_BUS, got: any[] = [];
-    const off = B.on('sse:me', (d: any) => got.push(d));
-    const es: FakeES = new (g.EventSource as any)('/api/live');
-    es.fire('me', JSON.stringify(base0(9)));
-    es.fire('mep', JSON.stringify({ mv: 10, h: { money: 1 } }));
-    expect(got.length).toBe(1); expect(got[0].mv).toBe(9);
-    off();
+  // 15.11 … 17.11: SSE had no patches. Since 18.11 the EventSource carries `mep` too (the bridge applies them there as
+  // well — test/site-1118.test.ts); this pins the old copy only.
+  it.skipIf(!LIVE15)('SSE until 17.11: the site handled `mep` only on the socket (18.11: both transports, see site-1118)', () => {
+    expect(LIVE15!.slice(LIVE15!.indexOf('function sseOpen'), LIVE15!.indexOf('connect();', LIVE15!.indexOf('function sseOpen')))).not.toContain('mep');
+    expect(LIVE15!).not.toContain('function mepIn(');
   });
 });
 

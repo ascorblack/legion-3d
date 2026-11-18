@@ -2,6 +2,9 @@
  * Hero patches of the live link (site 15.11, /lib/site-live.js): over the WebSocket the hero comes as a full `me` with a
  * version `mv`, then as `mep` patches. A line-by-line port of the site's base keeping (meBase / meV / meWant) and of its
  * meApply, for the bridge (src/bridge/bridge.ts tapLiveWs). No DOM, no globals: importable by tests.
+ * Site 18.11: the same rule now lives in site-live.js meIn / mepIn and serves BOTH transports — the EventSource `/api/live`
+ * gets `mep` events too (app.js adds `mep=1`); a gap there is answered by a reconnect (`down('mep')`) instead of {op:'live'}.
+ * The bridge keeps one mirror per socket and one per EventSource (tapLiveMe).
  */
 /**
  * The hero base of one live socket, kept exactly like site-live.js (15.11):

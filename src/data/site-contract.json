@@ -447,11 +447,18 @@
       "why": "the bridge's socket tap (src/bridge/bridge.ts liveFrame) cuts frames exactly like this; a new framing = live events over WebSocket not teed"
     },
     {
-      "id": "site-live.js hero patches: full me (mv) + mep when p.mv === meV + 1, else ask for a full one (15.11)",
+      "id": "site-live.js hero patches: meIn / mepIn — mep applied when p.mv === meV + 1, else ask for a full one (15.11; 18.11 shared by both transports)",
       "file": "site-live.js",
-      "re": "if \\(n === 'me'\\) \\{[\\s\\S]{0,300}meBase = d && typeof d === 'object' \\? d : null; meV = meBase && typeof meBase\\.mv === 'number' \\? meBase\\.mv : null; meWant = false;[\\s\\S]{0,120}emit\\('me', data\\);[\\s\\S]{0,120}if \\(n === 'mep'\\) \\{\\s*if \\(meWant\\) return;[\\s\\S]{0,200}if \\(!p \\|\\| !meBase \\|\\| meV === null \\|\\| p\\.mv !== meV \\+ 1\\) \\{\\s*meWant = true;[\\s\\S]{0,400}meBase = meApply\\(meBase, p\\); meV = p\\.mv;\\s*emit\\('me', JSON\\.stringify\\(meBase\\)\\);",
+      "re": "function meIn\\(data\\) \\{[\\s\\S]{0,200}meBase = d && typeof d === 'object' \\? d : null; meV = meBase && typeof meBase\\.mv === 'number' \\? meBase\\.mv : null; meWant = false;\\s*emit\\('me', data\\);\\s*\\}[\\s\\S]{0,40}function mepIn\\(data, resync\\) \\{\\s*if \\(meWant\\) return;[\\s\\S]{0,200}if \\(!p \\|\\| !meBase \\|\\| meV === null \\|\\| p\\.mv !== meV \\+ 1\\) \\{\\s*meWant = true;[\\s\\S]{0,200}resync\\(\\);\\s*return;\\s*\\}\\s*meBase = meApply\\(meBase, p\\); meV = p\\.mv;\\s*emit\\('me', JSON\\.stringify\\(meBase\\)\\);",
       "severity": "degrade",
-      "why": "15.11: over the socket the hero comes as patches; the bridge keeps the same base (src/bridge/bridge.ts MeMirror) and emits the full hero as sse:me — a different version rule = stale or wrong hero data in 3D (money, gear, hp, flags)"
+      "why": "15.11: the hero comes as a full me + mep patches; the bridge keeps the same base (src/bridge/me-patch.ts MeMirror, one per socket / EventSource) and emits the full hero as sse:me — a different version rule = stale or wrong hero data in 3D (money, gear, hp, flags)"
+    },
+    {
+      "id": "site-live.js hero patches on both transports: socket frames me / mep, EventSource me + mep listeners (18.11)",
+      "file": "site-live.js",
+      "re": "if \\(n === 'me'\\) return meIn\\(data\\);\\s*if \\(n === 'mep'\\) \\{\\s*return mepIn\\(data, \\(\\) => \\{ try \\{ s\\.send\\(JSON\\.stringify\\(\\{ op: 'live'[\\s\\S]{0,4000}function sseOn\\(s, n\\) \\{\\s*const g = gen;\\s*if \\(n === 'mep'\\) return;\\s*if \\(n === 'me'\\) \\{\\s*s\\.addEventListener\\('me', \\(e\\) => \\{ if \\(g !== gen\\) return; up\\(\\); meIn\\(e\\.data\\); \\}\\);\\s*s\\.addEventListener\\('mep', \\(e\\) => \\{ if \\(g !== gen\\) return; up\\(\\); mepIn\\(e\\.data, \\(\\) => down\\('mep'\\)\\); \\}\\);",
+      "severity": "degrade",
+      "why": "18.11: an EventSource /api/live carries mep patches too (a gap reconnects it); src/bridge/bridge.ts tapLiveMe keeps a MeMirror per EventSource, tapLiveWs one per socket — a patch event under another name or another transport rule = a stale hero in 3D"
     },
     {
       "id": "site-live.js meApply(base, p): h / hx / it {d,u,o} by uid / cr r fq synced now gnow / mv (15.11, gnow 16.11)",
@@ -463,9 +470,16 @@
     {
       "id": "app.js live link: LGLiveLink.open({ sse: /api/live, ws: (wss|ws)://host/ws })",
       "file": "app.js",
-      "re": "LGLiveLink\\.open\\(\\{\\s*sse: \\(\\) => \\(window\\.LG_BASE \\|\\| ''\\) \\+ '/api/live' \\+ q,\\s*ws: \\(\\) => \\(wsOn\\(\\) \\? \\{ url: \\(location\\.protocol === 'https:' \\? 'wss://' : 'ws://'\\) \\+ location\\.host \\+ '/ws'",
+      "re": "LGLiveLink\\.open\\(\\{\\s*sse: \\(\\) => \\(window\\.LG_BASE \\|\\| ''\\) \\+ '/api/live' \\+ q(?: \\+ [^\\n]*)?,\\s*ws: \\(\\) => \\(wsOn\\(\\) \\? \\{ url: \\(location\\.protocol === 'https:' \\? 'wss://' : 'ws://'\\) \\+ location\\.host \\+ '/ws'",
       "severity": "degrade",
       "why": "the bridge taps sockets to /ws on the page's host (src/bridge/bridge.ts isLiveWs) and EventSources to /api/live"
+    },
+    {
+      "id": "app.js SSE asks for hero patches: /api/live…mep=1 unless the streamer dock (18.11)",
+      "file": "app.js",
+      "re": "sse: \\(\\) => \\(window\\.LG_BASE \\|\\| ''\\) \\+ '/api/live' \\+ q \\+ \\(DOCK \\? '' : \\(q \\? '&' : '\\?'\\) \\+ 'mep=1'\\),",
+      "severity": "degrade",
+      "why": "18.11: with mep=1 the SSE hero is patches (src/bridge/bridge.ts tapLiveMe applies them; the EventSource tap matches /\\/api\\/live/ with any query); e2e/contract.mjs counts SSE opens with mep=1"
     },
     {
       "id": "SSE event me",
@@ -1222,7 +1236,7 @@
     {
       "id": "app.js GU_WIN + guTab (tabs as windows)",
       "file": "app.js",
-      "re": "const GU_WIN = \\{ hero: '[^']+', legion: '[^']+', season: '[^']+', war: '[^']+', arena: '[^']+' \\};[\\s\\S]{0,1200}function guTab\\(id\\)",
+      "re": "const GU_WIN = \\{ hero: '[^']+', legion: '[^']+', season: '[^']+', war: '[^']+', arena: '[^']+' \\};[\\s\\S]{0,3000}function guTab\\(id\\)",
       "severity": "degrade",
       "why": "10.11: the list src/net/gameui.ts GU_WINDOWS mirrors; tab(id) of these never leaves the City"
     },
@@ -1345,6 +1359,20 @@
       "re": "const kwBusy = \\(\\) => !!\\(S && \\([\\s\\S]{0,200}document\\.querySelector\\('\\.mn-board-w,",
       "severity": "degrade",
       "why": "17.11: the site's 2D mine walks with W A S D / arrows (hero `kw`, document keydown) unless kwBusy(); under the 3D mine the site's mine stays open, held by our hidden `.mn-board-w` (src/net/site-mine.ts holdSiteMine) — without it a key would walk the 2D hero too (POST /api/mine/go)"
+    },
+    {
+      "id": "mine.js LGMineDig (dig record dr → day / bag / mx / wk / news / quests at the server clock, 18.11)",
+      "file": "mine.js",
+      "re": "function\\s*dayMin\\(u,\\s*cap\\)\\s*\\{\\s*const\\s*c\\s*=\\s*Math\\.max\\(0,\\s*\\+cap\\s*\\|\\|\\s*0\\);\\s*return\\s*Math\\.floor\\(\\(c\\s*>\\s*0\\s*&&\\s*u\\s*>=\\s*c\\s*-\\s*CAP_EPS\\s*\\?\\s*Math\\.max\\(u,\\s*c\\)\\s*:\\s*u\\)\\s*/\\s*60000\\s*\\+\\s*1e-9\\);\\s*\\}\\s*const\\s*coins\\s*=\\s*\\(x\\)\\s*=>\\s*\\(\\{\\s*c:\\s*Math\\.floor\\(x\\),\\s*cx:\\s*r2\\(x\\)\\s*\\}\\);\\s*const\\s*qpView\\s*=\\s*\\(k,\\s*p\\)\\s*=>\\s*\\(k\\s*===\\s*'res'\\s*\\?\\s*Math\\.floor\\(p\\s*\\*\\s*100\\s*\\+\\s*1e-6\\)\\s*:\\s*Math\\.floor\\(p\\)\\);\\s*function\\s*perMin\\(dg\\)\\s*\\{\\s*const\\s*u\\s*=\\s*Math\\.max\\(0,\\s*\\+dg\\.r\\s*\\|\\|\\s*0\\)\\s*\\*\\s*Math\\.max\\(0,\\s*\\+dg\\.s\\s*\\|\\|\\s*0\\),\\s*w0\\s*=\\s*u\\s*/\\s*\\(\\+dg\\.k\\s*\\|\\|\\s*1\\);\\s*return\\s*\\{\\s*u,\\s*w0,\\s*coin:\\s*w0\\s*\\*\\s*\\(\\+dg\\.c\\s*\\|\\|\\s*0\\),\\s*xp:\\s*Math\\.max\\(w0,\\s*1\\)\\s*\\*\\s*\\(\\+dg\\.x\\s*\\|\\|\\s*0\\)\\s*\\};\\s*\\}\\s*const\\s*minOf\\s*=\\s*\\(dg,\\s*now\\)\\s*=>\\s*Math\\.max\\(0,\\s*Math\\.min\\(\\+now\\s*\\|\\|\\s*0,\\s*\\+dg\\.e\\s*\\|\\|\\s*0\\)\\s*-\\s*\\(\\+dg\\.t\\s*\\|\\|\\s*0\\)\\)\\s*/\\s*60000;\\s*function\\s*grow\\(dg,\\s*now\\)\\s*\\{\\s*const\\s*b\\s*=\\s*dg\\.b\\s*\\|\\|\\s*\\{\\},\\s*dt\\s*=\\s*minOf\\(dg,\\s*now\\),\\s*R\\s*=\\s*perMin\\(dg\\),\\s*out\\s*=\\s*\\{\\s*d:\\s*\\(\\+b\\.d\\s*\\|\\|\\s*0\\)\\s*\\+\\s*dt\\s*\\*\\s*60000,\\s*c:\\s*\\(\\+b\\.c\\s*\\|\\|\\s*0\\)\\s*\\+\\s*R\\.coin\\s*\\*\\s*dt,\\s*m:\\s*\\(\\+b\\.m\\s*\\|\\|\\s*0\\)\\s*\\+\\s*R\\.xp\\s*\\*\\s*dt,\\s*u:\\s*\\(\\+b\\.u\\s*\\|\\|\\s*0\\)\\s*\\+\\s*\\(dg\\.w\\s*\\?\\s*R\\.u\\s*\\*\\s*dt\\s*:\\s*0\\),\\s*qp:\\s*\\{\\}\\s*\\};\\s*if\\s*\\(b\\.n\\s*!=\\s*null\\)\\s*out\\.n\\s*=\\s*\\+b\\.n\\s*\\+\\s*R\\.coin\\s*\\*\\s*dt;\\s*if\\s*\\(b\\.cm\\s*!=\\s*null\\)\\s*out\\.cm\\s*=\\s*\\+b\\.cm\\s*\\+\\s*\\(dg\\.q\\s*\\?\\s*R\\.u\\s*\\*\\s*dt\\s*:\\s*0\\);\\s*for\\s*\\(const\\s*\\[L,\\s*id,\\s*k,\\s*p\\]\\s*of\\s*b\\.qp\\s*\\|\\|\\s*\\[\\]\\)\\s*out\\.qp\\[L\\s*\\+\\s*':'\\s*\\+\\s*id\\]\\s*=\\s*\\+p\\s*\\+\\s*\\(dg\\.q\\s*\\?\\s*\\(k\\s*===\\s*'min'\\s*\\?\\s*dt\\s*:\\s*k\\s*===\\s*'work'\\s*\\?\\s*R\\.u\\s*\\*\\s*dt\\s*:\\s*k\\s*===\\s*'sh'\\s*\\?\\s*R\\.u\\s*\\*\\s*\\(\\+dg\\.h\\s*\\|\\|\\s*0\\)\\s*\\*\\s*dt\\s*:\\s*0\\)\\s*:\\s*0\\);\\s*return\\s*out;\\s*\\}\\s*function\\s*view\\(me,\\s*now\\)\\s*\\{\\s*const\\s*dg\\s*=\\s*me\\s*&&\\s*me\\.dr;\\s*if\\s*\\(!dg\\s*\\|\\|\\s*typeof\\s*dg\\s*!==\\s*'object'\\s*\\|\\|\\s*!dg\\.b\\)\\s*return\\s*me;\\s*const\\s*g\\s*=\\s*grow\\(dg,\\s*now\\),\\s*o\\s*=\\s*\\{\\s*\\.\\.\\.me\\s*\\};\\s*o\\.day\\s*=\\s*dayMin\\(g\\.d,\\s*dg\\.cp\\);\\s*if\\s*\\(me\\.bag\\)\\s*o\\.bag\\s*=\\s*\\{\\s*\\.\\.\\.me\\.bag,\\s*\\.\\.\\.coins\\(g\\.c\\)\\s*\\};\\s*if\\s*\\(me\\.mx\\)\\s*\\{\\s*const\\s*need\\s*=\\s*\\+me\\.mx\\.need\\s*\\|\\|\\s*0;\\s*o\\.mx\\s*=\\s*\\{\\s*\\.\\.\\.me\\.mx,\\s*xp:\\s*Math\\.floor\\(need\\s*>\\s*0\\s*\\?\\s*Math\\.min\\(need,\\s*g\\.m\\)\\s*:\\s*g\\.m\\)\\s*\\};\\s*\\}\\s*if\\s*\\(dg\\.w\\)\\s*o\\.wk\\s*=\\s*Math\\.round\\(g\\.u\\);\\s*if\\s*\\(me\\.news\\s*&&\\s*g\\.n\\s*!=\\s*null\\)\\s*o\\.news\\s*=\\s*\\{\\s*\\.\\.\\.me\\.news,\\s*\\.\\.\\.coins\\(g\\.n\\)\\s*\\};\\s*if\\s*\\(me\\.q\\)\\s*\\{\\s*const\\s*q\\s*=\\s*\\{\\s*\\.\\.\\.me\\.q\\s*\\},\\s*it\\s*=\\s*\\(L\\)\\s*=>\\s*\\(x\\)\\s*=>\\s*\\{\\s*const\\s*v\\s*=\\s*x\\s*&&\\s*!x\\.done\\s*\\?\\s*g\\.qp\\[L\\s*\\+\\s*':'\\s*\\+\\s*x\\.id\\]\\s*:\\s*undefined;\\s*return\\s*v\\s*!=\\s*null\\s*\\?\\s*\\{\\s*\\.\\.\\.x,\\s*p:\\s*qpView\\(x\\.k,\\s*Math\\.min\\(\\+x\\.g\\s*\\|\\|\\s*0,\\s*v\\)\\)\\s*\\}\\s*:\\s*x;\\s*\\};\\s*if\\s*\\(Array\\.isArray\\(me\\.q\\.d\\)\\)\\s*q\\.d\\s*=\\s*me\\.q\\.d\\.map\\(it\\('d'\\)\\);\\s*if\\s*\\(Array\\.isArray\\(me\\.q\\.w\\)\\)\\s*q\\.w\\s*=\\s*me\\.q\\.w\\.map\\(it\\('w'\\)\\);\\s*if\\s*\\(me\\.q\\.c\\s*&&\\s*g\\.cm\\s*!=\\s*null\\)\\s*\\{\\s*const\\s*m\\s*=\\s*Math\\.floor\\(g\\.cm\\);\\s*q\\.c\\s*=\\s*\\{\\s*\\.\\.\\.me\\.q\\.c,\\s*me:\\s*m\\s*\\};\\s*if\\s*\\(m\\s*>=\\s*\\(\\+me\\.q\\.c\\.min\\s*\\|\\|\\s*0\\)\\)\\s*q\\.c\\.ok\\s*=\\s*1;\\s*else\\s*delete\\s*q\\.c\\.ok;\\s*\\}\\s*o\\.q\\s*=\\s*q;\\s*\\}\\s*return\\s*o;\\s*\\}\\s*return\\s*\\{\\s*view,\\s*grow,\\s*perMin,\\s*dayMin,\\s*coins,\\s*qpView,\\s*CAP_EPS\\s*\\};[\\s\\S]*function\\s*meNow\\(\\)\\s*\\{\\s*const\\s*D\\s*=\\s*window\\.LGMineDig;\\s*if\\s*\\(!S\\s*\\|\\|\\s*!S\\.me\\s*\\|\\|\\s*!S\\.me\\.dr\\s*\\|\\|\\s*!D\\)\\s*return\\s*false;\\s*const\\s*m\\s*=\\s*D\\.view\\(S\\.me,\\s*srvNow\\(\\)\\);\\s*S\\.me\\s*=\\s*m;\\s*return\\s*true;\\s*\\}\\s*function meTick\\(\\) \\{[\\s\\S]{0,300}if\\s*\\(m\\s*&&\\s*m\\.dr\\s*&&\\s*\\(!S\\.me\\s*\\|\\|\\s*!S\\.me\\.dr\\s*\\|\\|\\s*\\+m\\.dr\\.t\\s*>\\s*\\+S\\.me\\.dr\\.t\\)\\)\\s*S\\.me\\s*=\\s*S\\.me\\s*&&\\s*S\\.me\\.qq\\s*&&\\s*!m\\.qq\\s*\\?\\s*\\{\\s*\\.\\.\\.m,\\s*qq:\\s*S\\.me\\.qq\\s*\\}\\s*:\\s*m;",
+      "severity": "degrade",
+      "why": "18.11: the mine numbers move on the client (src/rooms/mine/dig.ts digView is a line-by-line port, MineModel.meNow / meTick); a changed formula = the 3D mine HUD shows other coins / XP / minutes / quest progress than the site"
+    },
+    {
+      "id": "mine.js WASD walk (18.11 rAF): keydown and every frame wait for kwBusy()",
+      "file": "mine.js",
+      "re": "const\\s*ds\\s*=\\s*kwOk\\(\\)\\s*&&\\s*!kwBusy\\(\\)\\s*&&\\s*!document\\.hidden\\s*\\?\\s*kwDirs\\(\\)\\s*:\\s*null;[\\s\\S]{0,3000}document\\.addEventListener\\('keydown',\\s*\\(e\\)\\s*=>\\s*\\{\\s*if\\s*\\(!KW_D\\[e\\.code\\]\\s*\\|\\|\\s*e\\.ctrlKey\\s*\\|\\|\\s*e\\.metaKey\\s*\\|\\|\\s*e\\.altKey\\s*\\|\\|\\s*!kwOk\\(\\)\\s*\\|\\|\\s*kwTyping\\(e\\.target\\)\\s*\\|\\|\\s*kwBusy\\(\\)\\)\\s*return;",
+      "severity": "degrade",
+      "why": "18.11: W A S D walk the site's 2D mine hero continuously (POST /api/mine/go); under the 3D mine our hidden .mn-board-w (src/net/site-mine.ts holdSiteMine) makes kwBusy() true — test/site-1118.test.ts runs the block"
     },
     {
       "id": "LegionMiniMap (mini-map)",
@@ -1497,9 +1525,9 @@
     {
       "id": "citymon.js placeAll / spotsBy / FORM (the 3D placement port)",
       "file": "citymon.js",
-      "re": "const FORM = \\{ 1: \\[\\[0, 0\\]\\], 2: \\[\\[-52, -6\\], \\[52, 8\\]\\], 3: \\[\\[-80, -10\\], \\[0, 14\\], \\[80, -8\\]\\], 4: \\[\\[-74, -20\\], \\[24, -24\\], \\[-30, 20\\], \\[70, 16\\]\\] \\}[\\s\\S]*const s0 = \\(D\\.n \\|\\| 1\\) >= L\\.length && D\\.idx != null \\? D\\.idx : D\\.slot \\|\\| 0;",
+      "re": "const FORM = \\{ 1: \\[\\[0, 0\\]\\], 2: \\[\\[-52, -6\\], \\[52, 8\\]\\], 3: \\[\\[-80, -10\\], \\[0, 14\\], \\[80, -8\\]\\], 4: \\[\\[-74, -20\\], \\[24, -24\\], \\[-30, 20\\], \\[70, 16\\]\\] \\}[\\s\\S]*const\\s*n\\s*=\\s*D\\.n\\s*\\|\\|\\s*1,\\s*own\\s*=\\s*String\\(t\\)\\s*===\\s*String\\(D\\.tier\\);\\s*const\\s*s0\\s*=\\s*n\\s*>=\\s*L\\.length\\s*&&\\s*D\\.idx\\s*!=\\s*null\\s*\\?\\s*D\\.idx\\s*:\\s*own\\s*&&\\s*D\\.tier\\s*===\\s*2\\s*&&\\s*D\\.idx\\s*!=\\s*null\\s*\\?\\s*L\\.length\\s*-\\s*n\\s*\\+\\s*D\\.idx\\s*:\\s*D\\.slot\\s*\\|\\|\\s*0;[\\s\\S]{0,400}const\\s*rest\\s*=\\s*\\[\\];\\s*packs\\.forEach\\(\\(D,\\s*i\\)\\s*=>\\s*\\{\\s*const\\s*q\\s*=\\s*pick\\(D\\.tier,\\s*D\\);\\s*if\\s*\\(q\\)\\s*out\\.packs\\.push\\(\\{\\s*D,\\s*\\.\\.\\.q\\s*\\}\\);\\s*else\\s*rest\\.push\\(\\[D,\\s*i\\]\\);\\s*\\}\\);\\s*rest\\.forEach\\(\\(\\[D,\\s*i\\]\\)\\s*=>\\s*\\{\\s*const\\s*q\\s*=\\s*pick\\(1,\\s*D\\)\\s*\\|\\|\\s*pick\\(2,\\s*D\\)\\s*\\|\\|\\s*pick\\(0,\\s*D\\)\\s*\\|\\|[\\s\\S]{0,600}soon\\.forEach\\(\\(D\\)\\s*=>\\s*\\{\\s*const\\s*q\\s*=\\s*pick\\(D\\.tier,\\s*D\\)\\s*\\|\\|\\s*pick\\(1,\\s*D\\)\\s*\\|\\|\\s*pick\\(2,\\s*D\\);",
       "severity": "degrade",
-      "why": "src/net/citymon.ts placeAll / FORM are ports: a changed rule puts the 3D monsters on other spots than the site (test/site-1112b.test.ts checks the live 12.11 placement)"
+      "why": "src/net/citymon.ts placeAll / FORM are ports (18.11: own tier first, then 1 / 2 / 0; a strong pack's idx counts from the far end): a changed rule puts the 3D monsters on other spots than the site (test/site-1118.test.ts runs the site's placeAll against ours)"
     },
     {
       "id": "city.js LGCity.wall() { x, y, own, glade }",

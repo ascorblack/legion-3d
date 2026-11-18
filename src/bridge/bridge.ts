@@ -12,7 +12,8 @@
  * bus gets the same 'sse:<name>' whichever one LGLiveLink picks; 'live:kind' says which ('ws' | 'sse').
  * Site 15.11: over the socket the hero is a full `me` + `mep` patches (version `mv`); the bridge applies them like
  * site-live.js (MeMirror / meApply) and emits the full hero as 'sse:me' ('live:mep' = the applied version, null = gap).
- * SSE carries no patches (site-live.js handles `mep` only on the socket; app.js listens to `me` alone).
+ * Site 18.11: SSE carries the patches too (app.js opens `/api/live?…mep=1` unless it is the streamer dock; site-live.js meIn /
+ * mepIn serve both transports; a gap on SSE reconnects the source): the EventSource tap keeps its own MeMirror (tapLiveMe).
  * Neither EventSource nor WebSocket is checked by the site's bot telemetry (mine.js tlPi checks fetch and rAF only).
  *
  * window.fetch is NOT replaced by default. The site's anti-bot telemetry (mine.js tlPi) compares window.fetch with the
@@ -84,7 +85,8 @@ declare global {
       const es = new ES(url, init);
       try {
         if (/\/api\/live/.test(String(url))) {
-          for (const t of TEE) es.addEventListener(t, (e: Event) => bus.emit('sse:' + t, parse((e as MessageEvent).data)));
+          for (const t of TEE) if (t !== 'me') es.addEventListener(t, (e: Event) => bus.emit('sse:' + t, parse((e as MessageEvent).data)));
+          tapLiveMe(es, bus, parse);   // site 18.11: `me` + `mep` patches over SSE too (app.js /api/live?…mep=1)
           es.addEventListener('open', () => { bus.emit('live:kind', 'sse'); bus.emit('sse:open', Date.now()); });
           es.addEventListener('error', () => bus.emit('sse:error', Date.now()));
         }
@@ -184,6 +186,21 @@ export function liveFrame(t: unknown): [string, string] | 'liveok' | null {
   return t.charCodeAt(0) === 123 && t.length < 200 && /"op"\s*:\s*"liveok"/.test(t) ? 'liveok' : null;
 }
 
+/** site-live.js meIn: a full hero — the mirror's new base, and the hero itself on the bus. */
+function meFull(me: MeMirror, bus: Bus, text: string, parse: (d: unknown) => unknown): void { me.full(text); bus.emit('sse:me', parse(text)); }
+/** site-live.js mepIn: an in-order patch → the patched full hero on the bus ('live:mep' = its version; null = a gap / a
+ *  patch while a full one is awaited — the site asks for the full one itself: {op:'live'} on the socket, a reconnect on SSE). */
+function mePatch(me: MeMirror, bus: Bus, text: string): void { const t = me.patch(text); bus.emit('live:mep', t ? me.v : null); if (t) bus.emit('sse:me', JSON.parse(t)); }
+
+/** Site 18.11: the EventSource `/api/live` carries `mep` patches too (app.js asks with `mep=1`; site-live.js sseOn adds a
+ *  `mep` listener beside `me`, and on a gap closes the source and opens a new one — `down('mep')`). One mirror per source:
+ *  a new source starts from its own first full `me`, exactly like the site's base (drop() clears it). */
+function tapLiveMe(es: EventSource, bus: Bus, parse: (d: unknown) => unknown): void {
+  const me = new MeMirror();
+  es.addEventListener('me', (e: Event) => { try { meFull(me, bus, String((e as MessageEvent).data), parse); } catch { /* never break the page */ } });
+  es.addEventListener('mep', (e: Event) => { try { mePatch(me, bus, String((e as MessageEvent).data)); } catch { /* never break the page */ } });
+}
+
 /** Passive listeners on the site's own live socket: the site's handlers (s.onmessage …) are untouched.
  *  Site 15.11: over the socket the hero comes as a full `me` (version `mv`) and then as `mep` patches; MeMirror
  *  keeps the same base the site keeps (site-live.js meBase / meV / meWant) and every applied patch reaches the bus as
@@ -198,8 +215,8 @@ function tapLiveWs(s: WebSocket, bus: Bus, tee: ReadonlySet<string>, parse: (d: 
       if (!f) return;
       if (f === 'liveok') { if (!up) { up = true; bus.emit('live:kind', 'ws'); bus.emit('sse:open', Date.now()); } return; }
       if (!up) { up = true; bus.emit('live:kind', 'ws'); }
-      if (f[0] === 'me') { me.full(f[1]); bus.emit('sse:me', parse(f[1])); return; }
-      if (f[0] === 'mep') { const t = me.patch(f[1]); bus.emit('live:mep', t ? me.v : null); if (t) bus.emit('sse:me', JSON.parse(t)); return; }
+      if (f[0] === 'me') { meFull(me, bus, f[1], parse); return; }
+      if (f[0] === 'mep') { mePatch(me, bus, f[1]); return; }
       if (tee.has(f[0])) bus.emit('sse:' + f[0], parse(f[1]));
     } catch { /* never break the page */ }
   });
